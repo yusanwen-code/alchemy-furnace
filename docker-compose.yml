@@ -1,0 +1,148 @@
+version: "3.8"
+
+services:
+  # PostgreSQL - 业务数据库
+  postgres:
+    image: postgres:14-alpine
+    container_name: alchemy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-alchemy}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-alchemy123}
+      POSTGRES_DB: ${DB_NAME:-alchemy_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - alchemy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-alchemy} -d ${DB_NAME:-alchemy_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant - 向量数据库
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: alchemy-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    networks:
+      - alchemy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Python RAG 引擎 - 炼丹核心
+  python-rag:
+    build:
+      context: ./backend/python
+      dockerfile: Dockerfile
+    container_name: alchemy-python-rag
+    restart: unless-stopped
+    environment:
+      - PYTHON_PORT=${PYTHON_PORT:-8000}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-elixir_pills}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - CHUNK_SIZE=${CHUNK_SIZE:-500}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-50}
+      - TOP_K=${TOP_K:-5}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-104857600}
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "${PYTHON_PORT:-8000}:8000"
+    networks:
+      - alchemy-network
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Go API 网关
+  go-api:
+    build:
+      context: ./backend/go
+      dockerfile: Dockerfile
+    container_name: alchemy-go-api
+    restart: unless-stopped
+    environment:
+      - GO_PORT=${GO_PORT:-8080}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-alchemy}
+      - DB_PASSWORD=${DB_PASSWORD:-alchemy123}
+      - DB_NAME=${DB_NAME:-alchemy_db}
+      - PYTHON_RAG_URL=http://python-rag:8000
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-104857600}
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "${GO_PORT:-8080}:8080"
+    networks:
+      - alchemy-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python-rag:
+        condition: service_healthy
+
+  # Nginx - 反向代理 + 静态文件
+  nginx:
+    image: nginx:alpine
+    container_name: alchemy-nginx
+    restart: unless-stopped
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend_dist:/usr/share/nginx/html:ro
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    networks:
+      - alchemy-network
+    depends_on:
+      - go-api
+      - python-rag
+
+  # Frontend Builder - 构建前端静态文件
+  frontend-builder:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: alchemy-frontend-builder
+    volumes:
+      - frontend_dist:/app/dist
+    networks:
+      - alchemy-network
+    profiles:
+      - build
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  uploads_data:
+    driver: local
+  frontend_dist:
+    driver: local
+
+networks:
+  alchemy-network:
+    driver: bridge
+    name: alchemy-network

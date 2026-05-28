@@ -1,0 +1,51 @@
+# 环境变量
+.env
+
+# Go
+backend/go/bin/
+backend/go/vendor/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Python
+backend/python/__pycache__/
+backend/python/**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+*.log
+npm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 上传文件
+uploads/
+backend/**/uploads/
+
+# 数据卷（开发时）
+data/
+postgres_data/
+qdrant_data/
