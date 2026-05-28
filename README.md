@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python" />
   <img src="https://img.shields.io/badge/Qdrant-Vector_DB-FD6096?logo=qdrant" />
   <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker" />
-  <img src="https://img.shields.io/badge/License-MIT-green.svg" />
+  <img src="https://img.shields.io/badge/License-Custom-orange.svg" />
 </p>
 
 <p align="center">
@@ -30,6 +30,14 @@
 **炼丹炉**（Alchemy Furnace）是一款以道教炼丹文化为设计灵感的 RAG（检索增强生成）对话系统。在这里，你的文档化作**丹方**，知识库化作**金丹**，AI Agent 化作**道人**——道人服用金丹后，便能运用其中蕴含的知识与你论道对答。
 
 > 古人云："丹成而龙虎伏，道备而鬼神惊。"今人以 AI 为火，以数据为药，炼就知识之金丹，养出智慧之道人。
+
+## 关于作者
+
+本项目「炼丹炉 (Alchemy Furnace)」由 **[yusanwen-code](https://github.com/yusanwen-code)** 开发维护。
+
+- **GitHub**: [https://github.com/yusanwen-code](https://github.com/yusanwen-code)
+- **仓库地址**: [https://github.com/yusanwen-code/alchemy-furnace](https://github.com/yusanwen-code/alchemy-furnace)
+- **开源方式**: 私人开源，商业闭源。个人使用、学习研究可自由使用；商业使用需单独授权，且必须保留项目名称和开发者信息。
 
 ## 特性
 
@@ -83,7 +91,7 @@
 
 ```bash
 # 1. 克隆仙府
-git clone https://github.com/yourusername/alchemy-furnace.git
+git clone https://github.com/yusanwen-code/alchemy-furnace.git
 cd alchemy-furnace
 
 # 2. 配置天机
@@ -305,27 +313,14 @@ alchemy-furnace/
 - [ ] 炼丹过程可视化
 - [ ] 金丹分享与 marketplace
 
-## 贡献
-
-欢迎道友前来共修！提交 Issue 或 Pull Request 前，请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-```bash
-# 1. Fork 本仓库
-# 2. 创建分支
-git checkout -b feature/你的功能
-
-# 3. 提交更改
-git commit -m "feat: 新增某某功能"
-
-# 4. 推送分支
-git push origin feature/你的功能
-
-# 5. 创建 Pull Request
-```
-
 ## 许可证
 
-[MIT License](LICENSE)
+本项目采用自定义许可证，详情参见 [LICENSE](LICENSE) 文件。
+
+**简要说明：**
+
+- **个人使用、学习研究**：可自由使用、修改、分发
+- **商业使用**：必须保留项目名称「炼丹炉 (Alchemy Furnace)」和开发者信息「yusanwen-code」，且需联系作者获取商业授权
 
 ---
 
@@ -334,5 +329,5 @@ git push origin feature/你的功能
 </p>
 
 <p align="center">
-  Made with ☯️ by the Alchemy Furnace Team
+  Made with ☯️ by <a href="https://github.com/yusanwen-code">yusanwen-code</a>
 </p>

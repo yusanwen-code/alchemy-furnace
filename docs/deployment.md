@@ -12,7 +12,7 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/alchemy-furnace.git
+git clone https://github.com/yusanwen-code/alchemy-furnace.git
 cd alchemy-furnace
 ```
 

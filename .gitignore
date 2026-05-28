@@ -49,3 +49,9 @@ backend/**/uploads/
 data/
 postgres_data/
 qdrant_data/
+
+# Claude workspace files
+.claude/
+
+# Specify tooling files
+.specify/
