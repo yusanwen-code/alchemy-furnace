@@ -50,3 +50,4 @@ postgres_data/
 
 # Specify tooling files
 .specify/
+specs/
