@@ -1,0 +1,210 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { ChevronDown, Menu, X } from 'lucide-react'
+import { navItems } from '@/components/layout/nav-config'
+import { NavDropdown } from '@/components/layout/nav-dropdown'
+import { cn } from '@/lib/utils'
+
+/**
+ * Dify 式顶部导航栏（参考 reference/导航栏.png）
+ * - sticky 毛玻璃顶栏：左印章 Logo、中导航项、滚动加深
+ * - 含子项的导航项 hover/focus/点击展开 mega-dropdown
+ * - Esc / 点击外部 / 鼠标移出 / 路由变化关闭
+ * - 移动端（<md）降级为汉堡抽屉，不渲染下拉面板
+ */
+export function Navbar() {
+  const pathname = usePathname()
+  const [open, setOpen] = useState<string | null>(null)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const rootRef = useRef<HTMLElement>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const isActive = (path: string) =>
+    path === '/' ? pathname === '/' : pathname.startsWith(path)
+
+  /* 滚动加深 */
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 10)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  /* 路由变化关闭 */
+  useEffect(() => {
+    setOpen(null)
+    setMobileOpen(false)
+  }, [pathname])
+
+  /* Esc 与点击外部关闭 */
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(null)
+    const onClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(null)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onClick)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onClick)
+    }
+  }, [open])
+
+  const scheduleClose = () => {
+    closeTimer.current = setTimeout(() => setOpen(null), 120)
+  }
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+  }
+
+  return (
+    <header
+      ref={rootRef}
+      className={cn(
+        'sticky top-0 z-50 border-b transition-all duration-300',
+        scrolled || open
+          ? 'border-border/70 bg-card/95 shadow-[0_10px_30px_-15px_rgba(60,40,20,0.15)] backdrop-blur-md'
+          : 'border-transparent bg-background/70 backdrop-blur-sm',
+      )}
+    >
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        {/* 品牌印章 Logo */}
+        <Link href="/" className="group flex items-center gap-2.5" aria-label="炼丹炉 · 主殿">
+          <span className="grid size-9 place-items-center rounded-xl bg-primary font-serif text-base font-black text-primary-foreground shadow-[0_10px_20px_-8px_rgba(181,74,63,0.5)] transition-transform duration-300 group-hover:scale-105">
+            丹
+          </span>
+          <span className="font-serif text-lg font-black tracking-wide text-foreground">
+            炼丹炉
+          </span>
+        </Link>
+
+        {/* 桌面端导航 */}
+        <nav aria-label="主导航" className="hidden items-center gap-1 md:flex">
+          {navItems.map((item) => {
+            const active = isActive(item.path)
+            const hasChildren = !!item.children?.length
+            const expanded = open === item.label
+            return (
+              <div
+                key={item.label}
+                className="relative"
+                onMouseEnter={() => {
+                  if (!hasChildren) return
+                  cancelClose()
+                  setOpen(item.label)
+                }}
+                onMouseLeave={scheduleClose}
+              >
+                <Link
+                  href={item.path}
+                  aria-current={active ? 'page' : undefined}
+                  aria-haspopup={hasChildren ? 'true' : undefined}
+                  aria-expanded={hasChildren ? expanded : undefined}
+                  onClick={(e) => {
+                    if (hasChildren) {
+                      e.preventDefault()
+                      setOpen(expanded ? null : item.label)
+                    }
+                  }}
+                  onFocus={() => hasChildren && setOpen(item.label)}
+                  className={cn(
+                    'flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-medium transition-colors duration-300',
+                    active
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {item.label}
+                  {hasChildren && (
+                    <ChevronDown
+                      className={cn(
+                        'size-3.5 transition-transform duration-300',
+                        expanded && 'rotate-180',
+                      )}
+                      aria-hidden
+                    />
+                  )}
+                </Link>
+              </div>
+            )
+          })}
+        </nav>
+
+        {/* 移动端汉堡按钮 */}
+        <button
+          type="button"
+          className="grid size-10 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+          aria-label={mobileOpen ? '关闭菜单' : '打开菜单'}
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen(!mobileOpen)}
+        >
+          {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+        </button>
+      </div>
+
+      {/* mega-dropdown 面板（桌面端） */}
+      {open && (
+        <div
+          className="absolute inset-x-0 top-full hidden md:block"
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        >
+          <NavDropdown
+            items={navItems.find((i) => i.label === open)?.children ?? []}
+            onNavigate={() => setOpen(null)}
+          />
+        </div>
+      )}
+
+      {/* 移动端抽屉菜单 */}
+      {mobileOpen && (
+        <nav
+          aria-label="移动端导航"
+          className="border-t border-border/70 bg-card/95 backdrop-blur-md md:hidden"
+        >
+          <div className="space-y-1 px-4 py-3">
+            {navItems.map((item) => {
+              const active = isActive(item.path)
+              const Icon = item.icon
+              return (
+                <div key={item.label}>
+                  <Link
+                    href={item.path}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="size-4" strokeWidth={1.75} aria-hidden />
+                    {item.label}
+                  </Link>
+                  {item.children && (
+                    <div className="ml-11 space-y-0.5 pb-1">
+                      {item.children.map((c) => (
+                        <Link
+                          key={c.title}
+                          href={c.path}
+                          className="block rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
+                        >
+                          {c.title}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </nav>
+      )}
+    </header>
+  )
+}
