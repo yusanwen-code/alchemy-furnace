@@ -1,0 +1,353 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Bespoke oriental-alchemy tokens */
+  --color-cinnabar: var(--cinnabar);
+  --color-gold: var(--gold);
+  --color-sage: var(--sage);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+
+  --font-sans: var(--font-noto-sans-sc), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif-sc), 'Songti SC', serif;
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 8px);
+  --radius-2xl: calc(var(--radius) + 16px);
+}
+
+:root {
+  color-scheme: light;
+  --radius: 20px;
+
+  /* warm rice-paper off-white, NOT pure white */
+  --paper: #f7f3ed;
+  --paper-deep: #efe8dc;
+  --background: #f7f3ed;
+  --foreground: #1c1c1c;
+
+  /* cards: frosted warm glass */
+  --card: #fbf8f2;
+  --card-foreground: #1c1c1c;
+  --popover: #fbf8f2;
+  --popover-foreground: #1c1c1c;
+
+  /* cinnabar seal-stamp red */
+  --cinnabar: #b54a3f;
+  --primary: #b54a3f;
+  --primary-foreground: #fbf8f2;
+
+  /* aged gold */
+  --gold: #c9a96e;
+
+  /* muted sage */
+  --sage: #6b7d73;
+
+  --secondary: #efe8dc;
+  --secondary-foreground: #1c1c1c;
+  --muted: #ece5d8;
+  --muted-foreground: #6b7d73;
+  --accent: #f0e7d6;
+  --accent-foreground: #b54a3f;
+  --destructive: #b54a3f;
+
+  --border: rgba(60, 40, 20, 0.1);
+  --input: rgba(60, 40, 20, 0.14);
+  --ring: #c9a96e;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply bg-background;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    line-height: 1.8;
+    /* subtle rice-paper grain */
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(201, 169, 110, 0.05), transparent 45%),
+      radial-gradient(circle at 85% 75%, rgba(181, 74, 63, 0.04), transparent 45%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+  }
+}
+
+/* gentle infinite float — objects suspended like art toys */
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+.float-soft {
+  animation: float-soft 6s ease-in-out infinite;
+}
+
+/* a heavier, slower drift for large suspended objects */
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(-10px);
+  }
+  50% {
+    transform: translateY(10px);
+  }
+}
+
+.float-slow {
+  animation: float-slow 9s ease-in-out infinite;
+}
+
+/* ink-wash edge fade */
+.ink-fade {
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
+}
+
+/* 鼎的自然漂移：位移 + 微旋转，节奏不对称 */
+@keyframes ding-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  22% {
+    transform: translate(5px, -9px) rotate(0.5deg);
+  }
+  48% {
+    transform: translate(-2px, -14px) rotate(-0.3deg);
+  }
+  74% {
+    transform: translate(-6px, -5px) rotate(0.4deg);
+  }
+}
+
+.ding-drift {
+  animation: ding-drift 11s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* 火舌闪烁 */
+@keyframes flame-flicker {
+  0% {
+    transform: scaleY(1) scaleX(1) skewX(0deg);
+    opacity: 0.85;
+  }
+  35% {
+    transform: scaleY(1.12) scaleX(0.94) skewX(1.5deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scaleY(0.92) scaleX(1.05) skewX(-1.5deg);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scaleY(1.06) scaleX(0.97) skewX(0.5deg);
+    opacity: 0.95;
+  }
+}
+
+/* 青烟上升飘散 */
+@keyframes smoke-rise {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.6);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  60% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-140px) translateX(18px) scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ding-drift {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-soft,
+  .float-slow {
+    animation: none;
+  }
+}
+
+/* ========== dao-* 组件类（宣纸浅色风重定义，类名与旧版一致） ========== */
+@layer components {
+  /* 卡片 - 磨砂暖白 */
+  .dao-card {
+    @apply rounded-[20px] border border-border/70 bg-card/80 backdrop-blur-sm;
+    @apply shadow-[0_25px_50px_-12px_rgba(60,40,20,0.08)];
+    @apply transition-all duration-300;
+  }
+
+  .dao-card:hover {
+    @apply border-gold/40 -translate-y-0.5;
+    @apply shadow-[0_35px_60px_-15px_rgba(60,40,20,0.14)];
+  }
+
+  /* 按钮 */
+  .dao-btn {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply rounded-full px-5 py-2.5 font-medium;
+    @apply transition-all duration-200;
+    @apply active:scale-95;
+  }
+
+  .dao-btn-primary {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply rounded-full px-5 py-2.5 font-medium;
+    @apply transition-all duration-200 active:scale-95;
+    @apply bg-primary text-primary-foreground;
+    @apply hover:bg-cinnabar/90;
+    @apply shadow-[0_15px_30px_-12px_rgba(181,74,63,0.45)];
+  }
+
+  .dao-btn-gold {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply rounded-full px-5 py-2.5 font-medium;
+    @apply transition-all duration-200 active:scale-95;
+    @apply bg-gold text-foreground;
+    @apply hover:bg-gold/85;
+    @apply shadow-[0_15px_30px_-12px_rgba(201,169,110,0.5)];
+  }
+
+  .dao-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply rounded-full px-5 py-2.5 font-medium;
+    @apply transition-all duration-200 active:scale-95;
+    @apply border border-gold/40 bg-transparent text-sage;
+    @apply hover:border-gold/60 hover:bg-gold/10 hover:text-foreground;
+  }
+
+  /* 输入框 */
+  .dao-input {
+    @apply w-full rounded-xl border border-input bg-card/90 px-4 py-2.5;
+    @apply text-foreground placeholder:text-sage/70;
+    @apply transition-all duration-200;
+    @apply focus:border-gold/60 focus:ring-1 focus:ring-gold/30 focus:outline-none;
+  }
+
+  .dao-textarea {
+    @apply w-full rounded-xl border border-input bg-card/90 px-4 py-2.5;
+    @apply text-foreground placeholder:text-sage/70;
+    @apply transition-all duration-200;
+    @apply focus:border-gold/60 focus:ring-1 focus:ring-gold/30 focus:outline-none;
+    @apply min-h-[100px] resize-none;
+  }
+
+  .dao-label {
+    @apply mb-1.5 block text-sm font-medium text-sage;
+  }
+
+  /* 状态标签 */
+  .dao-badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .dao-badge-refining {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border border-sage/30 bg-sage/15 text-sage;
+  }
+
+  .dao-badge-refined {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border border-gold/30 bg-gold/15 text-gold;
+  }
+
+  .dao-badge-failed {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border border-primary/30 bg-primary/10 text-primary;
+  }
+
+  .dao-badge-pending {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border border-border bg-muted text-muted-foreground;
+  }
+
+  /* 页面标题/副标题 */
+  .page-title {
+    @apply font-serif text-2xl font-black tracking-wide text-foreground md:text-3xl;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm text-sage;
+  }
+
+  /* 分隔线 */
+  .dao-divider {
+    @apply flex items-center gap-3 text-sage/60;
+  }
+
+  .dao-divider::before,
+  .dao-divider::after {
+    content: '';
+    @apply h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent;
+  }
+}
+
+/* ========== Markdown 内容样式（浅色排版） ========== */
+@layer components {
+  .markdown-body {
+    @apply prose prose-sm max-w-none;
+    @apply prose-headings:font-serif prose-headings:text-foreground;
+    @apply prose-p:leading-relaxed prose-p:text-foreground/90;
+    @apply prose-a:text-primary prose-a:no-underline hover:prose-a:underline;
+    @apply prose-strong:text-foreground;
+    @apply prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-primary;
+    @apply prose-pre:border prose-pre:border-border/70 prose-pre:bg-paper-deep;
+    @apply prose-blockquote:rounded-r prose-blockquote:border-l-gold/50 prose-blockquote:bg-gold/5 prose-blockquote:px-4 prose-blockquote:py-1;
+    @apply prose-li:text-foreground/90;
+    @apply prose-hr:border-border;
+  }
+}
+
+/* ========== 响应式工具 ========== */
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

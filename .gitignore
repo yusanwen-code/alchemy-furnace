@@ -29,6 +29,8 @@ venv/
 # Node / Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/.next/
+frontend/out/
 frontend/.cache/
 *.log
 npm-debug.log*
@@ -51,3 +53,6 @@ postgres_data/
 # Specify tooling files
 .specify/
 specs/
+
+# UI 重构参考文件（本地，不提交）
+reference/
