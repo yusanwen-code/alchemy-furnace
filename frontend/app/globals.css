@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Bespoke oriental-alchemy tokens */
+  --color-cinnabar: var(--cinnabar);
+  --color-gold: var(--gold);
+  --color-sage: var(--sage);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+
+  --font-sans: var(--font-noto-sans-sc), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif-sc), 'Songti SC', serif;
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 8px);
+  --radius-2xl: calc(var(--radius) + 16px);
+}
+
+:root {
+  color-scheme: light;
+  --radius: 20px;
+
+  /* warm rice-paper off-white, NOT pure white */
+  --paper: #f7f3ed;
+  --paper-deep: #efe8dc;
+  --background: #f7f3ed;
+  --foreground: #1c1c1c;
+
+  /* cards: frosted warm glass */
+  --card: #fbf8f2;
+  --card-foreground: #1c1c1c;
+  --popover: #fbf8f2;
+  --popover-foreground: #1c1c1c;
+
+  /* cinnabar seal-stamp red */
+  --cinnabar: #b54a3f;
+  --primary: #b54a3f;
+  --primary-foreground: #fbf8f2;
+
+  /* aged gold */
+  --gold: #c9a96e;
+
+  /* muted sage */
+  --sage: #6b7d73;
+
+  --secondary: #efe8dc;
+  --secondary-foreground: #1c1c1c;
+  --muted: #ece5d8;
+  --muted-foreground: #6b7d73;
+  --accent: #f0e7d6;
+  --accent-foreground: #b54a3f;
+  --destructive: #b54a3f;
+
+  --border: rgba(60, 40, 20, 0.1);
+  --input: rgba(60, 40, 20, 0.14);
+  --ring: #c9a96e;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply bg-background;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    line-height: 1.8;
+    /* subtle rice-paper grain */
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(201, 169, 110, 0.05), transparent 45%),
+      radial-gradient(circle at 85% 75%, rgba(181, 74, 63, 0.04), transparent 45%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+  }
+}
+
+/* gentle infinite float — objects suspended like art toys */
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+.float-soft {
+  animation: float-soft 6s ease-in-out infinite;
+}
+
+/* a heavier, slower drift for large suspended objects */
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(-10px);
+  }
+  50% {
+    transform: translateY(10px);
+  }
+}
+
+.float-slow {
+  animation: float-slow 9s ease-in-out infinite;
+}
+
+/* ink-wash edge fade */
+.ink-fade {
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-soft,
+  .float-slow {
+    animation: none;
+  }
+}

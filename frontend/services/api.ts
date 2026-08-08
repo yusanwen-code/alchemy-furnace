@@ -3,7 +3,7 @@
  * 基于 fetch 的统一请求封装，自动解包后端 { code, message, data } 响应信封
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1'
 
 /**
  * 统一 API 响应信封
@@ -38,8 +38,14 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 
 /**
  * 构建 WebSocket URL
+ * 开发环境用 NEXT_PUBLIC_WS_BASE_URL 直连后端（next rewrites 对 WS 升级不可靠）；
+ * 未配置时按同源推导（生产由 nginx 代理 /api 含 Upgrade）
  */
 export function buildWsUrl(path: string): string {
+  const wsBase = process.env.NEXT_PUBLIC_WS_BASE_URL
+  if (wsBase) {
+    return `${wsBase.replace(/\/$/, '')}${path}`
+  }
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${window.location.host}${API_BASE}${path}`
 }

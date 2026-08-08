@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * 金丹状态管理 Context
  * 使用 React Context + useReducer 管理金丹（语言模式技能包）相关状态

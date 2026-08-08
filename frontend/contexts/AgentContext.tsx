@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * 道人状态管理 Context
  * 使用 React Context + useReducer 管理道人（AI Agent）相关状态

@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * 对话状态管理 Context
  * 使用 React Context + useReducer 管理对话相关状态
