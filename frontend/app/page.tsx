@@ -45,27 +45,10 @@ export default function Page() {
           <DingHero />
         </div>
 
-        {/* 竖排古朴题字 */}
-        <div
-          aria-hidden
-          className="absolute right-6 top-1/2 hidden -translate-y-1/2 select-none lg:block"
-          style={{ writingMode: 'vertical-rl' }}
-        >
-          <span className="font-serif text-xl font-bold tracking-[0.6em] text-sage/70">
-            炉中日月长 · 鼎内乾坤大
-          </span>
-        </div>
-
         <div className="relative z-10 max-w-3xl">
-          <div className="flex items-center gap-3 text-sage">
-            <span className="h-px w-8 bg-gold" aria-hidden />
-            <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-            <span className="text-sm tracking-[0.3em]">丹房 · 今日宜炼丹</span>
-          </div>
-
-          <h1 className="mt-8 whitespace-nowrap font-serif text-[24vw] font-black leading-[0.82] tracking-tight text-foreground sm:text-[16rem] md:text-[13rem] lg:text-[17rem]">
-            炼丹
-            <span className="text-primary">炉</span>
+          <h1 className="font-serif font-black leading-[1.06] tracking-tight text-foreground">
+            <span className="block text-[22vw] sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">炼丹</span>
+            <span className="block pl-[0.08em] text-[22vw] text-primary sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">炉</span>
           </h1>
 
           <p className="mt-10 max-w-md text-pretty text-lg leading-relaxed text-muted-foreground">
@@ -83,6 +66,12 @@ export default function Page() {
             <span className="text-primary">炉火正温</span>
           </div>
         </div>
+
+        {/* 底部横排题字 */}
+        <p className="relative z-10 mt-14 flex items-center gap-4 font-serif text-sm font-bold tracking-[0.5em] text-sage/80">
+          <span className="h-px w-10 bg-gold/70" aria-hidden />
+          炉中日月长 · 鼎内乾坤大
+        </p>
       </header>
 
       <main className="px-5 sm:px-8 lg:px-14">

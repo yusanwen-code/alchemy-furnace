@@ -28,7 +28,7 @@ export function NavDropdown({
               href={item.path}
               role="menuitem"
               onClick={onNavigate}
-              className="group flex items-start gap-4 rounded-2xl px-4 py-3 transition-colors duration-300 hover:bg-secondary/70"
+              className="group flex items-start gap-4 px-4 py-3 transition-colors duration-300 hover:bg-secondary/70"
             >
               <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full ring-1 ring-gold/30 bg-gold/10 text-gold transition-colors duration-300 group-hover:text-primary group-hover:ring-primary/30 group-hover:bg-primary/10">
                 <Icon className="size-4" strokeWidth={1.75} aria-hidden />

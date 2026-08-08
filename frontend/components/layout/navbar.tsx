@@ -106,10 +106,10 @@ export function Navbar() {
                   }}
                   onFocus={() => hasChildren && setOpen(item.label)}
                   className={cn(
-                    'flex items-center gap-1 rounded-lg px-4 py-2 text-[15px] font-medium transition-colors duration-300',
+                    'group relative flex items-center gap-1 px-4 py-2 text-[15px] font-medium transition-colors duration-300',
                     active || expanded
-                      ? 'bg-secondary text-foreground'
-                      : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {item.label}
@@ -122,6 +122,16 @@ export function Navbar() {
                       aria-hidden
                     />
                   )}
+                  {/* 朱砂下划线：激活常显，hover 淡入 */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'absolute inset-x-4 bottom-0 h-[2px] origin-left transition-transform duration-300',
+                      active || expanded
+                        ? 'scale-x-100 bg-primary'
+                        : 'scale-x-0 bg-primary/50 group-hover:scale-x-100',
+                    )}
+                  />
                 </Link>
               </div>
             )
@@ -132,7 +142,7 @@ export function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <Link
             href="/chat"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[15px] font-medium text-primary-foreground shadow-[0_10px_20px_-8px_rgba(181,74,63,0.5)] transition-all duration-300 hover:bg-cinnabar/90 hover:shadow-[0_14px_24px_-8px_rgba(181,74,63,0.55)]"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[15px] font-medium text-primary-foreground shadow-[0_10px_20px_-8px_rgba(181,74,63,0.5)] transition-all duration-300 hover:bg-cinnabar/90 hover:shadow-[0_14px_24px_-8px_rgba(181,74,63,0.55)]"
           >
             <Flame className="size-4" strokeWidth={2} aria-hidden />
             开炉论道
@@ -142,7 +152,7 @@ export function Navbar() {
         {/* 移动端汉堡按钮 */}
         <button
           type="button"
-          className="grid size-10 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+          className="grid size-10 place-items-center text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
           aria-label={mobileOpen ? '关闭菜单' : '打开菜单'}
           aria-expanded={mobileOpen}
           onClick={() => setMobileOpen(!mobileOpen)}
@@ -181,12 +191,15 @@ export function Navbar() {
                     href={item.path}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+                      'relative flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors',
                       active
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                        ? 'text-primary'
+                        : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
+                    {active && (
+                      <span aria-hidden className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 bg-primary" />
+                    )}
                     <Icon className="size-4" strokeWidth={1.75} aria-hidden />
                     {item.label}
                   </Link>
@@ -196,7 +209,7 @@ export function Navbar() {
                         <Link
                           key={c.title}
                           href={c.path}
-                          className="block rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
+                          className="block px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
                         >
                           {c.title}
                         </Link>

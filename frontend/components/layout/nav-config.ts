@@ -28,7 +28,7 @@ export interface NavItem {
 
 /** 顶部导航配置（Dify 式 mega-dropdown，参考 reference/导航栏.png） */
 export const navItems: NavItem[] = [
-  { label: '主殿', path: '/', icon: Home },
+  { label: '丹房', path: '/', icon: Home },
   {
     label: '金丹阁',
     path: '/pills',
