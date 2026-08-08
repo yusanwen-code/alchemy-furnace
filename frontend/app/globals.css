@@ -136,6 +136,72 @@
   mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
 }
 
+/* 鼎的自然漂移：位移 + 微旋转，节奏不对称 */
+@keyframes ding-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  22% {
+    transform: translate(5px, -9px) rotate(0.5deg);
+  }
+  48% {
+    transform: translate(-2px, -14px) rotate(-0.3deg);
+  }
+  74% {
+    transform: translate(-6px, -5px) rotate(0.4deg);
+  }
+}
+
+.ding-drift {
+  animation: ding-drift 11s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* 火舌闪烁 */
+@keyframes flame-flicker {
+  0% {
+    transform: scaleY(1) scaleX(1) skewX(0deg);
+    opacity: 0.85;
+  }
+  35% {
+    transform: scaleY(1.12) scaleX(0.94) skewX(1.5deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scaleY(0.92) scaleX(1.05) skewX(-1.5deg);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scaleY(1.06) scaleX(0.97) skewX(0.5deg);
+    opacity: 0.95;
+  }
+}
+
+/* 青烟上升飘散 */
+@keyframes smoke-rise {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.6);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  60% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-140px) translateX(18px) scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ding-drift {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .float-soft,
   .float-slow {

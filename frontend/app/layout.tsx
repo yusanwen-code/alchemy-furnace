@@ -26,10 +26,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" className={`${notoSerifSC.variable} ${notoSansSC.variable}`}>
-      <body>
+      <body className="flex min-h-screen flex-col">
         <Providers>
           <Navbar />
-          {children}
+          <div className="flex-1">{children}</div>
           <Footer />
         </Providers>
       </body>
