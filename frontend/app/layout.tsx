@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Noto_Serif_SC, Noto_Sans_SC } from 'next/font/google'
 import { Providers } from '@/components/providers'
+import { Footer } from '@/components/layout/footer'
 import './globals.css'
 
 const notoSerifSC = Noto_Serif_SC({
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-CN" className={`${notoSerifSC.variable} ${notoSansSC.variable}`}>
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Footer />
+        </Providers>
       </body>
     </html>
   )
