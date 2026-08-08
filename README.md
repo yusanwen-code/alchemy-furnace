@@ -1,6 +1,10 @@
 # 炼丹炉 &middot; Alchemy Furnace
 
 <p align="center">
+  <b>中文</b> &middot; <a href="README_EN.md">English</a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" />
   <img src="https://img.shields.io/badge/Go-1.21-00ADD8?logo=go" />
   <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python" />
@@ -268,7 +272,8 @@ curl -X POST http://localhost:8080/api/v1/agents/1/pills \
 
 ```
 alchemy-furnace/
-├── README.md                    # 项目说明
+├── README.md                    # 项目说明（中文）
+├── README_EN.md                 # 项目说明（English）
 ├── docker-compose.yml           # Docker 编排
 ├── .env.example                 # 环境变量模板
 ├── Makefile                     # 常用命令
