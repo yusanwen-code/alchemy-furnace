@@ -62,6 +62,8 @@ class CombineRequest(BaseModel):
     personality: str = Field(default="", description="道人基础性格描述")
     pills: List[SynthesisPillInput] = Field(default_factory=list, description="金丹列表")
     model: str = Field(default="", description="合成用 LLM 模型")
+    api_key: Optional[str] = Field(default=None, description="按请求覆盖的 API 密钥（缺省回退环境变量）")
+    base_url: Optional[str] = Field(default=None, description="按请求覆盖的 OpenAI 兼容接口地址")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
 
@@ -127,6 +129,8 @@ class ChatCompletionRequest(BaseModel):
     """
     messages: List[ChatMessage] = Field(..., min_length=1, description="消息历史")
     model: str = Field(default="", description="LLM模型")
+    api_key: Optional[str] = Field(default=None, description="按请求覆盖的 API 密钥（缺省回退环境变量）")
+    base_url: Optional[str] = Field(default=None, description="按请求覆盖的 OpenAI 兼容接口地址")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
     max_tokens: int = Field(default=4096, ge=1, le=8192, description="最大token数")
     stream: bool = Field(default=False, description="是否流式返回")

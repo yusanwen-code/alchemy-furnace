@@ -1,37 +1,21 @@
 /**
  * 设置页 - 系统配置
- * API Key 配置、模型选择、关于信息
+ * 模型配置入口（跳转模型管理）、关于信息
  * 响应式布局
  */
-import { useState } from 'react'
 import {
   Settings2,
-  Key,
-  Globe,
   Cpu,
   Info,
   Flame,
-  Save,
-  Check,
   ExternalLink,
   Heart,
+  ArrowRight,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import Layout from '@/components/Layout'
-import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@/services/models'
 
 export default function Settings() {
-  const [apiKey, setApiKey] = useState('')
-  const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1')
-  const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL)
-  const [saved, setSaved] = useState(false)
-
-  /** 保存设置 */
-  const handleSave = () => {
-    // 演示模式：仅显示保存成功
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
   return (
     <Layout>
       {/* 页面头部 */}
@@ -46,111 +30,21 @@ export default function Settings() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 左侧：主要设置 */}
         <div className="lg:col-span-2 space-y-6">
-          {/* API 配置 */}
+          {/* 模型管理入口 */}
           <section className="dao-card p-5 md:p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <Key className="w-5 h-5 text-gold-400" />
-              <h2 className="text-lg font-serif font-bold text-gold-300">API 配置</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <Cpu className="w-5 h-5 text-gold-400" />
+              <h2 className="text-lg font-serif font-bold text-gold-300">语言模型</h2>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="dao-label flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5" />
-                  API Key
-                </label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="dao-input"
-                />
-                <p className="text-[10px] text-ink-500 mt-1">
-                  你的 OpenAI / DeepSeek / 通义千问 API Key
-                </p>
-              </div>
-
-              <div>
-                <label className="dao-label flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" />
-                  API Base URL
-                </label>
-                <input
-                  type="text"
-                  value={baseUrl}
-                  onChange={e => setBaseUrl(e.target.value)}
-                  placeholder="https://api.openai.com/v1"
-                  className="dao-input"
-                />
-              </div>
-
-              <div>
-                <label className="dao-label flex items-center gap-1.5">
-                  <Cpu className="w-3.5 h-3.5" />
-                  默认模型
-                </label>
-                <select
-                  value={defaultModel}
-                  onChange={e => setDefaultModel(e.target.value)}
-                  className="dao-input"
-                >
-                  {AVAILABLE_MODELS.map(model => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} ({model.provider})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <p className="text-sm text-ink-400 mb-4 leading-relaxed">
+              论道与丹性合成所用的语言模型（服务商、Base URL、API Key、温度等）已迁移至「模型管理」统一配置。
+            </p>
+            <Link to="/models" className="dao-btn-primary inline-flex">
+              <Cpu className="w-4 h-4" />
+              前往模型管理
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </section>
-
-          {/* 模型列表 */}
-          <section className="dao-card p-5 md:p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <Cpu className="w-5 h-5 text-jade-400" />
-              <h2 className="text-lg font-serif font-bold text-gold-300">可用模型</h2>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {AVAILABLE_MODELS.map(model => (
-                <div
-                  key={model.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-ink-800/50 border border-bronze-600/20"
-                >
-                  <div className="w-9 h-9 rounded-lg bg-jade-500/15 flex items-center justify-center flex-shrink-0">
-                    <Cpu className="w-4.5 h-4.5 text-jade-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-rice-paper-100">{model.name}</p>
-                    <p className="text-[10px] text-ink-400">{model.description}</p>
-                  </div>
-                  <span className={`
-                    text-[10px] px-2 py-0.5 rounded-full border
-                    ${model.provider === 'openai' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                      model.provider === 'deepseek' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                        'bg-orange-500/10 text-orange-400 border-orange-500/20'}
-                  `}>
-                    {model.provider}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 保存按钮 */}
-          <div className="flex items-center justify-end gap-3">
-            {saved && (
-              <span className="flex items-center gap-1 text-sm text-jade-400 animate-fade-in">
-                <Check className="w-4 h-4" />
-                已保存
-              </span>
-            )}
-            <button onClick={handleSave} className="dao-btn-primary">
-              <Save className="w-4 h-4" />
-              保存设置
-            </button>
-          </div>
         </div>
 
         {/* 右侧：关于信息 */}

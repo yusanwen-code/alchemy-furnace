@@ -5,6 +5,7 @@
  * H5 优化: 单列卡片
  */
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Plus,
   Users,
@@ -18,19 +19,32 @@ import {
 import { useAgent } from '@/contexts/AgentContext'
 import AgentCard from '@/components/AgentCard'
 import Layout from '@/components/Layout'
-import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@/services/models'
+import * as modelService from '@/services/modelService'
+import type { ModelOption } from '@/services/modelService'
 
 export default function Agents() {
   const { state, fetchAgents, addAgent } = useAgent()
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState('')
   const [personality, setPersonality] = useState('')
-  const [modelName, setModelName] = useState(DEFAULT_MODEL)
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
+  const [modelName, setModelName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
   // 初始化加载
   useEffect(() => {
     fetchAgents()
+    // 加载已启用模型选项（默认模型排在首位并作为默认选择）
+    modelService.options()
+      .then(opts => {
+        const sorted = [...opts].sort((a, b) => Number(b.is_default) - Number(a.is_default))
+        setModelOptions(sorted)
+        const def = sorted.find(o => o.is_default) || sorted[0]
+        if (def) setModelName(prev => prev || def.name)
+      })
+      .catch(() => {
+        // 模型选项加载失败时保留下拉为空态提示
+      })
   }, [fetchAgents])
 
   /** 创建道人 */
@@ -39,14 +53,15 @@ export default function Agents() {
     if (!name.trim()) return
     const agent = await addAgent({
       name: name.trim(),
-      model_name: modelName,
+      model_name: modelName || undefined,
       personality: personality.trim() || undefined,
     })
     if (agent) {
       setShowCreate(false)
       setName('')
       setPersonality('')
-      setModelName(DEFAULT_MODEL)
+      const def = modelOptions.find(o => o.is_default) || modelOptions[0]
+      setModelName(def?.name || '')
     }
   }
 
@@ -139,17 +154,25 @@ export default function Agents() {
                   <Cpu className="w-3.5 h-3.5" />
                   选择模型
                 </label>
-                <select
-                  value={modelName}
-                  onChange={e => setModelName(e.target.value)}
-                  className="dao-input"
-                >
-                  {AVAILABLE_MODELS.map(model => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} - {model.description}
-                    </option>
-                  ))}
-                </select>
+                {modelOptions.length === 0 ? (
+                  <p className="text-xs text-ink-400 bg-ink-800/50 border border-bronze-600/20 rounded-lg px-3 py-2.5">
+                    暂无可用模型，请先在
+                    <Link to="/models" className="text-gold-400 hover:text-gold-300 mx-1">模型管理</Link>
+                    中配置
+                  </p>
+                ) : (
+                  <select
+                    value={modelName}
+                    onChange={e => setModelName(e.target.value)}
+                    className="dao-input"
+                  >
+                    {modelOptions.map(model => (
+                      <option key={model.name} value={model.name}>
+                        {model.display_name || model.name}（{model.provider}）{model.is_default ? ' · 默认' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="flex items-center gap-3 pt-2">

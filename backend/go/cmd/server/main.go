@@ -79,9 +79,10 @@ func main() {
 	chatHandler := handler.NewChatHandler()
 	systemHandler := handler.NewSystemHandler()
 	trialHandler := handler.NewTrialHandler()
+	modelHandler := handler.NewModelHandler()
 
 	// ---------- 8. 注册路由 ----------
-	setupRoutes(r, pillHandler, agentHandler, chatHandler, systemHandler, trialHandler)
+	setupRoutes(r, pillHandler, agentHandler, chatHandler, systemHandler, trialHandler, modelHandler)
 
 	// ---------- 9. 启动 HTTP 服务 ----------
 	port := cfg.Server.Port
@@ -132,6 +133,7 @@ func setupRoutes(
 	chat *handler.ChatHandler,
 	system *handler.SystemHandler,
 	trial *handler.TrialHandler,
+	modelH *handler.ModelHandler,
 ) {
 	// API v1 根路径
 	v1 := r.Group("/api/v1")
@@ -174,6 +176,18 @@ func setupRoutes(
 	{
 		trialGroup.POST("/synthesis", trial.Synthesize) // 合成预览
 		trialGroup.POST("/chat", trial.Chat)            // 临时对话（非流式）
+	}
+
+	// ---------- 模型管理 ----------
+	// 注意：/options 必须在 /:id 之前注册，避免路由冲突
+	models := v1.Group("/models")
+	{
+		models.GET("", modelH.ListModels)                          // 模型列表
+		models.POST("", modelH.CreateModel)                        // 创建模型
+		models.GET("/options", modelH.ListOptions)                 // 道人表单下拉的精简列表
+		models.PUT("/:id", modelH.UpdateModel)                     // 更新模型
+		models.DELETE("/:id", modelH.DeleteModel)                  // 删除模型（被引用时 409）
+		models.POST("/:id/test-connection", modelH.TestConnection) // 连接测试
 	}
 
 	// ---------- 系统接口 ----------

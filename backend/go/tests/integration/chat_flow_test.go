@@ -16,6 +16,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -134,27 +135,26 @@ func TestSynthesisClientContract(t *testing.T) {
 	pointConfigAtEngine(t, engine.URL)
 
 	client := service.NewSynthesisClient()
-	resp, err := client.Combine("沉稳内敛，喜好引经据典", []service.SynthesisPillInput{
-		{
-			ID:        1,
-			Name:      "文言文金丹",
-			Weight:    1.0,
-			SortOrder: 1,
-			SkillSchema: model.JSONMap{
-				"identity_card": "吾乃文言丹所化",
-				"expression_dna": map[string]interface{}{
-					"sentence_length": "short",
-					"formality":       0.9,
-					"vocabulary":      []string{"之", "乎", "者", "也"},
-					"taboo_words":     []string{"yyds"},
-					"rhythm":          "四字为节",
-					"humor_type":      "冷幽默",
-					"certainty_style": "断然下判",
-					"citation_habit":  "引《论语》《庄子》",
-				},
+	resp, err := client.Combine("沉稳内敛，喜好引经据典", []service.SynthesisPillInput{{
+		ID:        1,
+		Name:      "文言文金丹",
+		Weight:    1.0,
+		SortOrder: 1,
+		SkillSchema: model.JSONMap{
+			"identity_card": "吾乃文言丹所化",
+			"expression_dna": map[string]interface{}{
+				"sentence_length": "short",
+				"formality":       0.9,
+				"vocabulary":      []string{"之", "乎", "者", "也"},
+				"taboo_words":     []string{"yyds"},
+				"rhythm":          "四字为节",
+				"humor_type":      "冷幽默",
+				"certainty_style": "断然下判",
+				"citation_habit":  "引《论语》《庄子》",
 			},
 		},
-	})
+	},
+	}, nil)
 	if err != nil {
 		t.Fatalf("Combine 调用失败: %v", err)
 	}
@@ -196,10 +196,10 @@ func TestChatStreamContract(t *testing.T) {
 	pointConfigAtEngine(t, engine.URL)
 
 	svc := service.NewChatService()
-	stream, err := svc.CallChatStream([]map[string]string{
+	stream, err := svc.CallChatStream(context.Background(), []map[string]string{
 		{"role": "system", "content": "【合成提示词】你是服用文言文金丹的道人"},
 		{"role": "user", "content": "道友请讲"},
-	}, "gpt-4o")
+	}, &service.ModelCredentials{Model: "gpt-4o"})
 	if err != nil {
 		t.Fatalf("CallChatStream 调用失败: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestChatStreamEngineError(t *testing.T) {
 	pointConfigAtEngine(t, engine.URL)
 
 	svc := service.NewChatService()
-	_, err := svc.CallChatStream([]map[string]string{{"role": "user", "content": "hi"}}, "gpt-4o")
+	_, err := svc.CallChatStream(context.Background(), []map[string]string{{"role": "user", "content": "hi"}}, &service.ModelCredentials{Model: "gpt-4o"})
 	if err == nil {
 		t.Fatal("引擎返回 500 时应当报错")
 	}
@@ -387,10 +387,10 @@ func TestChatFlowEndToEnd(t *testing.T) {
 	}
 
 	// 流式对话（mock 引擎）
-	stream, err := chatSvc.CallChatStream([]map[string]string{
+	stream, err := chatSvc.CallChatStream(context.Background(), []map[string]string{
 		{"role": "system", "content": pattern.SystemPrompt},
 		{"role": "user", "content": "道友，如何看待内卷？"},
-	}, agent.ModelName)
+	}, &service.ModelCredentials{Model: agent.ModelName})
 	if err != nil {
 		t.Fatalf("流式对话失败: %v", err)
 	}

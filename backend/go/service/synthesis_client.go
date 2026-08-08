@@ -38,10 +38,13 @@ type SynthesisPillInput struct {
 }
 
 // CombineRequest 合成请求
+// base_url/api_key 为按请求透传的模型凭证（可选），缺省时 Python 回退自身环境变量配置
 type CombineRequest struct {
 	Personality string               `json:"personality"`
 	Pills       []SynthesisPillInput `json:"pills"`
 	Model       string               `json:"model"`
+	BaseURL     string               `json:"base_url,omitempty"`
+	APIKey      string               `json:"api_key,omitempty"`
 	Temperature float64              `json:"temperature"`
 	MaxTokens   int                  `json:"max_tokens"`
 }
@@ -63,7 +66,8 @@ type CombineResponse struct {
 }
 
 // Combine 调用 Python /api/v1/synthesis/combine，将基础性格与金丹列表合成为系统提示词
-func (c *SynthesisClient) Combine(personality string, pills []SynthesisPillInput) (*CombineResponse, error) {
+// creds 为解析后的合成模型凭证（可为 nil，回退环境变量模型配置）
+func (c *SynthesisClient) Combine(personality string, pills []SynthesisPillInput, creds *ModelCredentials) (*CombineResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/synthesis/combine", c.baseURL)
 
 	reqBody := CombineRequest{
@@ -72,6 +76,11 @@ func (c *SynthesisClient) Combine(personality string, pills []SynthesisPillInput
 		Model:       config.Get().LLM.SynthesisModel,
 		Temperature: 0.7,
 		MaxTokens:   2048,
+	}
+	if creds != nil && creds.Model != "" {
+		reqBody.Model = creds.Model
+		reqBody.BaseURL = creds.BaseURL
+		reqBody.APIKey = creds.APIKey
 	}
 	if reqBody.Model == "" {
 		reqBody.Model = config.Get().LLM.DefaultModel

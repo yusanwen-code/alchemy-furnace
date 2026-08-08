@@ -61,7 +61,19 @@ def _install_httpx_stub() -> None:
         def close(self):
             pass
 
+    class AsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.kwargs = kwargs
+
+        async def aclose(self):
+            pass
+
+    class TimeoutException(Exception):
+        pass
+
     httpx.Client = Client
+    httpx.AsyncClient = AsyncClient
+    httpx.TimeoutException = TimeoutException
     sys.modules["httpx"] = httpx
 
 
@@ -85,7 +97,33 @@ def _install_openai_stub() -> None:
             self.kwargs = kwargs
             self.chat = _Chat()
 
+        def close(self):
+            pass
+
+    class AsyncOpenAI:
+        def __init__(self, *args, **kwargs):
+            self.kwargs = kwargs
+            self.chat = _Chat()
+
+        async def close(self):
+            pass
+
+    class APIError(Exception):
+        pass
+
+    class APIStatusError(APIError):
+        def __init__(self, message="", status_code=None, *args, **kwargs):
+            super().__init__(message)
+            self.status_code = status_code
+
+    class APITimeoutError(APIError):
+        pass
+
     openai.OpenAI = OpenAI
+    openai.AsyncOpenAI = AsyncOpenAI
+    openai.APIError = APIError
+    openai.APIStatusError = APIStatusError
+    openai.APITimeoutError = APITimeoutError
     sys.modules["openai"] = openai
 
 

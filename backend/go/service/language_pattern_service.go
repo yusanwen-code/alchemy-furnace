@@ -18,12 +18,14 @@ import (
 // LanguagePatternService 语言模式缓存业务逻辑
 type LanguagePatternService struct {
 	synthesis *SynthesisClient
+	models    *ModelService
 }
 
 // NewLanguagePatternService 创建语言模式缓存业务实例
 func NewLanguagePatternService() *LanguagePatternService {
 	return &LanguagePatternService{
 		synthesis: NewSynthesisClient(),
+		models:    NewModelService(),
 	}
 }
 
@@ -150,7 +152,15 @@ func (s *LanguagePatternService) GetOrBuildPattern(agentID uint) (*model.Languag
 		})
 	}
 
-	resp, err := s.synthesis.Combine(agent.Personality, pills)
+	// 解析合成专用模型凭证（is_synthesis 优先，回退 is_default）
+	creds, credErr := s.models.ResolveSynthesisCredentials()
+	if credErr != nil {
+		// 凭证解析失败不阻塞合成：回退环境变量模型配置
+		zap.L().Warn("[炼丹炉] 合成模型凭证解析失败，回退环境变量配置", zap.Error(credErr))
+		creds = nil
+	}
+
+	resp, err := s.synthesis.Combine(agent.Personality, pills, creds)
 	if err != nil {
 		// 合成失败时，若存在旧缓存则降级返回旧缓存（标记失效但可用）
 		if findErr == nil {

@@ -40,6 +40,8 @@ async def combine(request: CombineRequest) -> CombineResponse:
             model=request.model or None,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            api_key=request.api_key,
+            base_url=request.base_url,
         )
         return CombineResponse(**result)
     except Exception as e:

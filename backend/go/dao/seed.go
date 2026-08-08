@@ -9,6 +9,8 @@ import (
 	"log"
 
 	"github.com/alchemy-furnace/server/model"
+	"github.com/alchemy-furnace/server/pkg/config"
+	alchemycrypto "github.com/alchemy-furnace/server/pkg/crypto"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +39,89 @@ func SeedBuiltinPills(db *gorm.DB) error {
 	}
 
 	log.Printf("[炼丹炉] 内置金丹种子写入完成：新增 %d 枚，跳过 %d 枚", created, len(pills)-created)
+	return nil
+}
+
+// SeedDefaultLLMModels 写入默认 LLM 模型种子数据
+// 幂等策略：llm_models 表非空则直接跳过
+// 种子规则（data-model.md）：
+//  1. 仅当表为空且 OPENAI_API_KEY 有效时执行
+//  2. 创建 {name: DEFAULT_MODEL, provider: openai, base_url: OPENAI_BASE_URL, is_default: true, is_enabled: true}
+//  3. 若 SYNTHESIS_MODEL != DEFAULT_MODEL：另建同凭证条目 {name: SYNTHESIS_MODEL, is_synthesis: true}；
+//     相同则在默认条目上置 is_synthesis: true
+//  4. 未配置 MODEL_KEY_SECRET 时无法加密 api_key：仍创建条目但 api_key_encrypted 留空并输出警告日志
+func SeedDefaultLLMModels(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&model.LLMModel{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("查询模型配置数量失败: %w", err)
+	}
+	if count > 0 {
+		return nil // 已有模型配置，跳过
+	}
+
+	cfg := config.Get()
+	apiKey := cfg.LLM.APIKey
+	if apiKey == "" || apiKey == "sk-your-api-key-here" {
+		log.Println("[炼丹炉] 未配置有效的 OPENAI_API_KEY，跳过默认模型种子写入")
+		return nil
+	}
+
+	// 加密 api_key；未配置密钥时留空并警告（可在模型管理中补录）
+	encrypted := ""
+	if cfg.ModelKeySecret == "" {
+		log.Println("[炼丹炉] 警告: 未配置 MODEL_KEY_SECRET，默认模型种子将不存储 API Key，请配置密钥后在模型管理中补录")
+	} else {
+		enc, err := alchemycrypto.Encrypt(apiKey, cfg.ModelKeySecret)
+		if err != nil {
+			return fmt.Errorf("加密默认模型 API Key 失败: %w", err)
+		}
+		encrypted = enc
+	}
+
+	defaultEntry := model.LLMModel{
+		Name:            cfg.LLM.DefaultModel,
+		DisplayName:     cfg.LLM.DefaultModel,
+		Provider:        "openai",
+		BaseURL:         cfg.LLM.BaseURL,
+		APIKeyEncrypted: encrypted,
+		Temperature:     0.7,
+		MaxTokens:       4096,
+		IsEnabled:       true,
+		IsDefault:       true,
+		SortOrder:       0,
+	}
+
+	synthesisModel := cfg.LLM.SynthesisModel
+	if synthesisModel == "" || synthesisModel == cfg.LLM.DefaultModel {
+		// 合成模型与默认模型相同：同一条目兼任
+		defaultEntry.IsSynthesis = true
+		if err := db.Create(&defaultEntry).Error; err != nil {
+			return fmt.Errorf("写入默认模型种子失败: %w", err)
+		}
+		log.Printf("[炼丹炉] 已创建默认模型种子：%s（兼任合成专用模型）", defaultEntry.Name)
+		return nil
+	}
+
+	// 合成模型不同：默认条目 + 合成专用条目（同凭证）
+	if err := db.Create(&defaultEntry).Error; err != nil {
+		return fmt.Errorf("写入默认模型种子失败: %w", err)
+	}
+	synthesisEntry := model.LLMModel{
+		Name:            synthesisModel,
+		DisplayName:     synthesisModel,
+		Provider:        "openai",
+		BaseURL:         cfg.LLM.BaseURL,
+		APIKeyEncrypted: encrypted,
+		Temperature:     0.7,
+		MaxTokens:       2048,
+		IsEnabled:       true,
+		IsSynthesis:     true,
+		SortOrder:       1,
+	}
+	if err := db.Create(&synthesisEntry).Error; err != nil {
+		return fmt.Errorf("写入合成专用模型种子失败: %w", err)
+	}
+	log.Printf("[炼丹炉] 已创建模型种子：默认=%s，合成专用=%s", defaultEntry.Name, synthesisEntry.Name)
 	return nil
 }
 

@@ -5,6 +5,8 @@ package config
 import (
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -23,6 +25,10 @@ type Config struct {
 
 	// PythonEngine Python 语言引擎服务地址
 	PythonEngine PythonEngineConfig `mapstructure:"python_engine"`
+
+	// ModelKeySecret 模型 API Key 加密密钥（AES-GCM，经 SHA256 归一化为 32 字节）
+	// 环境变量 MODEL_KEY_SECRET；为空时无法存储/解密模型 API Key
+	ModelKeySecret string `mapstructure:"model_key_secret"`
 }
 
 // DatabaseConfig 数据库配置，用于连接 PostgreSQL 存储金丹、道人、语言模式等业务数据
@@ -100,6 +106,9 @@ func Load() (*Config, error) {
 	// Python 语言引擎默认配置
 	v.SetDefault("python_engine.base_url", getEnv(v, "PYTHON_ENGINE_BASE_URL", "http://localhost:8000"))
 
+	// 模型 API Key 加密密钥（MODEL_KEY_SECRET）
+	v.SetDefault("model_key_secret", getEnv(v, "MODEL_KEY_SECRET", ""))
+
 	// 解析配置到结构体
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
@@ -131,8 +140,12 @@ func (d *DatabaseConfig) DSN() string {
 }
 
 // getEnv 从环境变量获取字符串值，若不存在则返回默认值
+// 依次查找：AF_ 前缀环境变量（viper）→ .env 文件（viper）→ 无前缀环境变量
 func getEnv(v *viper.Viper, key, defaultVal string) string {
 	val := v.GetString(key)
+	if val == "" {
+		val = os.Getenv(key)
+	}
 	if val == "" {
 		return defaultVal
 	}
@@ -143,6 +156,11 @@ func getEnv(v *viper.Viper, key, defaultVal string) string {
 func getEnvInt(v *viper.Viper, key string, defaultVal int) int {
 	val := v.GetInt(key)
 	if val == 0 {
+		if s := os.Getenv(key); s != "" {
+			if n, err := strconv.Atoi(s); err == nil {
+				return n
+			}
+		}
 		return defaultVal
 	}
 	return val
