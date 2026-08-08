@@ -155,6 +155,33 @@ func (ChatMessage) TableName() string {
 	return "chat_messages"
 }
 
+// ---------- LLM 模型配置 ----------
+
+// LLMModel 模型配置，对应 llm_models 表
+// 每个模型独立配置服务商凭证（base_url/api_key），api_key 以 AES-GCM 加密存储
+// is_default / is_synthesis 全表最多一个（由部分唯一索引保证）
+type LLMModel struct {
+	ID              uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:模型配置唯一标识"`
+	Name            string    `json:"name" gorm:"size:50;not null;uniqueIndex;comment:模型名（API 调用用，如 gpt-4o）"`
+	DisplayName     string    `json:"display_name" gorm:"size:100;not null;comment:显示名"`
+	Provider        string    `json:"provider" gorm:"size:50;not null;comment:服务商标识(openai/deepseek/aliyun/ollama/other)"`
+	BaseURL         string    `json:"base_url" gorm:"size:255;not null;comment:OpenAI 兼容接口地址"`
+	APIKeyEncrypted string    `json:"-" gorm:"type:text;comment:AES-GCM 加密后的 api_key（空=无鉴权本地服务）"`
+	Temperature     float64   `json:"temperature" gorm:"default:0.7;comment:默认温度(0-2)"`
+	MaxTokens       int       `json:"max_tokens" gorm:"default:4096;comment:默认最大 token"`
+	IsEnabled       bool      `json:"is_enabled" gorm:"default:true;index;comment:是否启用"`
+	IsDefault       bool      `json:"is_default" gorm:"default:false;comment:是否默认模型（全表最多一个）"`
+	IsSynthesis     bool      `json:"is_synthesis" gorm:"default:false;comment:是否语言模式合成专用模型（全表最多一个）"`
+	SortOrder       int       `json:"sort_order" gorm:"default:0;comment:展示顺序"`
+	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
+}
+
+// TableName 指定表名
+func (LLMModel) TableName() string {
+	return "llm_models"
+}
+
 // ---------- JSONB 支持 ----------
 
 // JSONMap 是 map[string]interface{} 的包装类型，用于支持 PostgreSQL 的 JSONB 字段
@@ -295,4 +322,72 @@ type HealthCheckResponse struct {
 	Timestamp    int64  `json:"timestamp"`     // 时间戳
 	DB           string `json:"db"`            // 数据库状态
 	PythonEngine string `json:"python_engine"` // Python 语言引擎状态
+}
+
+// ---------- 模型管理 DTO ----------
+
+// LLMModelResponse 模型配置响应（api_key 永不明文返回，仅返回掩码）
+type LLMModelResponse struct {
+	ID           uint      `json:"id"`
+	Name         string    `json:"name"`
+	DisplayName  string    `json:"display_name"`
+	Provider     string    `json:"provider"`
+	BaseURL      string    `json:"base_url"`
+	APIKeyMasked string    `json:"api_key_masked"` // 掩码形式，如 sk-****wxyz
+	HasAPIKey    bool      `json:"has_api_key"`    // 是否已配置 api_key
+	Temperature  float64   `json:"temperature"`
+	MaxTokens    int       `json:"max_tokens"`
+	IsEnabled    bool      `json:"is_enabled"`
+	IsDefault    bool      `json:"is_default"`
+	IsSynthesis  bool      `json:"is_synthesis"`
+	SortOrder    int       `json:"sort_order"`
+	ReferencedBy int64     `json:"referenced_by"` // 引用该模型的道人数量
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// LLMModelOption 道人表单下拉用的精简模型项
+type LLMModelOption struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Provider    string `json:"provider"`
+	IsDefault   bool   `json:"is_default"`
+}
+
+// CreateLLMModelRequest 创建模型请求
+type CreateLLMModelRequest struct {
+	Name        string  `json:"name" binding:"required,max=50"`          // 模型名（唯一）
+	DisplayName string  `json:"display_name" binding:"required,max=100"` // 显示名
+	Provider    string  `json:"provider" binding:"required,max=50"`      // 服务商标识
+	BaseURL     string  `json:"base_url" binding:"required,max=255"`     // OpenAI 兼容接口地址
+	APIKey      string  `json:"api_key"`                                 // 明文 api_key（仅写入时传输）
+	Temperature float64 `json:"temperature"`                             // 默认温度(0-2)，0 值视为默认 0.7
+	MaxTokens   int     `json:"max_tokens"`                              // 默认最大 token，0 值视为默认 4096
+	IsEnabled   *bool   `json:"is_enabled"`                              // 是否启用，缺省 true
+	IsDefault   bool    `json:"is_default"`                              // 是否默认模型
+	IsSynthesis bool    `json:"is_synthesis"`                            // 是否合成专用模型
+	SortOrder   int     `json:"sort_order"`                              // 展示顺序
+}
+
+// UpdateLLMModelRequest 更新模型请求（指针字段区分「未传」与「置空/置零」）
+// api_key: 不传(nil)=不修改，传空字符串=清除密钥，传值=重新加密存储
+type UpdateLLMModelRequest struct {
+	Name        *string  `json:"name" binding:"omitempty,max=50"`
+	DisplayName *string  `json:"display_name" binding:"omitempty,max=100"`
+	Provider    *string  `json:"provider" binding:"omitempty,max=50"`
+	BaseURL     *string  `json:"base_url" binding:"omitempty,max=255"`
+	APIKey      *string  `json:"api_key"`
+	Temperature *float64 `json:"temperature"`
+	MaxTokens   *int     `json:"max_tokens"`
+	IsEnabled   *bool    `json:"is_enabled"`
+	IsDefault   *bool    `json:"is_default"`
+	IsSynthesis *bool    `json:"is_synthesis"`
+	SortOrder   *int     `json:"sort_order"`
+}
+
+// TestConnectionResult 模型连接测试结果
+type TestConnectionResult struct {
+	Success   bool   `json:"success"`    // 是否连通
+	LatencyMs int64  `json:"latency_ms"` // 耗时（毫秒）
+	Error     string `json:"error"`      // 失败时的可读中文描述
 }

@@ -4,7 +4,7 @@
  * AI 消息: 左侧，金色边框，卷轴风格
  * 支持 markdown 渲染（RAG 引用来源展示已移除）
  */
-import { User, Bot } from 'lucide-react'
+import { User, Bot, TriangleAlert, CircleStop } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '@/services/types'
 import MarkdownRenderer from './MarkdownRenderer'
 
@@ -84,6 +84,24 @@ export default function ChatMessage({ message, streaming = false }: ChatMessageP
             <span className="inline-block w-2 h-4 bg-gold-400 ml-1 animate-pulse" />
           )}
         </div>
+
+        {/* 状态标记（仅 AI 消息） */}
+        {!isUser && (message.incomplete || message.stopped) && (
+          <div className="flex items-center gap-3 mt-1.5 pl-1">
+            {message.incomplete && (
+              <span className="flex items-center gap-1 text-[10px] text-gold-400/80">
+                <TriangleAlert className="w-3 h-3" />
+                可能不完整
+              </span>
+            )}
+            {message.stopped && (
+              <span className="flex items-center gap-1 text-[10px] text-ink-400">
+                <CircleStop className="w-3 h-3" />
+                已停止
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

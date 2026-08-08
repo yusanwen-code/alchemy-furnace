@@ -31,7 +31,8 @@ import { useAgent } from '@/contexts/AgentContext'
 import { usePill } from '@/contexts/PillContext'
 import { useChat } from '@/contexts/ChatContext'
 import Layout from '@/components/Layout'
-import { AVAILABLE_MODELS } from '@/services/models'
+import * as modelService from '@/services/modelService'
+import type { ModelOption } from '@/services/modelService'
 import * as agentService from '@/services/agentService'
 import type { AgentPill, TensionSeverity } from '@/services/types'
 
@@ -214,6 +215,7 @@ export default function AgentDetail() {
   const [editName, setEditName] = useState('')
   const [editPersonality, setEditPersonality] = useState('')
   const [editModel, setEditModel] = useState('')
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -229,6 +231,14 @@ export default function AgentDetail() {
       fetchAgent(agentId)
       fetchPills()
     }
+    // 加载已启用模型选项（默认模型排在首位）
+    modelService.options()
+      .then(opts => {
+        setModelOptions([...opts].sort((a, b) => Number(b.is_default) - Number(a.is_default)))
+      })
+      .catch(() => {
+        // 模型选项加载失败时保留下拉为空态提示
+      })
   }, [agentId, fetchAgent, fetchPills])
 
   // 初始化编辑表单
@@ -397,15 +407,29 @@ export default function AgentDetail() {
                     <Cpu className="w-3.5 h-3.5" />
                     选择模型
                   </label>
-                  <select
-                    value={editModel}
-                    onChange={e => setEditModel(e.target.value)}
-                    className="dao-input"
-                  >
-                    {AVAILABLE_MODELS.map(m => (
-                      <option key={m.id} value={m.id}>{m.name} - {m.description}</option>
-                    ))}
-                  </select>
+                  {modelOptions.length === 0 ? (
+                    <p className="text-xs text-ink-400 bg-ink-800/50 border border-bronze-600/20 rounded-lg px-3 py-2.5">
+                      暂无可用模型，请先在
+                      <Link to="/models" className="text-gold-400 hover:text-gold-300 mx-1">模型管理</Link>
+                      中配置
+                    </p>
+                  ) : (
+                    <select
+                      value={editModel}
+                      onChange={e => setEditModel(e.target.value)}
+                      className="dao-input"
+                    >
+                      {/* 当前使用的模型可能已停用/删除，保留为可选项以便回显 */}
+                      {editModel && !modelOptions.some(o => o.name === editModel) && (
+                        <option value={editModel}>{editModel}（当前使用）</option>
+                      )}
+                      {modelOptions.map(m => (
+                        <option key={m.name} value={m.name}>
+                          {m.display_name || m.name}（{m.provider}）{m.is_default ? ' · 默认' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={handleSaveEdit} className="dao-btn-primary text-sm">

@@ -54,6 +54,8 @@ async def chat_completion(request: ChatCompletionRequest) -> BaseResponse:
             model=request.model or None,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            api_key=request.api_key,
+            base_url=request.base_url,
         )
 
         return BaseResponse(
@@ -68,11 +70,21 @@ async def chat_completion(request: ChatCompletionRequest) -> BaseResponse:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    except RuntimeError as e:
+        # chat_service 已将底层异常映射为可读中文消息（含错误码）
+        detail = str(e)
+        logger.error(f"求道失败: {detail}")
+        http_status = (
+            status.HTTP_504_GATEWAY_TIMEOUT
+            if "(TIMEOUT)" in detail
+            else status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+        raise HTTPException(status_code=http_status, detail=detail)
     except Exception as e:
         logger.error(f"求道失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"对话生成失败: {e}",
+            detail="对话生成失败，请稍后重试",
         )
 
 
@@ -105,6 +117,8 @@ async def chat_completion_stream(request: ChatCompletionRequest):
                 model=request.model or None,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
+                api_key=request.api_key,
+                base_url=request.base_url,
             ),
             media_type="text/event-stream",
             headers={

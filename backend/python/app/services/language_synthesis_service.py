@@ -13,12 +13,13 @@
 import hashlib
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from openai import OpenAI
 
 from app.core.config import settings
+from app.services.chat_service import mask_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,8 @@ class LanguageSynthesisService:
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         合成语言模式 - 化丹为性
@@ -84,6 +87,8 @@ class LanguageSynthesisService:
             model: 用于涌现推导的 LLM 模型（默认 SYNTHESIS_MODEL）
             temperature: 温度参数
             max_tokens: 最大 token 数
+            api_key: 调用级覆盖的 API 密钥（缺省回退环境变量）
+            base_url: 调用级覆盖的接口地址（缺省回退环境变量）
 
         Returns:
             dict: system_prompt, emergence_rules, inner_tensions,
@@ -115,6 +120,8 @@ class LanguageSynthesisService:
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
+            api_key=api_key,
+            base_url=base_url,
         )
 
         return {
@@ -390,6 +397,35 @@ class LanguageSynthesisService:
 
         return tensions
 
+    # ==================== 凭证解析（T016） ====================
+
+    def _resolve_credentials(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ) -> Tuple[str, Optional[str], bool]:
+        """
+        解析本次调用的生效凭证
+
+        Returns:
+            (effective_api_key, effective_base_url, is_override)
+        """
+        eff_key = (api_key or self.api_key or "").strip()
+        eff_url = (base_url or self.base_url or "").strip() or None
+        is_override = bool((api_key or "").strip() or (base_url or "").strip()) and (
+            eff_key != (self.api_key or "") or eff_url != (self.base_url or None)
+        )
+        return eff_key, eff_url, is_override
+
+    @staticmethod
+    def _build_client(api_key: str, base_url: Optional[str]) -> OpenAI:
+        # OpenAI SDK 要求 api_key 非空；本地服务（如 ollama）无鉴权时用占位符
+        return OpenAI(
+            api_key=api_key or "none",
+            base_url=base_url,
+            http_client=httpx.Client(timeout=60.0),
+        )
+
     # ==================== LLM 涌现推导 ====================
 
     def _derive_emergence(
@@ -401,6 +437,8 @@ class LanguageSynthesisService:
         model: str,
         temperature: float,
         max_tokens: int,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         LLM 涌现推导 - 丹性融合
@@ -409,13 +447,28 @@ class LanguageSynthesisService:
         - 融合后的系统提示词
         - 涌现规则（多金丹组合时显式要求 2-3 条）
         """
-        if not settings.openai_api_key_valid:
+        eff_key, eff_url, is_override = self._resolve_credentials(api_key, base_url)
+        # 调用级覆盖：提供了 api_key 或 base_url 即视为可用；否则沿用环境校验
+        credentials_usable = (
+            bool(eff_key or eff_url) if is_override else settings.openai_api_key_valid
+        )
+        if not credentials_usable:
             logger.warning("OPENAI_API_KEY 未配置，跳过涌现推导，使用结构化合并降级提示词")
             return {
                 "system_prompt": self._fallback_prompt(personality, merged),
                 "emergence_rules": [],
                 "usage": {},
             }
+
+        temp_client: Optional[OpenAI] = None
+        client = self.client
+        if is_override:
+            temp_client = self._build_client(eff_key, eff_url)
+            client = temp_client
+            logger.info(
+                "涌现推导使用调用级凭证 - base_url: %s, api_key: %s",
+                eff_url, mask_api_key(eff_key),
+            )
 
         pill_summaries = []
         for p in pills:
@@ -479,7 +532,7 @@ class LanguageSynthesisService:
 """
 
         try:
-            response = self.client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {
@@ -521,6 +574,12 @@ class LanguageSynthesisService:
                 "emergence_rules": [],
                 "usage": {},
             }
+        finally:
+            if temp_client is not None:
+                try:
+                    temp_client.close()
+                except Exception:
+                    logger.debug("关闭临时 OpenAI 客户端异常", exc_info=True)
 
     # ==================== 降级提示词 ====================
 

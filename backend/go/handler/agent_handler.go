@@ -16,12 +16,14 @@ import (
 // AgentHandler 道人 HTTP 处理器
 type AgentHandler struct {
 	service *service.AgentService
+	models  *service.ModelService
 }
 
 // NewAgentHandler 创建道人处理器
 func NewAgentHandler() *AgentHandler {
 	return &AgentHandler{
 		service: service.NewAgentService(),
+		models:  service.NewModelService(),
 	}
 }
 
@@ -71,6 +73,14 @@ func (h *AgentHandler) CreateAgent(c *gin.Context) {
 		return
 	}
 
+	// 校验 model_name 引用了已启用的模型配置
+	if req.ModelName != "" {
+		if err := h.models.ValidateEnabledModel(req.ModelName); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+	}
+
 	agent, err := h.service.CreateAgent(&req)
 	if err != nil {
 		zap.L().Error("[炼丹炉] 创建道人失败", zap.Error(err))
@@ -94,6 +104,14 @@ func (h *AgentHandler) UpdateAgent(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "请求参数错误: "+err.Error())
 		return
+	}
+
+	// 校验 model_name 引用了已启用的模型配置
+	if req.ModelName != "" {
+		if err := h.models.ValidateEnabledModel(req.ModelName); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
 	}
 
 	agent, err := h.service.UpdateAgent(uint(id), &req)

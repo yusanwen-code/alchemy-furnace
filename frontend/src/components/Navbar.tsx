@@ -9,6 +9,7 @@ import {
   CircleDot,
   Users,
   MessageSquare,
+  Cpu,
   Settings,
   Menu,
   X,
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/pills', label: '金丹阁', icon: CircleDot },
   { path: '/agents', label: '道人府', icon: Users },
   { path: '/chat', label: '论道', icon: MessageSquare },
+  { path: '/models', label: '模型管理', icon: Cpu },
   { path: '/settings', label: '设置', icon: Settings },
 ]
 

@@ -15,6 +15,7 @@ import PillDetail from '@/pages/PillDetail'
 import Agents from '@/pages/Agents'
 import AgentDetail from '@/pages/AgentDetail'
 import Chat from '@/pages/Chat'
+import Models from '@/pages/Models'
 import Settings from '@/pages/Settings'
 
 /**
@@ -42,6 +43,9 @@ function App() {
               {/* 论道 - 对话 */}
               <Route path="/chat" element={<Chat />} />
               <Route path="/chat/:sessionId" element={<Chat />} />
+
+              {/* 模型管理 */}
+              <Route path="/models" element={<Models />} />
 
               {/* 设置 */}
               <Route path="/settings" element={<Settings />} />

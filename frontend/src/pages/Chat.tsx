@@ -18,6 +18,8 @@ import {
   Sparkles,
   Users,
   Square,
+  AlertCircle,
+  WifiOff,
 } from 'lucide-react'
 import { useChat } from '@/contexts/ChatContext'
 import { useAgent } from '@/contexts/AgentContext'
@@ -28,7 +30,7 @@ export default function Chat() {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const navigate = useNavigate()
 
-  const { state: chatState, dispatch, fetchSessions, loadMessages, streamMessage, createSession, cancelStream } = useChat()
+  const { state: chatState, dispatch, fetchSessions, loadMessages, connect, disconnect, streamMessage, createSession, stopStream } = useChat()
   const { state: agentState, fetchAgents } = useAgent()
 
   const [input, setInput] = useState('')
@@ -40,6 +42,7 @@ export default function Chat() {
   const messages = chatState.messages
   const sessions = chatState.sessions
   const agents = agentState.agents
+  const connected = chatState.connectionState === 'connected'
 
   // 初始化加载
   useEffect(() => {
@@ -47,15 +50,22 @@ export default function Chat() {
     fetchAgents()
   }, [fetchSessions, fetchAgents])
 
-  // 根据 URL 参数加载会话
+  // 根据 URL 参数加载会话并建立 WebSocket 连接
   useEffect(() => {
     if (sessionId) {
       const sid = Number(sessionId)
       loadMessages(sid)
+      connect(sid)
     } else {
       dispatch({ type: 'CLEAR_CURRENT' })
+      disconnect()
     }
-  }, [sessionId, loadMessages, dispatch])
+  }, [sessionId, loadMessages, connect, disconnect, dispatch])
+
+  // 离开聊天页：主动断开连接（不触发重连）
+  useEffect(() => {
+    return () => disconnect()
+  }, [disconnect])
 
   // 自动滚动到底部
   useEffect(() => {
@@ -64,7 +74,7 @@ export default function Chat() {
 
   /** 发送消息 */
   const handleSend = async () => {
-    if (!input.trim() || !currentSession) return
+    if (!input.trim() || !currentSession || !connected) return
     const content = input.trim()
     setInput('')
     await streamMessage(currentSession.id, content)
@@ -327,11 +337,21 @@ export default function Chat() {
             )}
 
             {messages.map(message => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                streaming={chatState.streaming && message.role === 'assistant' && message.id === -1}
-              />
+              message.is_error ? (
+                /* 服务端错误：内联错误气泡 */
+                <div key={message.id} className="flex justify-center animate-fade-in">
+                  <div className="flex items-center gap-2 max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl bg-cinnabar-500/10 border border-cinnabar-500/30 text-cinnabar-300">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <p className="text-xs leading-relaxed">{message.content}</p>
+                  </div>
+                </div>
+              ) : (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  streaming={chatState.streaming && message.role === 'assistant' && message.id === -1}
+                />
+              )
             ))}
 
             {/* 流式输出中指示器 */}
@@ -352,6 +372,20 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* 连接状态提示 */}
+          {chatState.connectionState === 'connecting' && (
+            <div className="px-4 py-2 border-t border-gold-500/20 bg-gold-500/10 flex items-center justify-center gap-2 text-xs text-gold-300">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              连接已断开，正在重连…
+            </div>
+          )}
+          {chatState.connectionState === 'failed' && (
+            <div className="px-4 py-2 border-t border-cinnabar-500/20 bg-cinnabar-500/10 flex items-center justify-center gap-2 text-xs text-cinnabar-300">
+              <WifiOff className="w-3.5 h-3.5" />
+              连接失败，请检查网络后刷新页面重试
+            </div>
+          )}
+
           {/* 输入框 */}
           <div className="px-4 py-3 border-t border-bronze-600/20 bg-ink-800/30">
             <div className="flex items-end gap-2">
@@ -364,13 +398,14 @@ export default function Chat() {
                     handleSend()
                   }
                 }}
-                placeholder="向道人请教..."
-                className="dao-input resize-none min-h-[44px] max-h-[120px] py-2.5"
+                placeholder={connected ? '向道人请教...' : '连接中断，等待重连...'}
+                disabled={!connected}
+                className="dao-input resize-none min-h-[44px] max-h-[120px] py-2.5 disabled:opacity-50"
                 rows={1}
               />
               <button
-                onClick={chatState.streaming ? cancelStream : handleSend}
-                disabled={!chatState.streaming && !input.trim()}
+                onClick={chatState.streaming ? stopStream : handleSend}
+                disabled={chatState.streaming ? !connected : (!connected || !input.trim())}
                 className="dao-btn-primary px-3 py-2.5 flex-shrink-0 disabled:opacity-40"
                 title={chatState.streaming ? '停止输出' : '发送'}
               >

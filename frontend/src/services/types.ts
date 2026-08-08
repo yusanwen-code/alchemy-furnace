@@ -160,16 +160,12 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   created_at: string
-}
-
-// ========== 模型配置（前端静态可选列表） ==========
-
-/** 模型配置 */
-export interface ModelConfig {
-  id: string
-  name: string
-  description: string
-  provider: string
+  /** 断线导致该回复可能不完整 */
+  incomplete?: boolean
+  /** 该回复被手动停止 */
+  stopped?: boolean
+  /** 服务端错误消息（以错误气泡展示） */
+  is_error?: boolean
 }
 
 // ========== 请求 ==========
@@ -248,8 +244,8 @@ export interface AgentListParams extends ListParams {
 
 // ========== WebSocket ==========
 
-/** WebSocket 服务端消息（chunk / done / error） */
+/** WebSocket 服务端消息（chunk / done / stopped / error） */
 export interface WSMessage {
-  type: 'chunk' | 'done' | 'error'
+  type: 'chunk' | 'done' | 'stopped' | 'error'
   content?: string
 }

@@ -80,6 +80,11 @@ func InitDatabase(cfg *config.DatabaseConfig) error {
 		return fmt.Errorf("写入内置金丹种子数据失败: %w", err)
 	}
 
+	// 写入默认 LLM 模型种子数据（幂等：llm_models 非空则跳过）
+	if err := SeedDefaultLLMModels(db); err != nil {
+		return fmt.Errorf("写入默认模型种子数据失败: %w", err)
+	}
+
 	return nil
 }
 
@@ -95,11 +100,24 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.LanguagePattern{}, // 语言模式缓存表
 		&model.ChatSession{},     // 会话表
 		&model.ChatMessage{},     // 消息表
+		&model.LLMModel{},        // LLM 模型配置表
 	}
 
 	for _, m := range models {
 		if err := db.AutoMigrate(m); err != nil {
 			return fmt.Errorf("迁移表 %+v 失败: %w", m, err)
+		}
+	}
+
+	// llm_models 部分唯一索引：is_default / is_synthesis 全表最多一个为 true
+	// GORM 标签无法表达 WHERE 条件的部分索引，使用原生 SQL（幂等）
+	partialIndexes := []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_models_default ON llm_models(is_default) WHERE is_default`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_models_synthesis ON llm_models(is_synthesis) WHERE is_synthesis`,
+	}
+	for _, idx := range partialIndexes {
+		if err := db.Exec(idx).Error; err != nil {
+			return fmt.Errorf("创建 llm_models 部分唯一索引失败: %w", err)
 		}
 	}
 
@@ -123,7 +141,7 @@ func AutoMigrate(db *gorm.DB) error {
 		}
 	}
 
-	log.Println("[炼丹炉] 数据库表迁移完成，共 6 张表：elixir_pills, dao_agents, agent_pills, language_patterns, chat_sessions, chat_messages")
+	log.Println("[炼丹炉] 数据库表迁移完成，共 7 张表：elixir_pills, dao_agents, agent_pills, language_patterns, chat_sessions, chat_messages, llm_models")
 	return nil
 }
 

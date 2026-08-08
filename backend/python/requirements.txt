@@ -7,8 +7,8 @@ uvicorn[standard]==0.27.1
 python-multipart==0.0.9
 
 # 配置管理
-pydantic==2.6.1
-pydantic-settings==2.1.0
+pydantic==2.9.2
+pydantic-settings==2.5.2
 
 # LLM
 openai==1.12.0

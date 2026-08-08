@@ -15,17 +15,20 @@ import (
 	"github.com/alchemy-furnace/server/dao"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/pkg/config"
+	"go.uber.org/zap"
 )
 
 // TrialService 试丹服务
 type TrialService struct {
 	synthesis *SynthesisClient
+	models    *ModelService
 }
 
 // NewTrialService 创建试丹服务
 func NewTrialService() *TrialService {
 	return &TrialService{
 		synthesis: NewSynthesisClient(),
+		models:    NewModelService(),
 	}
 }
 
@@ -109,12 +112,31 @@ func (s *TrialService) loadTrialPills(inputs []TrialPillInput) ([]SynthesisPillI
 }
 
 // Synthesize 试丹-合成预览：不写入缓存，直接返回合成结果
+// 指定了 model_name 时按该模型解析凭证，否则使用合成专用模型凭证
 func (s *TrialService) Synthesize(req *TrialSynthesisRequest) (*CombineResponse, error) {
 	pills, err := s.loadTrialPills(req.Pills)
 	if err != nil {
 		return nil, err
 	}
-	return s.synthesis.Combine(req.Personality, pills)
+	return s.synthesis.Combine(req.Personality, pills, s.resolveTrialCredentials(req.ModelName))
+}
+
+// resolveTrialCredentials 解析试丹请求指定模型的凭证；空模型名走合成/默认解析
+// 解析失败时降级为 nil（Python 回退环境变量配置），不阻塞试丹流程
+func (s *TrialService) resolveTrialCredentials(modelName string) *ModelCredentials {
+	var creds *ModelCredentials
+	var err error
+	if modelName != "" {
+		creds, err = s.models.ResolveCredentials(modelName)
+	} else {
+		creds, err = s.models.ResolveSynthesisCredentials()
+	}
+	if err != nil {
+		zap.L().Warn("[炼丹炉] 试丹模型凭证解析失败，回退环境变量配置",
+			zap.String("model", modelName), zap.Error(err))
+		return nil
+	}
+	return creds
 }
 
 // Chat 试丹-临时对话：先合成系统提示词，再调用语言引擎非流式对话
@@ -124,7 +146,7 @@ func (s *TrialService) Chat(req *TrialChatRequest) (*TrialChatResponse, error) {
 		return nil, err
 	}
 
-	combined, err := s.synthesis.Combine(req.Personality, pills)
+	combined, err := s.synthesis.Combine(req.Personality, pills, s.resolveTrialCredentials(""))
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +156,15 @@ func (s *TrialService) Chat(req *TrialChatRequest) (*TrialChatResponse, error) {
 	messages = append(messages, map[string]string{"role": "system", "content": combined.SystemPrompt})
 	messages = append(messages, req.Messages...)
 
+	// 对话模型凭证：指定 model 时按名解析，否则用默认模型
+	creds := s.resolveTrialCredentials(req.Model)
 	modelName := req.Model
 	if modelName == "" {
-		modelName = config.Get().LLM.DefaultModel
+		if creds != nil && creds.Model != "" {
+			modelName = creds.Model
+		} else {
+			modelName = config.Get().LLM.DefaultModel
+		}
 	}
 	temperature := req.Temperature
 	if temperature <= 0 {
@@ -153,6 +181,14 @@ func (s *TrialService) Chat(req *TrialChatRequest) (*TrialChatResponse, error) {
 		"temperature": temperature,
 		"max_tokens":  maxTokens,
 	}
+	if creds != nil {
+		if creds.BaseURL != "" {
+			reqBody["base_url"] = creds.BaseURL
+		}
+		if creds.APIKey != "" {
+			reqBody["api_key"] = creds.APIKey
+		}
+	}
 	jsonBody, _ := json.Marshal(reqBody)
 
 	url := fmt.Sprintf("%s/api/v1/chat/completions", config.Get().PythonEngine.BaseURL)
@@ -165,7 +201,7 @@ func (s *TrialService) Chat(req *TrialChatRequest) (*TrialChatResponse, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("语言引擎对话接口返回错误: status=%d, body=%s", resp.StatusCode, string(body))
+		return nil, &EngineError{Op: "语言引擎对话接口", StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
 	var result TrialChatResponse
