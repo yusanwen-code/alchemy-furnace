@@ -19,6 +19,7 @@ import {
 import { usePill } from '@/contexts/PillContext'
 import { PillCard } from '@/components/pill-card'
 import { BindAgentModal } from '@/components/bind-agent-modal'
+import { TopTabs } from '@/components/interaction/top-tabs'
 import { emptySkillSchema } from '@/services/pillService'
 import type { Pill } from '@/services/types'
 
@@ -97,7 +98,7 @@ export default function PillsPage() {
         </button>
       </div>
 
-      {/* 搜索栏 + 内置过滤 */}
+      {/* 搜索栏 + 内置过滤（黑神话式标签切换） */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sage" />
@@ -109,15 +110,16 @@ export default function PillsPage() {
             className="dao-input pl-10"
           />
         </div>
-        <select
-          value={builtinFilter}
-          onChange={e => setBuiltinFilter(e.target.value as BuiltinFilter)}
-          className="dao-input sm:w-36"
-        >
-          <option value="all">全部金丹</option>
-          <option value="builtin">系统内置</option>
-          <option value="custom">自行炼制</option>
-        </select>
+        <TopTabs
+          tabs={[
+            { key: 'all', label: '全部金丹' },
+            { key: 'builtin', label: '系统内置' },
+            { key: 'custom', label: '自行炼制' },
+          ]}
+          activeKey={builtinFilter}
+          onChange={key => setBuiltinFilter(key as BuiltinFilter)}
+          className="sm:w-auto"
+        />
       </div>
 
       {/* 创建金丹弹窗 */}

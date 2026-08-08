@@ -25,6 +25,7 @@ import {
 import { useChat } from '@/contexts/ChatContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { ChatMessage } from '@/components/chat-message'
+import { TopTabs } from '@/components/interaction/top-tabs'
 
 export function ChatView({ sessionId }: { sessionId?: string }) {
   const router = useRouter()
@@ -287,13 +288,25 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
       <div className="flex-1 flex flex-col min-w-0">
         {/* 聊天头部 */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/70 bg-card/80">
-          {/* 侧边栏切换按钮 */}
+          {/* 桌面端侧边栏切换按钮 */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-gold transition-colors"
+            className="hidden md:block p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-gold transition-colors"
+            aria-label={sidebarOpen ? '收起会话列表' : '展开会话列表'}
           >
             {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
+
+          {/* 移动端标签切换（黑神话式）：论道 / 旧录 */}
+          <TopTabs
+            tabs={[
+              { key: 'chat', label: '论道' },
+              { key: 'sessions', label: '旧录' },
+            ]}
+            activeKey={sidebarOpen ? 'sessions' : 'chat'}
+            onChange={key => setSidebarOpen(key === 'sessions')}
+            className="border-b-0 md:hidden"
+          />
 
           {/* 道人信息 */}
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-white font-serif font-bold text-sm flex-shrink-0">

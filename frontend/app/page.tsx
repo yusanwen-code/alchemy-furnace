@@ -2,6 +2,14 @@ import Image from 'next/image'
 import { FurnaceCard } from '@/components/alchemy/furnace-card'
 import { ElixirRecipes } from '@/components/alchemy/elixir-recipes'
 import { AlchemyLog } from '@/components/alchemy/alchemy-log'
+import { SectionDots } from '@/components/interaction/section-dots'
+
+const sections = [
+  { id: 'hero', label: '主殿' },
+  { id: 'stats', label: '炉房概览' },
+  { id: 'furnace', label: '当前炼制' },
+  { id: 'log', label: '炼丹日志' },
+]
 
 const stats = [
   { label: '灵气值', value: '3,280', unit: '', trend: '+12%', caption: '天地灵气汇聚一炉' },
@@ -13,6 +21,7 @@ const stats = [
 export default function Page() {
   return (
     <div className="min-h-screen pb-24">
+      <SectionDots sections={sections} />
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
         {/* ── editorial hero: text weighs left, the vessel bleeds off the right ── */}
         <header id="hero" className="relative isolate min-h-[78vh] scroll-mt-24 pt-20 md:pt-28">
