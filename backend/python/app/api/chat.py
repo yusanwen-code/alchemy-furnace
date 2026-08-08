@@ -74,11 +74,13 @@ async def chat_completion(request: ChatCompletionRequest) -> BaseResponse:
         # chat_service 已将底层异常映射为可读中文消息（含错误码）
         detail = str(e)
         logger.error(f"求道失败: {detail}")
-        http_status = (
-            status.HTTP_504_GATEWAY_TIMEOUT
-            if "(TIMEOUT)" in detail
-            else status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        if "(TIMEOUT)" in detail:
+            http_status = status.HTTP_504_GATEWAY_TIMEOUT
+        elif "(AUTH_FAILED)" in detail:
+            # 上游凭证失效：透传 401，便于网关映射为"凭证无效"提示
+            http_status = status.HTTP_401_UNAUTHORIZED
+        else:
+            http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
         raise HTTPException(status_code=http_status, detail=detail)
     except Exception as e:
         logger.error(f"求道失败: {e}")

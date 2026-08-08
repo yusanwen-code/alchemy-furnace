@@ -411,7 +411,7 @@ export default function AgentDetail() {
                     <p className="text-xs text-ink-400 bg-ink-800/50 border border-bronze-600/20 rounded-lg px-3 py-2.5">
                       暂无可用模型，请先在
                       <Link to="/models" className="text-gold-400 hover:text-gold-300 mx-1">模型管理</Link>
-                      中配置
+                      中配置供应商
                     </p>
                   ) : (
                     <select
@@ -424,8 +424,8 @@ export default function AgentDetail() {
                         <option value={editModel}>{editModel}（当前使用）</option>
                       )}
                       {modelOptions.map(m => (
-                        <option key={m.name} value={m.name}>
-                          {m.display_name || m.name}（{m.provider}）{m.is_default ? ' · 默认' : ''}
+                        <option key={`${m.provider_name}/${m.name}`} value={m.name}>
+                          {m.display_name || m.name}（{m.provider_display_name || m.provider_name}）{m.is_default ? ' · 默认' : ''}
                         </option>
                       ))}
                     </select>
