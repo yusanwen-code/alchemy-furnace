@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * 金丹详情页面 - 炼丹房编辑器
  * 金丹元信息 + nuwa-skill 结构化内容编辑：
@@ -5,7 +7,8 @@
  * 支持「赠予道人」快捷绑定
  */
 import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   ArrowLeft,
   CircleDot,
@@ -29,8 +32,7 @@ import {
   User,
 } from 'lucide-react'
 import { usePill } from '@/contexts/PillContext'
-import BindAgentModal from '@/components/BindAgentModal'
-import Layout from '@/components/Layout'
+import { BindAgentModal } from '@/components/bind-agent-modal'
 import { formatDateTime } from '@/utils/format'
 import type {
   SkillSchema,
@@ -174,8 +176,8 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
   return (
     <section className="dao-card p-5">
       <div className="flex items-center gap-2 mb-4">
-        <Icon className="w-4 h-4 text-gold-400" />
-        <h2 className="text-base font-serif font-bold text-gold-300">{title}</h2>
+        <Icon className="w-4 h-4 text-gold" />
+        <h2 className="text-base font-serif font-bold text-gold">{title}</h2>
       </div>
       {children}
     </section>
@@ -212,7 +214,7 @@ function StringListEditor({
           <button
             type="button"
             onClick={() => onChange(items.filter((_, i) => i !== index))}
-            className="p-1.5 rounded hover:bg-cinnabar-500/20 text-ink-400 hover:text-cinnabar-400 transition-colors flex-shrink-0"
+            className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -221,7 +223,7 @@ function StringListEditor({
       <button
         type="button"
         onClick={() => onChange([...items, ''])}
-        className="flex items-center gap-1 text-xs text-gold-400/70 hover:text-gold-300 transition-colors"
+        className="flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors"
       >
         <Plus className="w-3.5 h-3.5" />
         {addLabel}
@@ -232,9 +234,9 @@ function StringListEditor({
 
 // ========== 页面组件 ==========
 
-export default function PillDetail() {
+export default function PillDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const router = useRouter()
   const pillId = Number(id)
 
   const { state, fetchPill, editPill, removePill } = usePill()
@@ -250,12 +252,12 @@ export default function PillDetail() {
     if (pillId) fetchPill(pillId)
   }, [pillId, fetchPill])
 
-  // 金丹加载完成后初始化表单
-  useEffect(() => {
-    if (pill && pill.id === pillId) {
-      setForm(buildForm(pill.skill_schema, pill))
-    }
-  }, [pill, pillId])
+  // 金丹加载完成后初始化表单（渲染期调整，避免级联渲染）
+  const [syncedPill, setSyncedPill] = useState(pill)
+  if (pill && pill.id === pillId && pill !== syncedPill) {
+    setSyncedPill(pill)
+    setForm(buildForm(pill.skill_schema, pill))
+  }
 
   /** 更新表单字段 */
   const patch = (partial: Partial<FormState>) => {
@@ -290,41 +292,41 @@ export default function PillDetail() {
   const handleDelete = async () => {
     if (!window.confirm('确定要销毁这颗金丹吗？此操作不可恢复。')) return
     const ok = await removePill(pillId)
-    if (ok) navigate('/pills')
+    if (ok) router.push('/pills')
   }
 
   if (!pill && state.loading) {
     return (
-      <Layout>
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="w-8 h-8 text-gold-400 animate-spin mb-3" />
-          <p className="text-sm text-ink-400">加载中...</p>
+          <Loader2 className="w-8 h-8 text-gold animate-spin mb-3" />
+          <p className="text-sm text-muted-foreground">加载中...</p>
         </div>
-      </Layout>
+      </div>
     )
   }
 
   if (!pill || !form) {
     return (
-      <Layout>
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
-          <AlertCircle className="w-12 h-12 text-cinnabar-400 mb-3" />
-          <p className="text-sm text-ink-400">金丹不存在</p>
-          <Link to="/pills" className="dao-btn-primary mt-4">
+          <AlertCircle className="w-12 h-12 text-primary mb-3" />
+          <p className="text-sm text-muted-foreground">金丹不存在</p>
+          <Link href="/pills" className="dao-btn-primary mt-4">
             <ArrowLeft className="w-4 h-4" />
             返回金丹阁
           </Link>
         </div>
-      </Layout>
+      </div>
     )
   }
 
   return (
-    <Layout>
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
       {/* 返回按钮 */}
       <Link
-        to="/pills"
-        className="inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-gold-300 transition-colors mb-4"
+        href="/pills"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-gold transition-colors mb-4"
       >
         <ArrowLeft className="w-4 h-4" />
         返回金丹阁
@@ -334,7 +336,7 @@ export default function PillDetail() {
       <div className="dao-card p-5 md:p-6 mb-6">
         <div className="flex flex-col md:flex-row md:items-start gap-4">
           {/* 图标 */}
-          <div className="flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center bg-gold-500/15 text-gold-400 glow-gold">
+          <div className="flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center bg-gold/15 text-gold shadow-[0_0_18px_rgba(201,169,110,0.35)]">
             <FlaskConical className="w-8 h-8" />
           </div>
 
@@ -348,7 +350,7 @@ export default function PillDetail() {
                 placeholder="金丹名称"
               />
               {pill.is_builtin && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full border bg-jade-500/20 text-jade-300 border-jade-500/30">
+                <span className="text-[10px] px-2 py-0.5 rounded-full border bg-sage/15 text-sage border-sage/30">
                   内置
                 </span>
               )}
@@ -398,7 +400,7 @@ export default function PillDetail() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs text-ink-400">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
                 {formatDateTime(pill.created_at)}
@@ -414,7 +416,7 @@ export default function PillDetail() {
             </button>
             <button
               onClick={handleDelete}
-              className="dao-btn-ghost text-sm text-cinnabar-400 hover:text-cinnabar-300"
+              className="dao-btn-ghost text-sm text-primary hover:text-primary/80"
             >
               <Trash2 className="w-4 h-4" />
               销毁
@@ -460,9 +462,9 @@ export default function PillDetail() {
                 step={0.05}
                 value={form.dna.formality}
                 onChange={e => patchDna({ formality: Number(e.target.value) })}
-                className="w-full accent-gold-400 mt-2.5"
+                className="w-full accent-gold mt-2.5"
               />
-              <div className="flex justify-between text-[10px] text-ink-500">
+              <div className="flex justify-between text-[10px] text-sage">
                 <span>随意</span>
                 <span>正式</span>
               </div>
@@ -528,7 +530,7 @@ export default function PillDetail() {
         <Section icon={BrainCircuit} title="心智模型">
           <div className="space-y-4">
             {form.mentalModels.map((model, index) => (
-              <div key={index} className="p-3 rounded-lg bg-ink-800/50 border border-bronze-600/20 space-y-2">
+              <div key={index} className="p-3 rounded-lg bg-muted border border-border/70 space-y-2">
                 <div className="flex items-center gap-2">
                   <input
                     value={model.name}
@@ -543,7 +545,7 @@ export default function PillDetail() {
                   <button
                     type="button"
                     onClick={() => patch({ mentalModels: form.mentalModels.filter((_, i) => i !== index) })}
-                    className="p-1.5 rounded hover:bg-cinnabar-500/20 text-ink-400 hover:text-cinnabar-400 transition-colors flex-shrink-0"
+                    className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -584,7 +586,7 @@ export default function PillDetail() {
             <button
               type="button"
               onClick={() => patch({ mentalModels: [...form.mentalModels, { name: '', one_liner: '', application: '', limitationsText: '' }] })}
-              className="flex items-center gap-1 text-xs text-gold-400/70 hover:text-gold-300 transition-colors"
+              className="flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               添加心智模型
@@ -596,7 +598,7 @@ export default function PillDetail() {
         <Section icon={Split} title="决策启发式">
           <div className="space-y-4">
             {form.heuristics.map((heuristic, index) => (
-              <div key={index} className="p-3 rounded-lg bg-ink-800/50 border border-bronze-600/20 space-y-2">
+              <div key={index} className="p-3 rounded-lg bg-muted border border-border/70 space-y-2">
                 <div className="flex items-center gap-2">
                   <input
                     value={heuristic.condition}
@@ -611,7 +613,7 @@ export default function PillDetail() {
                   <button
                     type="button"
                     onClick={() => patch({ heuristics: form.heuristics.filter((_, i) => i !== index) })}
-                    className="p-1.5 rounded hover:bg-cinnabar-500/20 text-ink-400 hover:text-cinnabar-400 transition-colors flex-shrink-0"
+                    className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -641,7 +643,7 @@ export default function PillDetail() {
             <button
               type="button"
               onClick={() => patch({ heuristics: [...form.heuristics, { condition: '', action: '', case: '' }] })}
-              className="flex items-center gap-1 text-xs text-gold-400/70 hover:text-gold-300 transition-colors"
+              className="flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               添加决策启发式
@@ -683,7 +685,7 @@ export default function PillDetail() {
         <Section icon={MessagesSquare} title="示例对话">
           <div className="space-y-4">
             {form.dialogues.map((dialogue, index) => (
-              <div key={index} className="p-3 rounded-lg bg-ink-800/50 border border-bronze-600/20 space-y-2">
+              <div key={index} className="p-3 rounded-lg bg-muted border border-border/70 space-y-2">
                 <div className="flex items-start gap-2">
                   <div className="flex-1 space-y-2">
                     <textarea
@@ -712,7 +714,7 @@ export default function PillDetail() {
                   <button
                     type="button"
                     onClick={() => patch({ dialogues: form.dialogues.filter((_, i) => i !== index) })}
-                    className="p-1.5 rounded hover:bg-cinnabar-500/20 text-ink-400 hover:text-cinnabar-400 transition-colors flex-shrink-0"
+                    className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -722,7 +724,7 @@ export default function PillDetail() {
             <button
               type="button"
               onClick={() => patch({ dialogues: [...form.dialogues, { user: '', assistant: '' }] })}
-              className="flex items-center gap-1 text-xs text-gold-400/70 hover:text-gold-300 transition-colors"
+              className="flex items-center gap-1 text-xs text-gold/70 hover:text-gold transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               添加示例对话
@@ -732,9 +734,9 @@ export default function PillDetail() {
       </div>
 
       {/* 底部保存栏 */}
-      <div className="sticky bottom-16 md:bottom-4 mt-6 flex items-center justify-end gap-3">
+      <div className="sticky bottom-4 mt-6 flex items-center justify-end gap-3">
         {saved && (
-          <span className="flex items-center gap-1 text-sm text-jade-400 animate-fade-in">
+          <span className="flex items-center gap-1 text-sm text-sage animate-in fade-in duration-300">
             <CircleDot className="w-4 h-4" />
             已存入金丹阁
           </span>
@@ -753,6 +755,6 @@ export default function PillDetail() {
       {showBind && (
         <BindAgentModal pill={pill} onClose={() => setShowBind(false)} />
       )}
-    </Layout>
+    </div>
   )
 }

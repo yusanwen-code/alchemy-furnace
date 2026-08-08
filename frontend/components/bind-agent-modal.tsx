@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * 从金丹到道人 - 快捷绑定弹窗
  * 选择一位道人，将金丹绑定给它（可设置权重与服用顺序）
@@ -13,7 +15,7 @@ interface BindAgentModalProps {
   onClose: () => void
 }
 
-export default function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
+export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -56,31 +58,31 @@ export default function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="dao-card w-full max-w-md p-6 animate-fade-in max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
+      <div className="dao-card w-full max-w-md p-6 animate-in fade-in duration-300 max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <Gift className="w-5 h-5 text-gold-400" />
-            <h2 className="text-lg font-serif font-bold text-gold-300">赠予道人</h2>
+            <Gift className="w-5 h-5 text-gold" />
+            <h2 className="text-lg font-serif font-bold text-foreground">赠予道人</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-ink-700 text-ink-400 hover:text-rice-paper-100 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <p className="text-xs text-ink-400 mb-4">
-          将「<span className="text-gold-300">{pill.name}</span>」赠予一位道人服用
+        <p className="text-xs text-muted-foreground mb-4">
+          将「<span className="text-gold">{pill.name}</span>」赠予一位道人服用
         </p>
 
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 text-gold-400 animate-spin" />
+            <Loader2 className="w-6 h-6 text-gold animate-spin" />
           </div>
         ) : agents.length === 0 ? (
-          <p className="text-sm text-ink-400 text-center py-6">
+          <p className="text-sm text-muted-foreground text-center py-6">
             暂无道人，请先在道人府招募一位
           </p>
         ) : (
@@ -90,22 +92,22 @@ export default function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
                 key={agent.id}
                 onClick={() => setSelectedAgentId(agent.id)}
                 className={`
-                  w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left
+                  w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left
                   ${selectedAgentId === agent.id
-                    ? 'bg-gold-400/10 border-gold-400/40'
-                    : 'bg-ink-800/50 border-bronze-600/20 hover:border-gold-400/30'
+                    ? 'bg-gold/10 border-gold/40'
+                    : 'bg-secondary/70 border-border/70 hover:border-gold/30'
                   }
                 `}
               >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-jade-500 to-jade-700 flex items-center justify-center text-white font-serif font-bold flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-primary-foreground font-serif font-bold flex-shrink-0">
                   {agent.name.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-rice-paper-100">{agent.name}</p>
-                  <p className="text-[10px] text-ink-400 truncate">{agent.model_name}</p>
+                  <p className="text-sm font-medium text-foreground">{agent.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{agent.model_name}</p>
                 </div>
                 {selectedAgentId === agent.id && (
-                  <span className="w-2 h-2 rounded-full bg-gold-400 flex-shrink-0" />
+                  <span className="w-2 h-2 rounded-full bg-gold flex-shrink-0" />
                 )}
               </button>
             ))}
@@ -141,7 +143,7 @@ export default function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
         )}
 
         {error && (
-          <div className="flex items-center gap-2 text-xs text-cinnabar-400 mb-3">
+          <div className="flex items-center gap-2 text-xs text-primary mb-3">
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
             <span>{error}</span>
           </div>

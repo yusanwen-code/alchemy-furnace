@@ -1,3 +1,5 @@
+'use client'
+
 /**
  * 道人府页面 - AI Agent 管理
  * 道人卡片列表（道教仙人风格头像占位）
@@ -16,11 +18,10 @@ import {
   Search,
 } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
-import AgentCard from '@/components/AgentCard'
-import Layout from '@/components/Layout'
+import { AgentCard } from '@/components/agent-card'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@/services/models'
 
-export default function Agents() {
+export default function AgentsPage() {
   const { state, fetchAgents, addAgent } = useAgent()
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState('')
@@ -57,12 +58,12 @@ export default function Agents() {
   )
 
   return (
-    <Layout>
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* 页面头部 */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-gold-400" />
+            <Users className="w-6 h-6 text-gold" />
             <h1 className="page-title">道人府</h1>
           </div>
           <p className="page-subtitle">管理你的 AI 道人</p>
@@ -79,7 +80,7 @@ export default function Agents() {
 
       {/* 搜索栏 */}
       <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           type="text"
           placeholder="搜索道人..."
@@ -91,16 +92,16 @@ export default function Agents() {
 
       {/* 创建道人弹窗 */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="dao-card w-full max-w-md p-6 animate-fade-in max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-foreground/40 backdrop-blur-sm">
+          <div className="dao-card w-full max-w-md p-6 animate-in fade-in duration-300 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-jade-400" />
-                <h2 className="text-lg font-serif font-bold text-gold-300">招募道人</h2>
+                <UserPlus className="w-5 h-5 text-sage" />
+                <h2 className="text-lg font-serif font-bold text-gold">招募道人</h2>
               </div>
               <button
                 onClick={() => setShowCreate(false)}
-                className="p-1.5 rounded-lg hover:bg-ink-700 text-ink-400 hover:text-rice-paper-100 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -129,7 +130,7 @@ export default function Agents() {
                   className="dao-textarea"
                   rows={4}
                 />
-                <p className="text-[10px] text-ink-500 mt-1">
+                <p className="text-[10px] text-sage mt-1">
                   基础性格将与已服用金丹的语言模式合成，决定道人的表达风格
                 </p>
               </div>
@@ -181,19 +182,19 @@ export default function Agents() {
       {/* 加载状态 */}
       {state.loading && state.agents.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="w-8 h-8 text-gold-400 animate-spin mb-3" />
-          <p className="text-sm text-ink-400">正在寻访道人...</p>
+          <Loader2 className="w-8 h-8 text-gold animate-spin mb-3" />
+          <p className="text-sm text-muted-foreground">正在寻访道人...</p>
         </div>
       )}
 
       {/* 空状态 */}
       {!state.loading && filteredAgents.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Users className="w-12 h-12 text-ink-600 mb-3" />
-          <h3 className="text-base font-medium text-ink-400 mb-1">
+          <Users className="w-12 h-12 text-muted-foreground/50 mb-3" />
+          <h3 className="text-base font-medium text-muted-foreground mb-1">
             {searchQuery ? '未找到匹配的道人' : '暂无道人'}
           </h3>
-          <p className="text-sm text-ink-500 mb-4">
+          <p className="text-sm text-sage mb-4">
             {searchQuery ? '尝试其他关键词' : '点击上方按钮招募你的第一位道人'}
           </p>
           {!searchQuery && (
@@ -216,6 +217,6 @@ export default function Agents() {
           ))}
         </div>
       )}
-    </Layout>
+    </div>
   )
 }

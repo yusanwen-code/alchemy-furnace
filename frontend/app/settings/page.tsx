@@ -1,7 +1,10 @@
+'use client'
+
 /**
  * 设置页 - 系统配置
  * API Key 配置、模型选择、关于信息
  * 响应式布局
+ * 业务逻辑与 legacy/pages/Settings.tsx 完全一致
  */
 import { useState } from 'react'
 import {
@@ -16,10 +19,9 @@ import {
   ExternalLink,
   Heart,
 } from 'lucide-react'
-import Layout from '@/components/Layout'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@/services/models'
 
-export default function Settings() {
+export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1')
   const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL)
@@ -33,10 +35,10 @@ export default function Settings() {
   }
 
   return (
-    <Layout>
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* 页面头部 */}
       <div className="flex items-center gap-3 mb-6">
-        <Settings2 className="w-6 h-6 text-gold-400" />
+        <Settings2 className="w-6 h-6 text-gold" />
         <div>
           <h1 className="page-title">设置</h1>
           <p className="page-subtitle">配置系统参数</p>
@@ -49,8 +51,8 @@ export default function Settings() {
           {/* API 配置 */}
           <section className="dao-card p-5 md:p-6">
             <div className="flex items-center gap-2 mb-5">
-              <Key className="w-5 h-5 text-gold-400" />
-              <h2 className="text-lg font-serif font-bold text-gold-300">API 配置</h2>
+              <Key className="w-5 h-5 text-gold" />
+              <h2 className="text-lg font-serif font-bold text-gold">API 配置</h2>
             </div>
 
             <div className="space-y-4">
@@ -66,7 +68,7 @@ export default function Settings() {
                   placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
                   className="dao-input"
                 />
-                <p className="text-[10px] text-ink-500 mt-1">
+                <p className="text-[10px] text-sage/70 mt-1">
                   你的 OpenAI / DeepSeek / 通义千问 API Key
                 </p>
               </div>
@@ -108,28 +110,28 @@ export default function Settings() {
           {/* 模型列表 */}
           <section className="dao-card p-5 md:p-6">
             <div className="flex items-center gap-2 mb-5">
-              <Cpu className="w-5 h-5 text-jade-400" />
-              <h2 className="text-lg font-serif font-bold text-gold-300">可用模型</h2>
+              <Cpu className="w-5 h-5 text-sage" />
+              <h2 className="text-lg font-serif font-bold text-gold">可用模型</h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {AVAILABLE_MODELS.map(model => (
                 <div
                   key={model.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-ink-800/50 border border-bronze-600/20"
+                  className="flex items-center gap-3 p-3 rounded-lg bg-muted border border-border/70"
                 >
-                  <div className="w-9 h-9 rounded-lg bg-jade-500/15 flex items-center justify-center flex-shrink-0">
-                    <Cpu className="w-4.5 h-4.5 text-jade-400" />
+                  <div className="w-9 h-9 rounded-lg bg-sage/15 flex items-center justify-center flex-shrink-0">
+                    <Cpu className="w-4.5 h-4.5 text-sage" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-rice-paper-100">{model.name}</p>
-                    <p className="text-[10px] text-ink-400">{model.description}</p>
+                    <p className="text-sm font-medium text-foreground">{model.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{model.description}</p>
                   </div>
                   <span className={`
                     text-[10px] px-2 py-0.5 rounded-full border
-                    ${model.provider === 'openai' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                      model.provider === 'deepseek' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                        'bg-orange-500/10 text-orange-400 border-orange-500/20'}
+                    ${model.provider === 'openai' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
+                      model.provider === 'deepseek' ? 'bg-purple-500/10 text-purple-600 border-purple-500/20' :
+                        'bg-orange-500/10 text-orange-600 border-orange-500/20'}
                   `}>
                     {model.provider}
                   </span>
@@ -141,7 +143,7 @@ export default function Settings() {
           {/* 保存按钮 */}
           <div className="flex items-center justify-end gap-3">
             {saved && (
-              <span className="flex items-center gap-1 text-sm text-jade-400 animate-fade-in">
+              <span className="flex items-center gap-1 text-sm text-sage animate-in fade-in duration-300">
                 <Check className="w-4 h-4" />
                 已保存
               </span>
@@ -157,18 +159,18 @@ export default function Settings() {
         <div className="space-y-6">
           <section className="dao-card p-5">
             <div className="flex items-center gap-2 mb-4">
-              <Info className="w-5 h-5 text-gold-400" />
-              <h2 className="text-base font-serif font-bold text-gold-300">关于炼丹炉</h2>
+              <Info className="w-5 h-5 text-gold" />
+              <h2 className="text-base font-serif font-bold text-gold">关于炼丹炉</h2>
             </div>
 
             <div className="flex flex-col items-center text-center py-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-b from-cinnabar-500/20 to-ink-800/80 border-2 border-gold-500/30 flex items-center justify-center mb-3 glow-gold">
-                <Flame className="w-8 h-8 text-cinnabar-400" />
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-b from-primary/15 to-muted border-2 border-gold/30 flex items-center justify-center mb-3 shadow-[0_15px_30px_-12px_rgba(201,169,110,0.5)]">
+                <Flame className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-serif font-bold text-gold-300 mb-1">炼丹炉</h3>
-              <p className="text-xs text-ink-400 mb-4">v1.0.0</p>
+              <h3 className="text-lg font-serif font-bold text-gold mb-1">炼丹炉</h3>
+              <p className="text-xs text-muted-foreground mb-4">v1.0.0</p>
 
-              <p className="text-sm text-ink-400 leading-relaxed mb-4">
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
                 以道教炼丹文化为设计灵感的金丹化性系统。
                 金丹即语言模式技能包，道人即 AI Agent，服丹化性，围炉论道。
               </p>
@@ -182,10 +184,10 @@ export default function Settings() {
                   href="https://github.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-2.5 rounded-lg bg-ink-800/50 hover:bg-gold-400/5 border border-bronze-600/20 hover:border-gold-400/30 transition-all text-sm"
+                  className="flex items-center gap-2 p-2.5 rounded-lg bg-muted hover:bg-gold/5 border border-border/70 hover:border-gold/40 transition-all text-sm"
                 >
-                  <ExternalLink className="w-4 h-4 text-gold-400" />
-                  <span className="text-rice-paper-200">GitHub 仓库</span>
+                  <ExternalLink className="w-4 h-4 text-gold" />
+                  <span className="text-foreground">GitHub 仓库</span>
                 </a>
               </div>
             </div>
@@ -193,12 +195,12 @@ export default function Settings() {
 
           {/* 技术栈 */}
           <section className="dao-card p-5">
-            <h3 className="text-sm font-medium text-gold-300 mb-3">技术栈</h3>
+            <h3 className="text-sm font-medium text-gold mb-3">技术栈</h3>
             <div className="flex flex-wrap gap-2">
-              {['React 18', 'TypeScript', 'Tailwind CSS', 'Vite', 'Go API', 'Python 语言引擎', 'PostgreSQL'].map(tech => (
+              {['Next.js 16', 'React 19', 'TypeScript', 'Tailwind CSS 4', 'Go API', 'Python 语言引擎', 'PostgreSQL'].map(tech => (
                 <span
                   key={tech}
-                  className="px-2.5 py-1 text-[11px] rounded-full bg-jade-500/10 text-jade-400 border border-jade-500/20"
+                  className="px-2.5 py-1 text-[11px] rounded-full bg-sage/10 text-sage border border-sage/20"
                 >
                   {tech}
                 </span>
@@ -207,6 +209,6 @@ export default function Settings() {
           </section>
         </div>
       </div>
-    </Layout>
+    </div>
   )
 }

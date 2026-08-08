@@ -34,11 +34,13 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  /* 路由变化关闭 */
-  useEffect(() => {
+  /* 路由变化关闭（渲染期调整，避免级联渲染） */
+  const [prevPath, setPrevPath] = useState(pathname)
+  if (prevPath !== pathname) {
+    setPrevPath(pathname)
     setOpen(null)
     setMobileOpen(false)
-  }, [pathname])
+  }
 
   /* Esc 与点击外部关闭 */
   useEffect(() => {
