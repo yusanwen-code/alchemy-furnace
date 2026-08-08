@@ -51,3 +51,6 @@ postgres_data/
 # Specify tooling files
 .specify/
 specs/
+
+# UI 重构参考文件（本地，不提交）
+reference/
