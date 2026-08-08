@@ -213,6 +213,7 @@ function StringListEditor({
           />
           <button
             type="button"
+            aria-label="删除该项"
             onClick={() => onChange(items.filter((_, i) => i !== index))}
             className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
           >
@@ -544,6 +545,7 @@ export default function PillDetailPage() {
                   />
                   <button
                     type="button"
+                    aria-label="删除心智模型"
                     onClick={() => patch({ mentalModels: form.mentalModels.filter((_, i) => i !== index) })}
                     className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
                   >
@@ -612,6 +614,7 @@ export default function PillDetailPage() {
                   />
                   <button
                     type="button"
+                    aria-label="删除决策启发式"
                     onClick={() => patch({ heuristics: form.heuristics.filter((_, i) => i !== index) })}
                     className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
                   >
@@ -713,6 +716,7 @@ export default function PillDetailPage() {
                   </div>
                   <button
                     type="button"
+                    aria-label="删除示例对话"
                     onClick={() => patch({ dialogues: form.dialogues.filter((_, i) => i !== index) })}
                     className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
                   >

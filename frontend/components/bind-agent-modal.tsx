@@ -66,6 +66,7 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
             <h2 className="text-lg font-serif font-bold text-foreground">赠予道人</h2>
           </div>
           <button
+            aria-label="关闭弹窗"
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           >

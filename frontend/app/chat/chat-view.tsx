@@ -153,6 +153,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
                   <h2 className="text-lg font-serif font-bold text-gold">选择道人</h2>
                 </div>
                 <button
+                  aria-label="关闭弹窗"
                   onClick={() => setShowAgentSelect(false)}
                   className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -200,6 +201,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
           <div className="flex items-center justify-between p-3 border-b border-border/70">
             <span className="text-sm font-medium text-gold">会话列表</span>
             <button
+              aria-label="新建会话"
               onClick={() => setShowAgentSelect(true)}
               className="p-1.5 rounded hover:bg-gold/10 text-gold transition-colors"
             >
@@ -247,12 +249,14 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
               <span className="text-sm font-medium text-gold">会话列表</span>
               <div className="flex items-center gap-2">
                 <button
+                  aria-label="新建会话"
                   onClick={() => { setSidebarOpen(false); setShowAgentSelect(true) }}
                   className="p-1.5 rounded hover:bg-gold/10 text-gold"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
                 <button
+                  aria-label="关闭"
                   onClick={() => setSidebarOpen(false)}
                   className="p-1.5 rounded hover:bg-secondary text-muted-foreground"
                 >
@@ -382,6 +386,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
               rows={1}
             />
             <button
+              aria-label={chatState.streaming ? '停止输出' : '发送'}
               onClick={chatState.streaming ? cancelStream : handleSend}
               disabled={!chatState.streaming && !input.trim()}
               className="dao-btn-primary px-3 py-2.5 flex-shrink-0 disabled:opacity-40"
@@ -410,6 +415,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
                 <h2 className="text-lg font-serif font-bold text-gold">选择道人</h2>
               </div>
               <button
+                aria-label="关闭弹窗"
                 onClick={() => setShowAgentSelect(false)}
                 className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
               >

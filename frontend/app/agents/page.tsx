@@ -100,6 +100,7 @@ export default function AgentsPage() {
                 <h2 className="text-lg font-serif font-bold text-gold">招募道人</h2>
               </div>
               <button
+                aria-label="关闭弹窗"
                 onClick={() => setShowCreate(false)}
                 className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
