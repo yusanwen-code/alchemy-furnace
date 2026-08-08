@@ -155,26 +155,54 @@ func (ChatMessage) TableName() string {
 	return "chat_messages"
 }
 
+// ---------- LLM 供应商配置 ----------
+
+// LLMProvider 供应商配置，对应 llm_providers 表
+// 供应商是协议 + Base URL + 加密 API Key 的唯一持有者；api_key 以 AES-GCM 加密存储
+// 停用供应商后其下全部模型在凭证解析链中不可用
+type LLMProvider struct {
+	ID              uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:供应商唯一标识"`
+	Name            string    `json:"name" gorm:"size:50;not null;uniqueIndex;comment:供应商标识（如 openai/deepseek/dashscope）"`
+	DisplayName     string    `json:"display_name" gorm:"size:100;not null;comment:显示名（如 OpenAI/通义千问）"`
+	Protocol        string    `json:"protocol" gorm:"size:50;not null;default:openai-compatible;comment:协议类型（预留扩展）"`
+	BaseURL         string    `json:"base_url" gorm:"size:255;not null;comment:OpenAI 兼容接口地址"`
+	APIKeyEncrypted string    `json:"-" gorm:"type:text;comment:AES-GCM 加密后的 api_key（空=免密钥本地服务）"`
+	IsEnabled       bool      `json:"is_enabled" gorm:"default:true;index;comment:是否启用"`
+	SortOrder       int       `json:"sort_order" gorm:"default:0;comment:展示顺序"`
+	Remark          string    `json:"remark" gorm:"size:255;default:'';comment:备注"`
+	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
+
+	// 关联关系：一个供应商下有多个模型
+	Models []LLMModel `json:"models,omitempty" gorm:"foreignKey:ProviderID;references:ID"`
+}
+
+// TableName 指定表名
+func (LLMProvider) TableName() string {
+	return "llm_providers"
+}
+
 // ---------- LLM 模型配置 ----------
 
 // LLMModel 模型配置，对应 llm_models 表
-// 每个模型独立配置服务商凭证（base_url/api_key），api_key 以 AES-GCM 加密存储
-// is_default / is_synthesis 全表最多一个（由部分唯一索引保证）
+// 模型归属供应商（provider_id 外键），仅声明模型名与生成参数，凭证由供应商持有
+// (provider_id, name) 联合唯一；is_default / is_synthesis 全表最多一个（由部分唯一索引保证）
 type LLMModel struct {
-	ID              uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:模型配置唯一标识"`
-	Name            string    `json:"name" gorm:"size:50;not null;uniqueIndex;comment:模型名（API 调用用，如 gpt-4o）"`
-	DisplayName     string    `json:"display_name" gorm:"size:100;not null;comment:显示名"`
-	Provider        string    `json:"provider" gorm:"size:50;not null;comment:服务商标识(openai/deepseek/aliyun/ollama/other)"`
-	BaseURL         string    `json:"base_url" gorm:"size:255;not null;comment:OpenAI 兼容接口地址"`
-	APIKeyEncrypted string    `json:"-" gorm:"type:text;comment:AES-GCM 加密后的 api_key（空=无鉴权本地服务）"`
-	Temperature     float64   `json:"temperature" gorm:"default:0.7;comment:默认温度(0-2)"`
-	MaxTokens       int       `json:"max_tokens" gorm:"default:4096;comment:默认最大 token"`
-	IsEnabled       bool      `json:"is_enabled" gorm:"default:true;index;comment:是否启用"`
-	IsDefault       bool      `json:"is_default" gorm:"default:false;comment:是否默认模型（全表最多一个）"`
-	IsSynthesis     bool      `json:"is_synthesis" gorm:"default:false;comment:是否语言模式合成专用模型（全表最多一个）"`
-	SortOrder       int       `json:"sort_order" gorm:"default:0;comment:展示顺序"`
-	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
-	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
+	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:模型配置唯一标识"`
+	ProviderID  uint      `json:"provider_id" gorm:"not null;index:idx_llm_models_provider_id;uniqueIndex:idx_llm_models_provider_name;comment:所属供应商ID"`
+	Name        string    `json:"name" gorm:"size:100;not null;uniqueIndex:idx_llm_models_provider_name;comment:模型名（API 调用用，如 gpt-4o）"`
+	DisplayName string    `json:"display_name" gorm:"size:100;not null;comment:显示名"`
+	Temperature float64   `json:"temperature" gorm:"default:0.7;comment:默认温度(0-2)"`
+	MaxTokens   int       `json:"max_tokens" gorm:"default:4096;comment:默认最大 token"`
+	IsEnabled   bool      `json:"is_enabled" gorm:"default:true;index;comment:是否启用"`
+	IsDefault   bool      `json:"is_default" gorm:"default:false;comment:是否默认模型（全表最多一个）"`
+	IsSynthesis bool      `json:"is_synthesis" gorm:"default:false;comment:是否语言模式合成专用模型（全表最多一个）"`
+	SortOrder   int       `json:"sort_order" gorm:"default:0;comment:展示顺序"`
+	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	UpdatedAt   time.Time `json:"updated_at" gorm:"autoUpdateTime;comment:更新时间"`
+
+	// 关联关系
+	Provider LLMProvider `json:"provider,omitempty" gorm:"foreignKey:ProviderID;references:ID"`
 }
 
 // TableName 指定表名
@@ -324,43 +352,89 @@ type HealthCheckResponse struct {
 	PythonEngine string `json:"python_engine"` // Python 语言引擎状态
 }
 
-// ---------- 模型管理 DTO ----------
+// ---------- 供应商管理 DTO ----------
 
-// LLMModelResponse 模型配置响应（api_key 永不明文返回，仅返回掩码）
-type LLMModelResponse struct {
+// ProviderResponse 供应商配置响应（api_key 永不明文返回，仅返回掩码）
+type ProviderResponse struct {
 	ID           uint      `json:"id"`
 	Name         string    `json:"name"`
 	DisplayName  string    `json:"display_name"`
-	Provider     string    `json:"provider"`
+	Protocol     string    `json:"protocol"`
 	BaseURL      string    `json:"base_url"`
 	APIKeyMasked string    `json:"api_key_masked"` // 掩码形式，如 sk-****wxyz
 	HasAPIKey    bool      `json:"has_api_key"`    // 是否已配置 api_key
-	Temperature  float64   `json:"temperature"`
-	MaxTokens    int       `json:"max_tokens"`
 	IsEnabled    bool      `json:"is_enabled"`
-	IsDefault    bool      `json:"is_default"`
-	IsSynthesis  bool      `json:"is_synthesis"`
 	SortOrder    int       `json:"sort_order"`
-	ReferencedBy int64     `json:"referenced_by"` // 引用该模型的道人数量
+	Remark       string    `json:"remark"`
+	ModelCount   int64     `json:"model_count"` // 该供应商下的模型数量
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// LLMModelOption 道人表单下拉用的精简模型项
-type LLMModelOption struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Provider    string `json:"provider"`
-	IsDefault   bool   `json:"is_default"`
+// CreateProviderRequest 创建供应商请求
+type CreateProviderRequest struct {
+	Name        string `json:"name" binding:"required,max=50"`          // 供应商标识（唯一）
+	DisplayName string `json:"display_name" binding:"required,max=100"` // 显示名
+	Protocol    string `json:"protocol" binding:"omitempty,max=50"`     // 协议类型，缺省 openai-compatible
+	BaseURL     string `json:"base_url" binding:"required,max=255"`     // OpenAI 兼容接口地址
+	APIKey      string `json:"api_key"`                                 // 明文 api_key（仅写入时传输）
+	IsEnabled   *bool  `json:"is_enabled"`                              // 是否启用，缺省 true
+	SortOrder   int    `json:"sort_order"`                              // 展示顺序
+	Remark      string `json:"remark" binding:"max=255"`                // 备注
 }
 
-// CreateLLMModelRequest 创建模型请求
+// UpdateProviderRequest 更新供应商请求（指针字段区分「未传」与「置空/置零」）
+// api_key: 不传(nil)=不修改，传空字符串=清除密钥，传值=重新加密存储
+type UpdateProviderRequest struct {
+	Name        *string `json:"name" binding:"omitempty,max=50"`
+	DisplayName *string `json:"display_name" binding:"omitempty,max=100"`
+	Protocol    *string `json:"protocol" binding:"omitempty,max=50"`
+	BaseURL     *string `json:"base_url" binding:"omitempty,max=255"`
+	APIKey      *string `json:"api_key"`
+	IsEnabled   *bool   `json:"is_enabled"`
+	SortOrder   *int    `json:"sort_order"`
+	Remark      *string `json:"remark" binding:"omitempty,max=255"`
+}
+
+// TestConnectionRequest 供应商连接测试请求（model 可选，缺省用该供应商下第一个启用模型）
+type TestConnectionRequest struct {
+	Model string `json:"model"`
+}
+
+// ---------- 模型管理 DTO ----------
+
+// LLMModelResponse 模型配置响应（凭证在供应商上，模型仅含供应商引用信息）
+type LLMModelResponse struct {
+	ID                  uint      `json:"id"`
+	ProviderID          uint      `json:"provider_id"`
+	Name                string    `json:"name"`
+	DisplayName         string    `json:"display_name"`
+	ProviderName        string    `json:"provider_name"`         // 所属供应商标识
+	ProviderDisplayName string    `json:"provider_display_name"` // 所属供应商显示名
+	Temperature         float64   `json:"temperature"`
+	MaxTokens           int       `json:"max_tokens"`
+	IsEnabled           bool      `json:"is_enabled"`
+	IsDefault           bool      `json:"is_default"`
+	IsSynthesis         bool      `json:"is_synthesis"`
+	SortOrder           int       `json:"sort_order"`
+	ReferencedBy        int64     `json:"referenced_by"` // 引用该模型的道人数量
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+}
+
+// LLMModelOption 道人表单下拉用的精简模型项
+type LLMModelOption struct {
+	Name                string `json:"name"`
+	DisplayName         string `json:"display_name"`
+	ProviderName        string `json:"provider_name"`         // 所属供应商标识
+	ProviderDisplayName string `json:"provider_display_name"` // 所属供应商显示名
+	IsDefault           bool   `json:"is_default"`
+}
+
+// CreateLLMModelRequest 创建模型请求（供应商由嵌套路径 :id 提供）
 type CreateLLMModelRequest struct {
-	Name        string  `json:"name" binding:"required,max=50"`          // 模型名（唯一）
+	Name        string  `json:"name" binding:"required,max=100"`         // 模型名（同供应商下唯一）
 	DisplayName string  `json:"display_name" binding:"required,max=100"` // 显示名
-	Provider    string  `json:"provider" binding:"required,max=50"`      // 服务商标识
-	BaseURL     string  `json:"base_url" binding:"required,max=255"`     // OpenAI 兼容接口地址
-	APIKey      string  `json:"api_key"`                                 // 明文 api_key（仅写入时传输）
 	Temperature float64 `json:"temperature"`                             // 默认温度(0-2)，0 值视为默认 0.7
 	MaxTokens   int     `json:"max_tokens"`                              // 默认最大 token，0 值视为默认 4096
 	IsEnabled   *bool   `json:"is_enabled"`                              // 是否启用，缺省 true
@@ -370,13 +444,9 @@ type CreateLLMModelRequest struct {
 }
 
 // UpdateLLMModelRequest 更新模型请求（指针字段区分「未传」与「置空/置零」）
-// api_key: 不传(nil)=不修改，传空字符串=清除密钥，传值=重新加密存储
 type UpdateLLMModelRequest struct {
-	Name        *string  `json:"name" binding:"omitempty,max=50"`
+	Name        *string  `json:"name" binding:"omitempty,max=100"`
 	DisplayName *string  `json:"display_name" binding:"omitempty,max=100"`
-	Provider    *string  `json:"provider" binding:"omitempty,max=50"`
-	BaseURL     *string  `json:"base_url" binding:"omitempty,max=255"`
-	APIKey      *string  `json:"api_key"`
 	Temperature *float64 `json:"temperature"`
 	MaxTokens   *int     `json:"max_tokens"`
 	IsEnabled   *bool    `json:"is_enabled"`

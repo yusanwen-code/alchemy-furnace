@@ -178,16 +178,26 @@ func setupRoutes(
 		trialGroup.POST("/chat", trial.Chat)            // 临时对话（非流式）
 	}
 
-	// ---------- 模型管理 ----------
+	// ---------- 供应商与模型管理 ----------
+	// 注意：/templates 必须在 /:id 之前注册，避免路由冲突
+	providers := v1.Group("/providers")
+	{
+		providers.GET("/templates", modelH.ListTemplates)                     // 预置供应商模板清单
+		providers.GET("", modelH.ListProviders)                               // 供应商列表（含 model_count）
+		providers.POST("", modelH.CreateProvider)                             // 创建供应商
+		providers.PUT("/:id", modelH.UpdateProvider)                          // 更新供应商（api_key 三态语义）
+		providers.DELETE("/:id", modelH.DeleteProvider)                       // 删除供应商（下有模型时 409）
+		providers.POST("/:id/test-connection", modelH.TestProviderConnection) // 供应商连接测试
+		providers.GET("/:id/models", modelH.ListProviderModels)               // 供应商下的模型列表
+		providers.POST("/:id/models", modelH.CreateProviderModel)             // 供应商下创建模型
+	}
+
 	// 注意：/options 必须在 /:id 之前注册，避免路由冲突
 	models := v1.Group("/models")
 	{
-		models.GET("", modelH.ListModels)                          // 模型列表
-		models.POST("", modelH.CreateModel)                        // 创建模型
-		models.GET("/options", modelH.ListOptions)                 // 道人表单下拉的精简列表
-		models.PUT("/:id", modelH.UpdateModel)                     // 更新模型
-		models.DELETE("/:id", modelH.DeleteModel)                  // 删除模型（被引用时 409）
-		models.POST("/:id/test-connection", modelH.TestConnection) // 连接测试
+		models.GET("/options", modelH.ListOptions) // 道人表单下拉的精简列表（含供应商显示名）
+		models.PUT("/:id", modelH.UpdateModel)     // 更新模型
+		models.DELETE("/:id", modelH.DeleteModel)  // 删除模型（被引用时 409）
 	}
 
 	// ---------- 系统接口 ----------

@@ -90,8 +90,19 @@ func InitDatabase(cfg *config.DatabaseConfig) error {
 
 // AutoMigrate 自动迁移数据库表结构
 // 根据 GORM 模型创建或更新数据库表，确保表结构与代码模型一致
+//
+// llm_models 迁移策略（003 清空重建，D3）：旧版表（凭证挂在模型上，无 provider_id 列）
+// 无法优雅迁移到两级结构，检测到即 DROP 后由 AutoMigrate 重建，幂等且意图清晰
 func AutoMigrate(db *gorm.DB) error {
 	log.Println("[炼丹炉] 开始自动迁移数据库表结构...")
+
+	// 检测旧版 llm_models 结构：表存在但缺少 provider_id 列 → 清空重建
+	if db.Migrator().HasTable("llm_models") && !db.Migrator().HasColumn(&model.LLMModel{}, "provider_id") {
+		log.Println("[炼丹炉] 检测到旧版 llm_models 结构，按规划清空重建")
+		if err := db.Migrator().DropTable("llm_models"); err != nil {
+			return fmt.Errorf("删除旧版 llm_models 表失败: %w", err)
+		}
+	}
 
 	models := []interface{}{
 		&model.ElixirPill{},      // 金丹表
@@ -100,6 +111,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.LanguagePattern{}, // 语言模式缓存表
 		&model.ChatSession{},     // 会话表
 		&model.ChatMessage{},     // 消息表
+		&model.LLMProvider{},     // LLM 供应商配置表
 		&model.LLMModel{},        // LLM 模型配置表
 	}
 
@@ -141,7 +153,7 @@ func AutoMigrate(db *gorm.DB) error {
 		}
 	}
 
-	log.Println("[炼丹炉] 数据库表迁移完成，共 7 张表：elixir_pills, dao_agents, agent_pills, language_patterns, chat_sessions, chat_messages, llm_models")
+	log.Println("[炼丹炉] 数据库表迁移完成，共 8 张表：elixir_pills, dao_agents, agent_pills, language_patterns, chat_sessions, chat_messages, llm_providers, llm_models")
 	return nil
 }
 

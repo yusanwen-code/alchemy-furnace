@@ -39,7 +39,7 @@ export default function Footer() {
             <span>炼制</span>
             <span className="mx-1 text-ink-600">·</span>
             <a
-              href="https://github.com"
+              href="https://github.com/yusanwen-code/alchemy-furnace"
               target="_blank"
               rel="noopener noreferrer"
               className="text-gold-400/60 hover:text-gold-400 transition-colors"

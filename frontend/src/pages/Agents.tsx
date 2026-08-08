@@ -158,7 +158,7 @@ export default function Agents() {
                   <p className="text-xs text-ink-400 bg-ink-800/50 border border-bronze-600/20 rounded-lg px-3 py-2.5">
                     暂无可用模型，请先在
                     <Link to="/models" className="text-gold-400 hover:text-gold-300 mx-1">模型管理</Link>
-                    中配置
+                    中配置供应商
                   </p>
                 ) : (
                   <select
@@ -167,8 +167,8 @@ export default function Agents() {
                     className="dao-input"
                   >
                     {modelOptions.map(model => (
-                      <option key={model.name} value={model.name}>
-                        {model.display_name || model.name}（{model.provider}）{model.is_default ? ' · 默认' : ''}
+                      <option key={`${model.provider_name}/${model.name}`} value={model.name}>
+                        {model.display_name || model.name}（{model.provider_display_name || model.provider_name}）{model.is_default ? ' · 默认' : ''}
                       </option>
                     ))}
                   </select>

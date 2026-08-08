@@ -73,7 +73,7 @@ export default function Settings() {
 
               <div className="space-y-2 w-full text-left">
                 <a
-                  href="https://github.com"
+                  href="https://github.com/yusanwen-code/alchemy-furnace"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 p-2.5 rounded-lg bg-ink-800/50 hover:bg-gold-400/5 border border-bronze-600/20 hover:border-gold-400/30 transition-all text-sm"
