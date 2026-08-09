@@ -23,7 +23,7 @@ import (
 
 	"github.com/alchemy-furnace/server/dao"
 	"github.com/alchemy-furnace/server/handler"
-	"github.com/alchemy-furnace/server/middleware"
+	"github.com/alchemy-furnace/server/server/http/middleware"
 	"github.com/alchemy-furnace/server/pkg/config"
 	"github.com/gin-gonic/gin"
 )
@@ -71,7 +71,7 @@ func main() {
 	// 日志记录
 	r.Use(middleware.GinLogger())
 	// 跨域支持
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(cfg.Server.AllowOrigins))
 
 	// ---------- 7. 初始化处理器 ----------
 	pillHandler := handler.NewPillHandler()

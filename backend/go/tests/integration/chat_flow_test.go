@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/alchemy-furnace/server/dao"
+	newdao "github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/pkg/config"
 	"github.com/alchemy-furnace/server/service"
@@ -282,7 +283,7 @@ func TestChatFlowEndToEnd(t *testing.T) {
 	if err := dao.AutoMigrate(db); err != nil {
 		t.Fatalf("自动迁移失败: %v", err)
 	}
-	if err := dao.SeedBuiltinPills(db); err != nil {
+	if err := newdao.SeedBuiltinPills(db); err != nil {
 		t.Fatalf("种子写入失败: %v", err)
 	}
 
@@ -292,7 +293,7 @@ func TestChatFlowEndToEnd(t *testing.T) {
 	if countBefore < 3 {
 		t.Fatalf("内置金丹数量不足: %d", countBefore)
 	}
-	if err := dao.SeedBuiltinPills(db); err != nil {
+	if err := newdao.SeedBuiltinPills(db); err != nil {
 		t.Fatalf("二次种子写入失败: %v", err)
 	}
 	db.Model(&model.ElixirPill{}).Where("is_builtin = ?", true).Count(&countAfter)

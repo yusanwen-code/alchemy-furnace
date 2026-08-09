@@ -10,7 +10,7 @@ import (
 
 	"github.com/alchemy-furnace/server/dao"
 	"github.com/alchemy-furnace/server/model"
-	alchemycrypto "github.com/alchemy-furnace/server/pkg/crypto"
+	alchemycrypto "github.com/alchemy-furnace/server/internal/util/crypto"
 )
 
 // TestProviderCreateEncryptsKey 创建时 api_key 加密存储，响应仅含掩码

@@ -6,6 +6,7 @@ package middleware
 import (
 	"time"
 
+	"github.com/alchemy-furnace/server/internal/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -16,23 +17,12 @@ var Logger *zap.Logger
 // InitLogger 初始化 zap logger
 // 根据环境选择开发模式（彩色输出）或生产模式（JSON格式）
 func InitLogger(mode string) (*zap.Logger, error) {
-	var logger *zap.Logger
-	var err error
-
-	if mode == "release" {
-		// 生产模式：JSON 格式，性能优化
-		logger, err = zap.NewProduction()
-	} else {
-		// 开发模式：彩色控制台输出
-		logger, err = zap.NewDevelopment()
-	}
-
-	if err != nil {
+	// 委托 internal/logger 装配(内部已 zap.ReplaceGlobals)
+	if err := logger.Init(mode); err != nil {
 		return nil, err
 	}
-
-	Logger = logger
-	return logger, nil
+	Logger = logger.L
+	return Logger, nil
 }
 
 // GinLogger Gin HTTP 请求日志中间件

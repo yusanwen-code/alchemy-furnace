@@ -8,7 +8,7 @@ import (
 	"log"
 	"runtime/debug"
 
-	"github.com/alchemy-furnace/server/pkg/response"
+	"github.com/alchemy-furnace/server/server/http/response"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -50,13 +50,13 @@ func CustomErrorHandler() gin.HandlerFunc {
 
 		// 检查是否有路由错误
 		if c.Writer.Status() == 404 && c.Writer.Written() == false {
-			response.NotFound(c, fmt.Sprintf("路径 %s %s 不存在，请检查 API 文档", c.Request.Method, c.Request.URL.Path))
+			response.NotFoundResp(c, fmt.Sprintf("路径 %s %s 不存在，请检查 API 文档", c.Request.Method, c.Request.URL.Path))
 			c.Abort()
 			return
 		}
 
 		if c.Writer.Status() == 405 && c.Writer.Written() == false {
-			response.ErrorWithStatus(c, 405, 405,
+			response.Failure(c, 405, 405,
 				fmt.Sprintf("方法 %s 不允许用于路径 %s", c.Request.Method, c.Request.URL.Path))
 			c.Abort()
 			return
@@ -67,13 +67,13 @@ func CustomErrorHandler() gin.HandlerFunc {
 // NoRouteHandler 处理所有未匹配的路由
 func NoRouteHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		response.NotFound(c, "此路径不在「炼丹炉」的仙界地图中，请检查 API 文档")
+		response.NotFoundResp(c, "此路径不在「炼丹炉」的仙界地图中，请检查 API 文档")
 	}
 }
 
 // NoMethodHandler 处理所有未匹配的 HTTP 方法
 func NoMethodHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		response.ErrorWithStatus(c, 405, 405, "此 HTTP 方法在此路径上不被允许")
+		response.Failure(c, 405, 405, "此 HTTP 方法在此路径上不被允许")
 	}
 }

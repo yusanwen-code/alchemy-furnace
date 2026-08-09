@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alchemy-furnace/server/model"
+	newdao "github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/pkg/config"
 
 	"gorm.io/driver/postgres"
@@ -76,12 +77,12 @@ func InitDatabase(cfg *config.DatabaseConfig) error {
 	}
 
 	// 迁移完成后写入内置示例金丹种子数据（幂等：同名金丹已存在则跳过）
-	if err := SeedBuiltinPills(db); err != nil {
+	if err := newdao.SeedBuiltinPills(db); err != nil {
 		return fmt.Errorf("写入内置金丹种子数据失败: %w", err)
 	}
 
 	// 写入默认 LLM 模型种子数据（幂等：llm_models 非空则跳过）
-	if err := SeedDefaultLLMModels(db); err != nil {
+	if err := newdao.SeedDefaultLLMModels(db); err != nil {
 		return fmt.Errorf("写入默认模型种子数据失败: %w", err)
 	}
 

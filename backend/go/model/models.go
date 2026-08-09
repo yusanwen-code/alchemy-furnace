@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // ---------- 金丹（语言模式/人格特质技能包） ----------
@@ -18,6 +21,7 @@ import (
 // SkillSchema 存储于 PostgreSQL JSONB 中
 type ElixirPill struct {
 	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:金丹唯一标识"`
+	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	Name        string    `json:"name" gorm:"size:100;not null;comment:金丹名称"`
 	Description string    `json:"description" gorm:"type:text;comment:金丹简介（含触发语、反触发语）"`
 	SkillSchema JSONMap   `json:"skill_schema" gorm:"type:jsonb;not null;comment:nuwa-skill 结构化内容"`
@@ -43,6 +47,7 @@ func (ElixirPill) TableName() string {
 // 道人是 AI 对话代理，拥有基础性格，可服用多个金丹获得语言模式/人格特质
 type DaoAgent struct {
 	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:道人唯一标识"`
+	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	Name        string    `json:"name" gorm:"size:100;not null;comment:道人名称"`
 	Avatar      string    `json:"avatar" gorm:"size:255;comment:头像URL"`
 	Personality string    `json:"personality" gorm:"type:text;comment:基础性格描述/系统提示词"`
@@ -117,6 +122,7 @@ func (LanguagePattern) TableName() string {
 // 用户与某个道人之间的对话上下文，一个会话包含多条消息
 type ChatSession struct {
 	ID        uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:会话唯一标识"`
+	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	AgentID   uint      `json:"agent_id" gorm:"not null;index;comment:关联的道人ID"`
 	Title     string    `json:"title" gorm:"size:200;comment:会话标题"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
@@ -140,6 +146,7 @@ func (ChatSession) TableName() string {
 // sources 字段已废弃，保留 JSONB 列以兼容历史数据，不再写入新数据
 type ChatMessage struct {
 	ID        uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:消息唯一标识"`
+	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	SessionID uint      `json:"session_id" gorm:"not null;index;comment:所属会话ID"`
 	Role      string    `json:"role" gorm:"size:20;not null;comment:角色: user/assistant/system"`
 	Content   string    `json:"content" gorm:"type:text;not null;comment:消息内容"`
@@ -162,6 +169,7 @@ func (ChatMessage) TableName() string {
 // 停用供应商后其下全部模型在凭证解析链中不可用
 type LLMProvider struct {
 	ID              uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:供应商唯一标识"`
+	UUID              uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	Name            string    `json:"name" gorm:"size:50;not null;uniqueIndex;comment:供应商标识（如 openai/deepseek/dashscope）"`
 	DisplayName     string    `json:"display_name" gorm:"size:100;not null;comment:显示名（如 OpenAI/通义千问）"`
 	Protocol        string    `json:"protocol" gorm:"size:50;not null;default:openai-compatible;comment:协议类型（预留扩展）"`
@@ -189,6 +197,7 @@ func (LLMProvider) TableName() string {
 // (provider_id, name) 联合唯一；is_default / is_synthesis 全表最多一个（由部分唯一索引保证）
 type LLMModel struct {
 	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:模型配置唯一标识"`
+	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	ProviderID  uint      `json:"provider_id" gorm:"not null;index:idx_llm_models_provider_id;uniqueIndex:idx_llm_models_provider_name;comment:所属供应商ID"`
 	Name        string    `json:"name" gorm:"size:100;not null;uniqueIndex:idx_llm_models_provider_name;comment:模型名（API 调用用，如 gpt-4o）"`
 	DisplayName string    `json:"display_name" gorm:"size:100;not null;comment:显示名"`
@@ -460,4 +469,50 @@ type TestConnectionResult struct {
 	Success   bool   `json:"success"`    // 是否连通
 	LatencyMs int64  `json:"latency_ms"` // 耗时（毫秒）
 	Error     string `json:"error"`      // 失败时的可读中文描述
+}
+
+// ---------- UUID 兜底钩子 ----------
+// PG schema 由 migration SQL 负责(列默认 gen_random_uuid());GORM 标签不带 default,
+// 以便 sqlite 测试库可 AutoMigrate;应用层 BeforeCreate 统一兜底生成
+
+func (m *ElixirPill) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
+}
+
+func (m *DaoAgent) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
+}
+
+func (m *ChatSession) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
+}
+
+func (m *ChatMessage) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
+}
+
+func (m *LLMProvider) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
+}
+
+func (m *LLMModel) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
 }

@@ -1,4 +1,4 @@
-// Package dao 内置金丹种子数据
+// 内置金丹种子数据
 // 在数据库自动迁移完成后，写入系统内置示例金丹（is_builtin=true）
 // 种子写入是幂等的：按金丹名称查重，已存在则跳过，不会重复插入或覆盖用户修改
 package dao
@@ -9,14 +9,14 @@ import (
 	"log"
 
 	"github.com/alchemy-furnace/server/model"
-	"github.com/alchemy-furnace/server/pkg/config"
-	alchemycrypto "github.com/alchemy-furnace/server/pkg/crypto"
+	"github.com/alchemy-furnace/server/internal/configuration"
+	alchemycrypto "github.com/alchemy-furnace/server/internal/util/crypto"
 	"gorm.io/gorm"
 )
 
 // SeedBuiltinPills 写入内置示例金丹种子数据
 // 幂等策略：按 name 查重，已存在的金丹直接跳过
-// 数据库迁移完成后由 InitDatabase 调用
+// 由 seed 子命令显式触发
 func SeedBuiltinPills(db *gorm.DB) error {
 	pills := builtinPills()
 
@@ -60,7 +60,7 @@ func SeedDefaultLLMModels(db *gorm.DB) error {
 		return nil // 已有供应商配置，跳过
 	}
 
-	cfg := config.Get()
+	cfg := &configuration.Configuration
 	apiKey := cfg.LLM.APIKey
 	if apiKey == "" || apiKey == "sk-your-api-key-here" {
 		log.Println("[炼丹炉] 未配置有效的 OPENAI_API_KEY，跳过默认供应商/模型种子写入")

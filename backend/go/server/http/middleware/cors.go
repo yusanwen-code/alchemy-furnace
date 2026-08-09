@@ -3,16 +3,13 @@
 package middleware
 
 import (
-	"github.com/alchemy-furnace/server/pkg/config"
 	"github.com/gin-gonic/gin"
 )
 
 // CORS 跨域中间件
 // 允许前端从不同域名访问 API，支持预检请求(Preflight)
-// 在开发环境允许所有来源，生产环境可通过配置限制
-func CORS() gin.HandlerFunc {
-	cfg := config.Get()
-	allowOrigins := cfg.Server.AllowOrigins
+// allowOrigins 由调用方从配置注入("" 等价 "*")
+func CORS(allowOrigins string) gin.HandlerFunc {
 	if allowOrigins == "" {
 		allowOrigins = "*"
 	}

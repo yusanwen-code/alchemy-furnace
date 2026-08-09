@@ -3,7 +3,7 @@
 # Alchemy Furnace Skill-Persona System
 # ═══════════════════════════════════════════
 
-.PHONY: help init build up down logs ps clean dev-front dev-go dev-python test
+.PHONY: help init build up down logs ps clean dev dev-front dev-go dev-python test
 
 # 默认目标
 help:
@@ -28,6 +28,7 @@ help:
 	@echo "    make clean        清理所有数据和镜像"
 	@echo ""
 	@echo "  独立开发:"
+	@echo "    make dev          一键启动全部开发服务（前端 + Go + Python，含数据库检查）"
 	@echo "    make dev-front    启动前端开发服务器"
 	@echo "    make dev-go       启动 Go 后端开发服务器"
 	@echo "    make dev-python   启动 Python 语言引擎开发服务器"
@@ -89,6 +90,9 @@ clean:
 
 # ─── 独立开发 ───
 
+dev:
+	@./scripts/dev.sh
+
 dev-front:
 	@echo "⚡ 启动前端开发服务器..."
 	cd frontend && npm install && npm run dev
@@ -123,6 +127,10 @@ test-frontend:
 migrate:
 	@echo "🗃️  执行数据库迁移..."
 	cd backend/go && go run cmd/server/main.go migrate
+
+wire:
+	@echo "🔗 生成 wire 依赖注入装配(需先 go install github.com/google/wire/cmd/wire@latest)..."
+	cd backend/go/server/http/gateway/web/handler && wire
 
 seed:
 	@echo "💊 写入内置示例金丹..."

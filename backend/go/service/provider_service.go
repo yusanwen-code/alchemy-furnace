@@ -17,7 +17,7 @@ import (
 	"github.com/alchemy-furnace/server/dao"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/pkg/config"
-	alchemycrypto "github.com/alchemy-furnace/server/pkg/crypto"
+	alchemycrypto "github.com/alchemy-furnace/server/internal/util/crypto"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
