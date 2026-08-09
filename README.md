@@ -53,14 +53,14 @@
 - **金丹化性** - 语言模式合成引擎将道人基础性格与所服金丹结构化合并，再经 LLM 涌现推导，生成统一的"丹性"系统提示词
 - **多丹融合** - 多颗金丹按权重折中融合，冲突维度自动检测（丹性相冲），涌现规则提炼，避免风格撕裂
 - **试丹预览** - 临时组合性格与金丹，不绑定道人即可快速预览合成效果
-- **论道对答** - 流式对话，道人始终以融合后的语言风格回应；支持中途停止、断线自动重连
+- **论道对答** - 流式对话，道人始终以融合后的语言风格回应；支持中途停止（部分内容自动保存）
 - **模型管理** - 供应商协议化集成：预置国内外常见供应商模板（OpenAI / DeepSeek / 通义千问 / 智谱 GLM / Kimi / 百川 / 文心一言 / Ollama），API Key 加密存储于供应商级，一次配置多模型复用，支持连接测试、默认/合成专用模型设置
 
 ### 技术亮点
 
 - **响应式设计** - 一套 React 代码同时兼容桌面 Web 端和手机 H5 端
 - **微服务架构** - Go 负责 API 网关与业务数据，Python 负责语言模式合成引擎与 LLM 调用，职责分明
-- **流式对话** - WebSocket 实时传输，打字机效果呈现 AI 回复
+- **流式对话** - 标准 SSE（Server-Sent Events）逐段传输，打字机效果呈现 AI 回复；25s 注释心跳保活，停止即中断连接
 - **合成缓存** - 道人当前的合成系统提示词按需缓存，性格或金丹变化时自动失效重建
 - **道教美学** - 朱砂红、金箔黄、宣纸米白，CSS 动画炼丹特效，沉浸式体验
 
@@ -254,7 +254,10 @@ curl -X POST http://localhost:8080/api/v1/agents/1/pills \
   -H "Content-Type: application/json" \
   -d '{"pill_id": 1, "weight": 1.0, "sort_order": 0}'
 
-# 创建会话并对话（WebSocket）
+# 创建会话并对话（SSE 流式）
+curl -N -X POST http://localhost:8080/api/v1/chat/sse/1 \
+  -H "Content-Type: application/json" \
+  -d '{"content": "何为道"}'
 # 详见 API 文档与 specs/001-skill-persona-alchemy-pivot/quickstart.md
 ```
 
@@ -314,13 +317,13 @@ alchemy-furnace/
 - Tailwind CSS + shadcn/ui
 - Vite
 - HashRouter（兼容静态部署）
-- WebSocket 客户端
+- fetch + ReadableStream（SSE 客户端）
 - React Context API 状态管理
 
 ### 后端
 - Go 1.21 + Gin
 - GORM + PostgreSQL
-- WebSocket
+- SSE（标准 Server-Sent Events）
 - RESTful API
 - Zap 日志
 
@@ -336,7 +339,7 @@ alchemy-furnace/
 - [x] 服用金丹（权重与顺序配置）
 - [x] 语言模式合成引擎（结构化合并 + LLM 涌现推导）
 - [x] 试丹预览（临时组合快速验证）
-- [x] 流式对话（WebSocket）
+- [x] 流式对话（标准 SSE）
 - [ ] 多轮对话上下文优化
 - [ ] 丹性相冲可视化提示
 - [ ] 多用户权限管理

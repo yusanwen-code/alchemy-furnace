@@ -1,18 +1,17 @@
 /**
- * 对话服务 - 会话管理、消息 API 与 WebSocket 流式对话（v2 协议）
- * 对接后端 /api/v1/chat/sessions 与 WebSocket /api/v1/chat/ws/:session_id
+ * 对话服务 - 会话管理、消息 API 与标准 SSE 流式对话
+ * 对接后端 /api/v1/chat/sessions 与 POST /api/v1/chat/sse/:session_id
  *
- * WebSocket v2 协议要点：
- * - 每个会话维持一条长连接，消息（{ content }）经同一连接发送
- * - 停止生成：发送 { type: "stop" }，服务端以 { type: "stopped" } 确认（不关闭连接）
- * - 错误消息 { type: "error", content } 为可读中文描述，需恢复输入状态
- * - 断线重连：指数退避 1s/2s/4s/8s/16s，最多 5 次；页面隐藏时暂停重连
- * - 用户主动离开聊天页为正常关闭，不触发重连
- * - 重连成功后需重新拉取会话历史（消息由服务端持久化）
- * - 心跳为 WS 协议层 ping/pong，浏览器自动应答，无需应用层处理
+ * SSE 协议要点：
+ * - 每次发送消息发起一次 fetch POST，以 ReadableStream 消费 text/event-stream
+ * - 事件：chunk（内容片段）/ done（完成，已入库）/ error（可读中文描述）
+ * - 停止生成：AbortController.abort() 中断连接，无 stopped 确认事件，
+ *   服务端将已生成内容（非空时）保存为 assistant 消息
+ * - 心跳为 SSE 注释行（: ping），解析器忽略
+ * - 请求级生命周期，无长驻连接，无需重连
  */
-import { get, post, buildWsUrl } from './api'
-import type { ChatSession, ChatMessage, CreateSessionRequest, PagedList, ListParams, WSMessage } from './types'
+import { get, post, buildApiUrl } from './api'
+import type { ChatSession, ChatMessage, CreateSessionRequest, PagedList, ListParams } from './types'
 
 /**
  * 获取会话列表
@@ -41,227 +40,144 @@ export function getMessages(sessionId: number, params: ListParams = {}): Promise
   })
 }
 
-/** WebSocket 连接状态 */
-export type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'failed'
-
-/** 流式对话连接回调 */
-export interface ChatConnectionHandlers {
+/** 流式对话回调 */
+export interface StreamHandlers {
   /** 收到内容片段 */
   onChunk: (content: string) => void
-  /** 流式输出完成 */
+  /** 流式输出完成（完整回复已入库） */
   onDone: () => void
-  /** 生成已被停止（此前内容已保存） */
+  /** 已被本地停止（abort；此前内容服务端已保存） */
   onStopped: () => void
-  /** 服务端错误（可读中文描述） */
+  /** 服务端错误（可读中文描述），需恢复输入状态 */
   onError: (error: string) => void
-  /** 连接状态变化 */
-  onConnectionStateChange: (state: ConnectionState) => void
-  /** 重连成功（应重新拉取会话历史） */
-  onReconnect: () => void
-  /** 流式生成中断线（该条回复可能不完整） */
-  onStreamInterrupted: () => void
+  /** 流式生成中网络中断（已收到部分内容，该条回复可能不完整） */
+  onInterrupted: () => void
 }
 
-/** 重连退避间隔（最多 5 次） */
-const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]
-const MAX_ATTEMPTS = 5
+// 当前活跃的流式请求（同一时间只允许一条）
+let activeController: AbortController | null = null
 
-/** 单会话 WebSocket 连接 */
-interface Connection {
-  sessionId: number
-  ws: WebSocket | null
-  handlers: ChatConnectionHandlers
-  /** 已尝试的重连次数 */
-  attempts: number
-  reconnectTimer: number | null
-  /** 用户主动关闭（离开聊天页），不触发重连 */
-  userClosed: boolean
-  /** 是否有流式生成进行中 */
-  streamInProgress: boolean
-  state: ConnectionState
-  /** 页面隐藏导致重连暂停 */
-  paused: boolean
-}
-
-// 当前活跃连接（同一时间只允许一条）
-let conn: Connection | null = null
-
-/** 更新连接状态并通知 */
-function setState(c: Connection, state: ConnectionState): void {
-  if (c.state === state) return
-  c.state = state
-  c.handlers.onConnectionStateChange(state)
-}
-
-/** 清除重连定时器 */
-function clearReconnectTimer(c: Connection): void {
-  if (c.reconnectTimer !== null) {
-    window.clearTimeout(c.reconnectTimer)
-    c.reconnectTimer = null
-  }
+/**
+ * 停止当前流式生成（中断 HTTP 连接）
+ * 服务端请求 context 取消 → 上游 LLM 流中断，部分内容入库
+ */
+export function stopStream(): void {
+  activeController?.abort()
 }
 
 /**
- * 建立（或复用）指定会话的 WebSocket 连接
- * 相同会话重复调用仅更新回调；不同会话则切换连接
+ * 发送消息并以标准 SSE 流式接收回复
+ * 同一时间只允许一条流式请求（重复调用会先中断上一条）
  */
-export function connectChat(sessionId: number, handlers: ChatConnectionHandlers): void {
-  // 相同会话且连接仍存在：仅替换回调
-  if (conn && conn.sessionId === sessionId && !conn.userClosed) {
-    conn.handlers = handlers
-    handlers.onConnectionStateChange(conn.state)
-    return
-  }
+export async function streamChatMessage(
+  sessionId: number,
+  content: string,
+  handlers: StreamHandlers
+): Promise<void> {
+  stopStream()
+  const controller = new AbortController()
+  activeController = controller
 
-  disconnectChat()
+  /** 是否已收到任何内容片段 */
+  let received = false
+  /** 是否已收到终止事件（done/error） */
+  let finished = false
 
-  const c: Connection = {
-    sessionId,
-    ws: null,
-    handlers,
-    attempts: 0,
-    reconnectTimer: null,
-    userClosed: false,
-    streamInProgress: false,
-    state: 'connecting',
-    paused: false,
-  }
-  conn = c
-  setState(c, 'connecting')
-  openSocket(c)
-}
+  try {
+    const response = await fetch(buildApiUrl(`/chat/sse/${sessionId}`), {
+      method: 'POST',
+      headers: {
+        'Accept': 'text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+      signal: controller.signal,
+    })
 
-/** 打开 WebSocket 并绑定事件 */
-function openSocket(c: Connection): void {
-  const ws = new WebSocket(buildWsUrl(`/chat/ws/${c.sessionId}`))
-  c.ws = ws
-
-  ws.onopen = () => {
-    if (conn !== c) return
-    const isReconnect = c.attempts > 0
-    c.attempts = 0
-    setState(c, 'connected')
-    if (isReconnect) {
-      // 重连成功：会话状态存于服务端，通知调用方重新拉取历史
-      c.handlers.onReconnect()
-    }
-  }
-
-  ws.onmessage = (event) => {
-    if (conn !== c) return
-    try {
-      const msg = JSON.parse(event.data as string) as WSMessage
-      if (msg.type === 'chunk' && msg.content) {
-        c.handlers.onChunk(msg.content)
-      } else if (msg.type === 'done') {
-        c.streamInProgress = false
-        c.handlers.onDone()
-      } else if (msg.type === 'stopped') {
-        c.streamInProgress = false
-        c.handlers.onStopped()
-      } else if (msg.type === 'error') {
-        c.streamInProgress = false
-        c.handlers.onError(msg.content || '论道出错了')
-      }
-    } catch {
-      // 忽略无法解析的消息
-    }
-  }
-
-  ws.onerror = () => {
-    // 浏览器随后会触发 onclose，统一在 onclose 中处理重连
-  }
-
-  ws.onclose = () => {
-    if (conn !== c) return
-    c.ws = null
-    if (c.userClosed) {
-      setState(c, 'disconnected')
+    if (!response.ok || !response.body) {
+      const errorData = await response.json().catch(() => ({}))
+      handlers.onError(errorData.message || `请求失败（HTTP ${response.status}）`)
       return
     }
-    // 意外断线：若流式生成进行中，该条回复可能不完整
-    if (c.streamInProgress) {
-      c.streamInProgress = false
-      c.handlers.onStreamInterrupted()
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let eventType = ''
+    let dataLines: string[] = []
+
+    /** 空行触发事件分发 */
+    const dispatchEvent = () => {
+      const type = eventType
+      const data = dataLines.join('\n')
+      eventType = ''
+      dataLines = []
+      if (!type) return
+
+      let payload: { content?: string } = {}
+      try {
+        payload = data ? JSON.parse(data) : {}
+      } catch {
+        // 忽略无法解析的 data
+      }
+
+      if (type === 'chunk' && payload.content) {
+        received = true
+        handlers.onChunk(payload.content)
+      } else if (type === 'done') {
+        finished = true
+        handlers.onDone()
+      } else if (type === 'error') {
+        finished = true
+        handlers.onError(payload.content || '论道出错了')
+      }
     }
-    scheduleReconnect(c)
-  }
-}
 
-/** 按指数退避调度重连；页面隐藏时暂停，恢复可见后立即重连 */
-function scheduleReconnect(c: Connection): void {
-  if (conn !== c || c.userClosed) return
-  if (c.attempts >= MAX_ATTEMPTS) {
-    setState(c, 'failed')
-    return
-  }
-  setState(c, 'connecting')
-  const delay = BACKOFF_MS[Math.min(c.attempts, BACKOFF_MS.length - 1)]
-  c.attempts += 1
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
 
-  if (document.hidden) {
-    c.paused = true
-    return
-  }
-
-  c.reconnectTimer = window.setTimeout(() => {
-    c.reconnectTimer = null
-    if (conn === c && !c.userClosed) {
-      openSocket(c)
+      // 按行解析 SSE 帧（跨 chunk 行缓冲拼接）
+      let idx: number
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).replace(/\r$/, '')
+        buffer = buffer.slice(idx + 1)
+        if (line === '') {
+          dispatchEvent()
+        } else if (line.startsWith(':')) {
+          // 注释行（心跳），忽略
+        } else if (line.startsWith('event:')) {
+          eventType = line.slice('event:'.length).trim()
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trimStart())
+        }
+      }
+      if (finished) break
     }
-  }, delay)
-}
 
-// 页面恢复可见时，立即恢复被暂停的重连
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    const c = conn
-    if (!document.hidden && c && c.paused && !c.userClosed && c.state !== 'connected') {
-      c.paused = false
-      clearReconnectTimer(c)
-      openSocket(c)
+    // 流结束但未收到终止事件：连接中断
+    if (!finished) {
+      if (received) {
+        handlers.onInterrupted()
+      } else {
+        handlers.onError('连接中断，请重试')
+      }
     }
-  })
-}
-
-/**
- * 通过当前连接发送用户消息
- * @returns 是否发送成功（连接未就绪时返回 false）
- */
-export function sendChatMessage(content: string): boolean {
-  if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN || conn.userClosed) {
-    return false
-  }
-  conn.ws.send(JSON.stringify({ content }))
-  conn.streamInProgress = true
-  return true
-}
-
-/**
- * 停止当前流式生成（发送 { type: "stop" }，不关闭连接）
- * 仅在生成期间有效，服务端将以 { type: "stopped" } 确认
- */
-export function sendStop(): void {
-  if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN) return
-  conn.ws.send(JSON.stringify({ type: 'stop' }))
-}
-
-/**
- * 主动断开连接（离开聊天页），不触发重连
- */
-export function disconnectChat(): void {
-  if (!conn) return
-  const c = conn
-  conn = null
-  c.userClosed = true
-  c.streamInProgress = false
-  clearReconnectTimer(c)
-  if (c.ws) {
-    try {
-      c.ws.close()
-    } catch {
-      // 忽略关闭异常
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      // 本地停止：服务端已保存部分内容，前端落定"已停止"
+      handlers.onStopped()
+      return
     }
-    c.ws = null
+    if (received) {
+      handlers.onInterrupted()
+    } else {
+      handlers.onError(error instanceof Error ? error.message : '网络请求失败，请检查网络连接')
+    }
+  } finally {
+    if (activeController === controller) {
+      activeController = null
+    }
   }
 }

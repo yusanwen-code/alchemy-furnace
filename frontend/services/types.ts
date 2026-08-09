@@ -241,11 +241,3 @@ export interface PillListParams extends ListParams {
 export interface AgentListParams extends ListParams {
   status?: AgentStatus
 }
-
-// ========== WebSocket ==========
-
-/** WebSocket 服务端消息（chunk / done / stopped / error） */
-export interface WSMessage {
-  type: 'chunk' | 'done' | 'stopped' | 'error'
-  content?: string
-}
