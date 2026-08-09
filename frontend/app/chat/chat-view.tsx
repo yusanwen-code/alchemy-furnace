@@ -4,8 +4,8 @@
  * 论道视图 - 对话大厅
  * 左侧: 会话列表（可折叠，H5 默认折叠为底部 sheet）
  * 右侧: 聊天界面
- * 选择道人后开始对话（WebSocket 流式输出，无 RAG 引用来源）
- * WebSocket v2：会话级长连接、断线指数退避重连、停止生成
+ * 选择道人后开始对话（标准 SSE 流式输出，无 RAG 引用来源）
+ * SSE：fetch POST + ReadableStream；停止 = AbortController 中断连接
  */
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,7 +22,6 @@ import {
   Users,
   Square,
   AlertCircle,
-  WifiOff,
 } from 'lucide-react'
 import { useChat } from '@/contexts/ChatContext'
 import { useAgent } from '@/contexts/AgentContext'
@@ -32,7 +31,7 @@ import { TopTabs } from '@/components/interaction/top-tabs'
 export function ChatView({ sessionId }: { sessionId?: string }) {
   const router = useRouter()
 
-  const { state: chatState, dispatch, fetchSessions, loadMessages, connect, disconnect, streamMessage, createSession, stopStream } = useChat()
+  const { state: chatState, dispatch, fetchSessions, loadMessages, streamMessage, createSession, stopStream } = useChat()
   const { state: agentState, fetchAgents } = useAgent()
 
   const [input, setInput] = useState('')
@@ -44,7 +43,6 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   const messages = chatState.messages
   const sessions = chatState.sessions
   const agents = agentState.agents
-  const connected = chatState.connectionState === 'connected'
 
   // 初始化加载
   useEffect(() => {
@@ -52,22 +50,15 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
     fetchAgents()
   }, [fetchSessions, fetchAgents])
 
-  // 根据 URL 参数加载会话并建立 WebSocket 连接
+  // 根据 URL 参数加载会话
   useEffect(() => {
     if (sessionId) {
       const sid = Number(sessionId)
       loadMessages(sid)
-      connect(sid)
     } else {
       dispatch({ type: 'CLEAR_CURRENT' })
-      disconnect()
     }
-  }, [sessionId, loadMessages, connect, disconnect, dispatch])
-
-  // 离开聊天页：主动断开连接（不触发重连）
-  useEffect(() => {
-    return () => disconnect()
-  }, [disconnect])
+  }, [sessionId, loadMessages, dispatch])
 
   // 自动滚动到底部
   useEffect(() => {
@@ -76,7 +67,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
 
   /** 发送消息 */
   const handleSend = async () => {
-    if (!input.trim() || !currentSession || !connected) return
+    if (!input.trim() || !currentSession || chatState.streaming) return
     const content = input.trim()
     setInput('')
     await streamMessage(currentSession.id, content)
@@ -389,20 +380,6 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 连接状态提示 */}
-        {chatState.connectionState === 'connecting' && (
-          <div className="px-4 py-2 border-t border-gold/20 bg-gold/10 flex items-center justify-center gap-2 text-xs text-gold">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            连接已断开，正在重连…
-          </div>
-        )}
-        {chatState.connectionState === 'failed' && (
-          <div className="px-4 py-2 border-t border-primary/20 bg-primary/10 flex items-center justify-center gap-2 text-xs text-primary">
-            <WifiOff className="w-3.5 h-3.5" />
-            连接失败，请检查网络后刷新页面重试
-          </div>
-        )}
-
         {/* 输入框 */}
         <div className="px-4 py-3 border-t border-border/70 bg-card/80">
           <div className="flex items-end gap-2">
@@ -415,15 +392,14 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
                   handleSend()
                 }
               }}
-              placeholder={connected ? '向道人请教...' : '连接中断，等待重连...'}
-              disabled={!connected}
-              className="dao-input resize-none min-h-[44px] max-h-[120px] py-2.5 disabled:opacity-50"
+              placeholder="向道人请教..."
+              className="dao-input resize-none min-h-[44px] max-h-[120px] py-2.5"
               rows={1}
             />
             <button
               aria-label={chatState.streaming ? '停止输出' : '发送'}
               onClick={chatState.streaming ? stopStream : handleSend}
-              disabled={chatState.streaming ? !connected : (!connected || !input.trim())}
+              disabled={!chatState.streaming && !input.trim()}
               className="dao-btn-primary px-3 py-2.5 flex-shrink-0 disabled:opacity-40"
               title={chatState.streaming ? '停止输出' : '发送'}
             >

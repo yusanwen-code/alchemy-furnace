@@ -168,7 +168,7 @@ func setupRoutes(
 		chatGroup.POST("/sessions", chat.CreateSession)           // 创建会话
 		chatGroup.GET("/sessions", chat.ListSessions)             // 会话列表
 		chatGroup.GET("/sessions/:id/messages", chat.GetMessages) // 消息历史
-		chatGroup.GET("/ws/:session_id", chat.WebSocketChat)      // WebSocket 流式对话
+		chatGroup.POST("/sse/:session_id", chat.SSEChat)          // SSE 流式对话
 	}
 
 	// ---------- 试丹（临时组合预览） ----------

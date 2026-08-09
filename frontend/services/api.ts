@@ -37,17 +37,10 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 }
 
 /**
- * 构建 WebSocket URL
- * 开发环境用 NEXT_PUBLIC_WS_BASE_URL 直连后端（next rewrites 对 WS 升级不可靠）；
- * 未配置时按同源推导（生产由 nginx 代理 /api 含 Upgrade）
+ * 构建 API 完整 URL 前缀（用于 fetch 直连场景，如 SSE 流式对话）
  */
-export function buildWsUrl(path: string): string {
-  const wsBase = process.env.NEXT_PUBLIC_WS_BASE_URL
-  if (wsBase) {
-    return `${wsBase.replace(/\/$/, '')}${path}`
-  }
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${window.location.host}${API_BASE}${path}`
+export function buildApiUrl(path: string): string {
+  return API_BASE + path
 }
 
 /**

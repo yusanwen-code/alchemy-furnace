@@ -3,14 +3,12 @@
 /**
  * 对话状态管理 Context
  * 使用 React Context + useReducer 管理对话相关状态
- * 流式输出通过 WebSocket /api/v1/chat/ws/:session_id（v2 协议）
- * - 每会话一条长连接，支持停止生成（stop/stopped）
- * - 断线自动重连，重连成功后重新拉取消息历史
- * - 断线中断的回复标记「可能不完整」，错误消息以错误气泡内联展示
+ * 流式输出通过标准 SSE：POST /api/v1/chat/sse/:session_id（fetch + ReadableStream）
+ * - 停止生成 = AbortController 中断连接，部分内容落定为「已停止」
+ * - 流式中网络中断的回复标记「可能不完整」，错误消息以错误气泡内联展示
  */
 import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect } from 'react'
 import * as chatService from '@/services/chatService'
-import type { ConnectionState } from '@/services/chatService'
 import type { ChatSession, ChatMessage } from '@/services/types'
 
 /** 对话状态 */
@@ -20,7 +18,6 @@ interface ChatState {
   messages: ChatMessage[]
   loading: boolean
   streaming: boolean // 是否正在流式输出
-  connectionState: ConnectionState // WebSocket 连接状态
   error: string | null
 }
 
@@ -38,7 +35,6 @@ type ChatAction =
   | { type: 'ADD_SESSION'; payload: ChatSession }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_STREAMING'; payload: boolean }
-  | { type: 'SET_CONNECTION_STATE'; payload: ConnectionState }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'CLEAR_CURRENT' }
 
@@ -49,7 +45,6 @@ const initialState: ChatState = {
   messages: [],
   loading: false,
   streaming: false,
-  connectionState: 'disconnected',
   error: null,
 }
 
@@ -122,8 +117,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, loading: action.payload }
     case 'SET_STREAMING':
       return { ...state, streaming: action.payload }
-    case 'SET_CONNECTION_STATE':
-      return { ...state, connectionState: action.payload }
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false, streaming: false }
     case 'CLEAR_CURRENT':
@@ -141,12 +134,8 @@ interface ChatContextType {
   fetchSessions: () => Promise<void>
   createSession: (agentId: number, title?: string) => Promise<ChatSession | null>
   loadMessages: (sessionId: number) => Promise<void>
-  /** 建立会话 WebSocket 连接（进入聊天页时调用） */
-  connect: (sessionId: number) => void
-  /** 主动断开连接（离开聊天页时调用，不触发重连） */
-  disconnect: () => void
   streamMessage: (sessionId: number, content: string) => Promise<void>
-  /** 停止当前流式生成（发送 stop，等待服务端 stopped 确认） */
+  /** 停止当前流式生成（中断 SSE 连接，部分内容落定为「已停止」） */
   stopStream: () => void
 }
 
@@ -156,8 +145,6 @@ const ChatContext = createContext<ChatContextType | null>(null)
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, initialState)
   const sessionsRef = useRef<ChatSession[]>([])
-  // 断线时是否有未完成的流式内容（用于重连后标记「可能不完整」）
-  const interruptedRef = useRef(false)
   // 本轮流式是否已收到内容片段
   const partialReceivedRef = useRef(false)
 
@@ -212,24 +199,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /** 重连成功后恢复会话：重新拉取消息历史，标记被中断的回复 */
-  const reloadAfterReconnect = useCallback(async (sessionId: number) => {
-    try {
-      const data = await chatService.getMessages(sessionId)
-      dispatch({ type: 'SET_MESSAGES', payload: data.list || [] })
-      // 断线时若有已生成内容，服务端保存的最后一条回复可能不完整
-      if (interruptedRef.current) {
-        interruptedRef.current = false
-        dispatch({ type: 'MARK_LAST_INCOMPLETE' })
-      }
-    } catch {
-      // 拉取失败：保留现有消息，等待下次重连
+  /** 发送消息（SSE 流式接收回复） */
+  const streamMessage = useCallback(async (sessionId: number, content: string) => {
+    // 先添加用户消息
+    const userMessage: ChatMessage = {
+      id: Date.now(),
+      session_id: sessionId,
+      role: 'user',
+      content,
+      created_at: new Date().toISOString(),
     }
-  }, [])
+    dispatch({ type: 'ADD_MESSAGE', payload: userMessage })
+    partialReceivedRef.current = false
+    dispatch({ type: 'SET_STREAMING', payload: true })
 
-  /** 建立会话 WebSocket 连接 */
-  const connect = useCallback((sessionId: number) => {
-    chatService.connectChat(sessionId, {
+    await chatService.streamChatMessage(sessionId, content, {
       onChunk: (chunk) => {
         partialReceivedRef.current = true
         dispatch({ type: 'ADD_STREAM_CHUNK', payload: chunk })
@@ -246,58 +230,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         partialReceivedRef.current = false
         dispatch({ type: 'ADD_ERROR_MESSAGE', payload: error })
       },
-      onConnectionStateChange: (connState) => {
-        dispatch({ type: 'SET_CONNECTION_STATE', payload: connState })
-      },
-      onReconnect: () => {
-        void reloadAfterReconnect(sessionId)
-      },
-      onStreamInterrupted: () => {
-        // 流式生成中断线：恢复输入，标记该条回复「可能不完整」
-        if (partialReceivedRef.current) {
-          interruptedRef.current = true
-        }
+      onInterrupted: () => {
+        // 流式生成中网络中断：恢复输入，标记该条回复「可能不完整」
         partialReceivedRef.current = false
         dispatch({ type: 'FINISH_STREAM' })
-        if (interruptedRef.current) {
-          dispatch({ type: 'MARK_LAST_INCOMPLETE' })
-        }
+        dispatch({ type: 'MARK_LAST_INCOMPLETE' })
       },
     })
-  }, [reloadAfterReconnect])
-
-  /** 主动断开连接（离开聊天页） */
-  const disconnect = useCallback(() => {
-    chatService.disconnectChat()
-    interruptedRef.current = false
-    partialReceivedRef.current = false
-    dispatch({ type: 'SET_CONNECTION_STATE', payload: 'disconnected' })
   }, [])
 
-  /** 发送消息（经当前 WebSocket 连接流式接收回复） */
-  const streamMessage = useCallback(async (sessionId: number, content: string) => {
-    // 先添加用户消息
-    const userMessage: ChatMessage = {
-      id: Date.now(),
-      session_id: sessionId,
-      role: 'user',
-      content,
-      created_at: new Date().toISOString(),
-    }
-    dispatch({ type: 'ADD_MESSAGE', payload: userMessage })
-
-    const sent = chatService.sendChatMessage(content)
-    if (!sent) {
-      dispatch({ type: 'ADD_ERROR_MESSAGE', payload: '连接未就绪，请等待重连成功后再发送' })
-      return
-    }
-    partialReceivedRef.current = false
-    dispatch({ type: 'SET_STREAMING', payload: true })
-  }, [])
-
-  /** 停止当前流式生成（等待服务端 stopped 确认后恢复输入） */
+  /** 停止当前流式生成（中断连接，服务端保存部分内容） */
   const stopStream = useCallback(() => {
-    chatService.sendStop()
+    chatService.stopStream()
   }, [])
 
   return (
@@ -308,8 +252,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         fetchSessions,
         createSession,
         loadMessages,
-        connect,
-        disconnect,
         streamMessage,
         stopStream,
       }}
