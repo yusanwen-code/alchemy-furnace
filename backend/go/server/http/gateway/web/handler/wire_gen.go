@@ -9,9 +9,19 @@ package handler
 import (
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
+	"github.com/alchemy-furnace/server/internal/service/chat_service"
+	"github.com/alchemy-furnace/server/internal/service/credential"
+	"github.com/alchemy-furnace/server/internal/service/language_pattern_service"
+	"github.com/alchemy-furnace/server/internal/service/model_service"
 	"github.com/alchemy-furnace/server/internal/service/pill_service"
+	"github.com/alchemy-furnace/server/internal/service/provider_service"
+	"github.com/alchemy-furnace/server/internal/service/trial_service"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/agent"
+	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/chat"
+	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/model"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/pill"
+	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/trial"
+	"github.com/alchemy-furnace/server/server/http/service"
 )
 
 // Injectors from wire.go:
@@ -32,4 +42,37 @@ func NewAgent() *agent.Agent {
 	agent_serviceAgent := agent_service.New(agentDao, pillDao, modelDao)
 	agentAgent := agent.New(agent_serviceAgent)
 	return agentAgent
+}
+
+// NewTrial 试丹处理器装配
+func NewTrial() *trial.Trial {
+	pillDao := dao.NewPillDao()
+	synthesisClient := service.NewSynthesisClient()
+	modelResolver := credential.NewResolver()
+	trialService := trial_service.New(pillDao, synthesisClient, modelResolver)
+	trialTrial := trial.New(trialService)
+	return trialTrial
+}
+
+// NewModel 供应商与模型管理处理器装配
+func NewModel() *model.Model {
+	providerDao := dao.NewProviderDao()
+	modelDao := dao.NewModelDao()
+	providerService := provider_service.New(providerDao, modelDao)
+	modelService := model_service.New(modelDao, providerDao)
+	modelModel := model.New(providerService, modelService)
+	return modelModel
+}
+
+// NewChat 对话处理器装配
+func NewChat() *chat.Chat {
+	chatDao := dao.NewChatDao()
+	agentDao := dao.NewAgentDao()
+	synthesisClient := service.NewSynthesisClient()
+	modelResolver := credential.NewResolver()
+	engineBaseURL := service.NewEngineBaseURL()
+	languagePatternService := language_pattern_service.New(agentDao, synthesisClient, modelResolver)
+	chatService := chat_service.New(chatDao, agentDao, languagePatternService, modelResolver, engineBaseURL)
+	chatChat := chat.New(chatService)
+	return chatChat
 }

@@ -34,7 +34,12 @@ func Wrapper(h Handler) gin.HandlerFunc {
 					zap.Error(err))
 				message = "服务器内部错误"
 			}
-			response.Failure(c, status, bodyCode, message)
+			// 携带附加数据的错误(如 409 引用计数)写入响应 data 字段
+			if ed, ok := err.(errors.ErrorWithData); ok {
+				response.FailureWithData(c, status, bodyCode, message, ed.GetData())
+			} else {
+				response.Failure(c, status, bodyCode, message)
+			}
 			return
 		}
 

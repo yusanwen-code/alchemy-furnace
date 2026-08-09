@@ -38,12 +38,22 @@ type Error interface {
 	Relations() []Error
 }
 
+// ErrorWithData 携带附加响应数据的错误(如 409 冲突返回引用计数)
+// Wrapper 据此把数据写入失败响应的 data 字段
+type ErrorWithData interface {
+	Error
+
+	// GetData 获取附加响应数据
+	GetData() any
+}
+
 // ie 内部错误实现
 type ie struct {
 	t         ErrorType // 错误类型
 	code      string    // 定位码,硬编码在发生错误的地方
 	message   any       // 消息内容,string 时为 fmt 模板
 	values    []any     // 模板变量
+	data      any       // 附加响应数据(可选,如 409 引用计数)
 	relations []Error   // 关联错误
 }
 
@@ -59,6 +69,7 @@ func (e *ie) Error() string {
 func (e *ie) GetCode() string       { return e.code }
 func (e *ie) IsType(t ErrorType) bool { return e.t == t }
 func (e *ie) Relations() []Error    { return e.relations }
+func (e *ie) GetData() any          { return e.data }
 
 func (e *ie) Relation(errs ...Error) Error {
 	e.relations = append(e.relations, errs...)
@@ -68,6 +79,11 @@ func (e *ie) Relation(errs ...Error) Error {
 // New 创建内部错误;message 为模板字符串时 values 为模板变量
 func New(t ErrorType, code string, message any, values ...any) Error {
 	return &ie{t: t, code: code, message: message, values: values}
+}
+
+// NewWithData 创建携带附加响应数据的内部错误(如 409 冲突返回引用计数)
+func NewWithData(t ErrorType, code string, data any, message any, values ...any) Error {
+	return &ie{t: t, code: code, message: message, values: values, data: data}
 }
 
 // IsType 判断 err 是否(或关联错误中)包含指定类型

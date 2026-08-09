@@ -45,7 +45,12 @@ func Created(c *gin.Context, data interface{}) {
 
 // Failure 返回错误响应(带 HTTP 状态码)
 func Failure(c *gin.Context, httpStatus int, code Code, message string) {
-	c.JSON(httpStatus, Response{Code: code, Message: message, RequestID: requestID(c), Data: nil})
+	FailureWithData(c, httpStatus, code, message, nil)
+}
+
+// FailureWithData 返回错误响应(带 HTTP 状态码与附加数据,如 409 引用计数)
+func FailureWithData(c *gin.Context, httpStatus int, code Code, message string, data interface{}) {
+	c.JSON(httpStatus, Response{Code: code, Message: message, RequestID: requestID(c), Data: data})
 }
 
 // BadRequest 400 / NotFoundResp 404 / ConflictResp 409 / InternalError 500 便捷函数

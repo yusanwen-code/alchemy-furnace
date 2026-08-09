@@ -21,13 +21,23 @@ from app.core.config import settings
 from app.services.language_synthesis_service import LanguageSynthesisService
 
 
+# ==================== 指纹跨端一致性金标准 (contracts/python-synthesis.md) ====================
+# 固定样本：Go 端 T043 须以同一 personality + pills 计算出同一 SHA256。
+# 排序键：(sort_order, str(id)) 字典序；序列化：json.dumps(ensure_ascii=False, sort_keys=True)。
+_GOLDEN_PERSONALITY = "测试道人"
+_UUID_A = "11111111-1111-1111-1111-111111111111"  # sort_order 0
+_UUID_B = "22222222-2222-2222-2222-222222222222"  # sort_order 1
+_UUID_C = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"  # sort_order 1
+_GOLDEN_FINGERPRINT = "sha256:c8fecc755f7d242c6e6871a1726c14110975125931eff8a9771d2a620f98f95a"
+
+
 # ==================== 测试夹具 ====================
 
 
 def _wenyan_pill(**overrides) -> dict:
     """文言文金丹：正式度 0.9，长句"""
     pill = {
-        "id": 1,
+        "id": "550e8400-e29b-41d4-a716-446655440000",
         "name": "文言文金丹",
         "weight": 1.0,
         "sort_order": 0,
@@ -63,7 +73,7 @@ def _wenyan_pill(**overrides) -> dict:
 def _hiphop_pill(**overrides) -> dict:
     """嘻哈金丹：正式度 0.2，短句"""
     pill = {
-        "id": 2,
+        "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
         "name": "嘻哈金丹",
         "weight": 1.0,
         "sort_order": 1,
@@ -278,6 +288,47 @@ class TestFingerprint:
         f1 = LanguageSynthesisService.compute_fingerprint("沉稳内敛", [])
         f2 = LanguageSynthesisService.compute_fingerprint("活泼外向", [])
         assert f1 != f2
+
+    # ---- UUID 契约对齐 (T042 / contracts/python-synthesis.md) ----
+
+    def test_uuid_id_disorder_same_fingerprint(self):
+        """乱序输入（含同 sort_order、id 字典序需重排）-> 指纹一致
+
+        覆盖 contracts/python-synthesis.md 一致性用例：同一 pill 集合以不同
+        顺序输入，(sort_order, str(id)) 字典序排序后归一为同一规范化 JSON
+        -> 同一 SHA256。其中乙/丙同 sort_order=1，"2222..." 字典序先于
+        "aaaa..."，故乱序输入 [丙, 甲, 乙] 必须重排为 [甲, 乙, 丙]。
+        """
+        ordered = [
+            {"sort_order": 0, "id": _UUID_A, "name": "甲丹", "weight": 1.0, "skill_schema": {"k": "a"}},
+            {"sort_order": 1, "id": _UUID_B, "name": "乙丹", "weight": 2.0, "skill_schema": {"k": "b"}},
+            {"sort_order": 1, "id": _UUID_C, "name": "丙丹", "weight": 1.5, "skill_schema": {"k": "c"}},
+        ]
+        # 同集合、乱序：丙(sort1) 在前、甲(sort0) 居中、乙(sort1) 殿后
+        disordered = [ordered[2], ordered[0], ordered[1]]
+        f_ordered = LanguageSynthesisService.compute_fingerprint(_GOLDEN_PERSONALITY, ordered)
+        f_disordered = LanguageSynthesisService.compute_fingerprint(_GOLDEN_PERSONALITY, disordered)
+        assert f_ordered == f_disordered
+
+    def test_fingerprint_golden_value_uuid_contract(self):
+        """固定样本指纹金标准值（供 Go 端 T043 跨端一致性比对）
+
+        排序后规范化 JSON（ensure_ascii=False, sort_keys=True）的 SHA256
+        必须等于 _GOLDEN_FINGERPRINT；Go 端以同一输入计算应得到同一哈希。
+        规范化 JSON：
+        {"personality": "测试道人", "pills": [{"id": "11111111-...",
+        "name": "甲丹", "skill_schema": {"k": "a"}, "sort_order": 0, "weight": 1.0},
+        {"id": "22222222-...", "name": "乙丹", "skill_schema": {"k": "b"},
+        "sort_order": 1, "weight": 2.0}, {"id": "aaaaaaaa-...", "name": "丙丹",
+        "skill_schema": {"k": "c"}, "sort_order": 1, "weight": 1.5}]}
+        """
+        pills = [
+            {"sort_order": 0, "id": _UUID_A, "name": "甲丹", "weight": 1.0, "skill_schema": {"k": "a"}},
+            {"sort_order": 1, "id": _UUID_B, "name": "乙丹", "weight": 2.0, "skill_schema": {"k": "b"}},
+            {"sort_order": 1, "id": _UUID_C, "name": "丙丹", "weight": 1.5, "skill_schema": {"k": "c"}},
+        ]
+        fp = LanguageSynthesisService.compute_fingerprint(_GOLDEN_PERSONALITY, pills)
+        assert fp == _GOLDEN_FINGERPRINT
 
 
 # ==================== 4. 边界与上限 ====================

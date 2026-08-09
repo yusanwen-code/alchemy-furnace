@@ -49,6 +49,25 @@ func (d *AgentDao) TakeAgentDetailByUUID(ctx context.Context, uid uuid.UUID) (*m
 	return &agent, nil
 }
 
+// TakeAgentDetailByID 按内部自增 ID 查询道人详情(预加载服用记录+金丹+语言模式缓存)
+func (d *AgentDao) TakeAgentDetailByID(ctx context.Context, agentID uint) (*model.DaoAgent, errors.Error) {
+	var agent model.DaoAgent
+	if err := GetDB().WithContext(ctx).
+		Preload("AgentPills", func(db *gorm.DB) *gorm.DB {
+			return db.Order("agent_pills.sort_order ASC, agent_pills.id ASC")
+		}).
+		Preload("AgentPills.Pill").
+		Preload("LanguagePattern").
+		Where("id = ?", agentID).
+		First(&agent).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.ErrorRecordNotFound("dao.agent.take_detail_by_id")
+		}
+		return nil, errors.ErrorServerInternalError("dao.agent.take_detail_by_id")
+	}
+	return &agent, nil
+}
+
 // FindAgents 分页查询道人列表
 func (d *AgentDao) FindAgents(ctx context.Context, page int, size int, status string) (int64, []*model.DaoAgent, errors.Error) {
 	db := GetDB().WithContext(ctx).Model(&model.DaoAgent{})
@@ -164,6 +183,14 @@ func (d *AgentDao) InvalidateLanguagePattern(ctx context.Context, agentID uint) 
 		Where("agent_id = ?", agentID).
 		Update("is_valid", false).Error; err != nil {
 		return errors.ErrorServerInternalError("dao.agent.invalidate_pattern")
+	}
+	return nil
+}
+
+// SaveLanguagePattern 写入/更新语言模式缓存(GORM Save: ID==0 创建,否则全字段更新)
+func (d *AgentDao) SaveLanguagePattern(ctx context.Context, pattern *model.LanguagePattern) errors.Error {
+	if err := GetDB().WithContext(ctx).Save(pattern).Error; err != nil {
+		return errors.ErrorServerInternalError("dao.agent.save_language_pattern")
 	}
 	return nil
 }

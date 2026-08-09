@@ -30,6 +30,22 @@ func (d *PillDao) TakePillByUUID(ctx context.Context, uid uuid.UUID) (*model.Eli
 	return &pill, nil
 }
 
+// FindPillsByUUIDs 按 UUID 批量查询金丹(结果顺序不保证,调用方自行排序;空入参返回 nil)
+func (d *PillDao) FindPillsByUUIDs(ctx context.Context, uids []uuid.UUID) ([]*model.ElixirPill, errors.Error) {
+	if len(uids) == 0 {
+		return nil, nil
+	}
+	strs := make([]string, 0, len(uids))
+	for _, u := range uids {
+		strs = append(strs, u.String())
+	}
+	var pills []*model.ElixirPill
+	if err := GetDB().WithContext(ctx).Where("uuid IN ?", strs).Find(&pills).Error; err != nil {
+		return nil, errors.ErrorServerInternalError("dao.pill.find_by_uuids")
+	}
+	return pills, nil
+}
+
 // FindPills 分页查询金丹列表
 func (d *PillDao) FindPills(ctx context.Context, page int, size int, keyword string, isBuiltin *bool) (int64, []*model.ElixirPill, errors.Error) {
 	db := GetDB().WithContext(ctx).Model(&model.ElixirPill{})

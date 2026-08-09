@@ -18,6 +18,10 @@ type Agent interface {
 	// TakeAgentDetailByUUID 按 UUID 查询道人详情(预加载服用记录+金丹+语言模式缓存)
 	TakeAgentDetailByUUID(ctx context.Context, uid uuid.UUID) (*model.DaoAgent, errors.Error)
 
+	// TakeAgentDetailByID 按内部自增 ID 查询道人详情(预加载服用记录+金丹+语言模式缓存)
+	// 供语言模式服务按 agentID 加载性格/金丹/已有缓存
+	TakeAgentDetailByID(ctx context.Context, agentID uint) (*model.DaoAgent, errors.Error)
+
 	// FindAgents 分页查询道人列表(status 为空不过滤),返回总数与当页数据
 	FindAgents(ctx context.Context, page int, size int, status string) (int64, []*model.DaoAgent, errors.Error)
 
@@ -50,4 +54,7 @@ type Agent interface {
 
 	// InvalidateLanguagePattern 将道人语言模式缓存标记为失效
 	InvalidateLanguagePattern(ctx context.Context, agentID uint) errors.Error
+
+	// SaveLanguagePattern 写入/更新语言模式缓存(GORM Save: ID==0 创建,否则全字段更新)
+	SaveLanguagePattern(ctx context.Context, pattern *model.LanguagePattern) errors.Error
 }

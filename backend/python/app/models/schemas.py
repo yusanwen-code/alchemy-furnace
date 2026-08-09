@@ -35,13 +35,13 @@ class SynthesisPillInput(BaseModel):
     合成请求中的单颗金丹
 
     Attributes:
-        id: 金丹ID
+        id: 金丹ID（UUID 字符串）
         name: 金丹名称
         weight: 剂量/权重
         sort_order: 服用顺序
         skill_schema: nuwa-skill 结构化内容
     """
-    id: int = Field(..., gt=0, description="金丹ID")
+    id: str = Field(..., min_length=1, description="金丹ID（UUID 字符串）")
     name: str = Field(..., description="金丹名称")
     weight: float = Field(default=1.0, ge=0.0, le=10.0, description="剂量/权重")
     sort_order: int = Field(default=0, ge=0, description="服用顺序")
