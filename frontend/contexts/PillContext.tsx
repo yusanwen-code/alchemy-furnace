@@ -23,7 +23,7 @@ type PillAction =
   | { type: 'SET_CURRENT_PILL'; payload: Pill | null }
   | { type: 'ADD_PILL'; payload: Pill }
   | { type: 'UPDATE_PILL'; payload: Pill }
-  | { type: 'REMOVE_PILL'; payload: number }
+  | { type: 'REMOVE_PILL'; payload: string }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
 
@@ -72,12 +72,12 @@ interface PillContextType {
   dispatch: React.Dispatch<PillAction>
   // 异步操作
   fetchPills: (params?: PillListParams) => Promise<void>
-  fetchPill: (id: number) => Promise<void>
+  fetchPill: (id: string) => Promise<void>
   /** 创建金丹，返回创建的金丹（失败返回 null） */
   addPill: (data: CreatePillRequest) => Promise<Pill | null>
   /** 更新金丹，返回更新后的金丹（失败返回 null） */
-  editPill: (id: number, data: UpdatePillRequest) => Promise<Pill | null>
-  removePill: (id: number) => Promise<boolean>
+  editPill: (id: string, data: UpdatePillRequest) => Promise<Pill | null>
+  removePill: (id: string) => Promise<boolean>
 }
 
 const PillContext = createContext<PillContextType | null>(null)
@@ -98,7 +98,7 @@ export function PillProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 获取单个金丹 */
-  const fetchPill = useCallback(async (id: number) => {
+  const fetchPill = useCallback(async (id: string) => {
     dispatch({ type: 'SET_LOADING', payload: true })
     try {
       const pill = await pillService.getPill(id)
@@ -123,7 +123,7 @@ export function PillProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 更新金丹 */
-  const editPill = useCallback(async (id: number, data: UpdatePillRequest): Promise<Pill | null> => {
+  const editPill = useCallback(async (id: string, data: UpdatePillRequest): Promise<Pill | null> => {
     try {
       const pill = await pillService.updatePill(id, data)
       dispatch({ type: 'UPDATE_PILL', payload: pill })
@@ -135,7 +135,7 @@ export function PillProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 删除金丹 */
-  const removePill = useCallback(async (id: number): Promise<boolean> => {
+  const removePill = useCallback(async (id: string): Promise<boolean> => {
     try {
       await pillService.deletePill(id)
       dispatch({ type: 'REMOVE_PILL', payload: id })

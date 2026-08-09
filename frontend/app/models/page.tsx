@@ -111,9 +111,9 @@ export default function ModelsPage() {
   const [error, setError] = useState<string | null>(null)
 
   // 展开的供应商及其模型
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [modelsByProvider, setModelsByProvider] = useState<Record<number, LLMModel[]>>({})
-  const [modelsLoading, setModelsLoading] = useState<Record<number, boolean>>({})
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [modelsByProvider, setModelsByProvider] = useState<Record<string, LLMModel[]>>({})
+  const [modelsLoading, setModelsLoading] = useState<Record<string, boolean>>({})
 
   // 供应商弹窗：create = 两步（模板选择 → 表单），edit = 仅表单
   const [providerModal, setProviderModal] = useState<{
@@ -139,7 +139,7 @@ export default function ModelsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   // 每个供应商的连接测试状态
-  const [tests, setTests] = useState<Record<number, TestState>>({})
+  const [tests, setTests] = useState<Record<string, TestState>>({})
 
   /** 加载供应商列表 */
   const fetchProviders = useCallback(async () => {
@@ -171,7 +171,7 @@ export default function ModelsPage() {
   }, [fetchProviders, fetchTemplates])
 
   /** 加载某供应商下的模型 */
-  const fetchModels = useCallback(async (providerId: number) => {
+  const fetchModels = useCallback(async (providerId: string) => {
     setModelsLoading(prev => ({ ...prev, [providerId]: true }))
     try {
       const data = await modelService.listModels(providerId)

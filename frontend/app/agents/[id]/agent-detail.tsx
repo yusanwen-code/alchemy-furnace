@@ -84,8 +84,8 @@ function AgentPillRow({
   index: number
   isDragOver: boolean
   reordering: boolean
-  onSave: (pillId: number, weight: number, sortOrder: number) => Promise<boolean>
-  onUnbind: (pillId: number) => Promise<boolean>
+  onSave: (pillId: string, weight: number, sortOrder: number) => Promise<boolean>
+  onUnbind: (pillId: string) => Promise<boolean>
   onDragStartRow: (index: number, e: DragEvent, rowEl: HTMLElement | null) => void
   onDragOverRow: (index: number, e: DragEvent) => void
   onDropRow: (index: number) => void
@@ -208,7 +208,7 @@ function AgentPillRow({
 export default function AgentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const agentId = Number(id)
+  const agentId = id
 
   const { state: agentState, fetchAgent, bindPill, unbindPill, updateAgentPill, editAgent } = useAgent()
   const { state: pillState, fetchPills } = usePill()
@@ -266,7 +266,7 @@ export default function AgentDetailPage() {
   }
 
   /** 服用金丹（默认权重 1.0，顺序追加到末尾） */
-  const handleBindPill = async (pillId: number) => {
+  const handleBindPill = async (pillId: string) => {
     const maxOrder = agentPills.reduce((max, ap) => Math.max(max, ap.sort_order), -1)
     await bindPill(agentId, pillId, 1, maxOrder + 1)
   }

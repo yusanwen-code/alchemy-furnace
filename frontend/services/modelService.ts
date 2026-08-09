@@ -29,7 +29,7 @@ export interface ProviderTemplate {
 
 /** LLM 供应商（api_key 仅以掩码形式返回） */
 export interface Provider {
-  id: number
+  id: string
   /** 供应商标识（唯一，如 deepseek） */
   name: string
   /** 显示名（如 DeepSeek） */
@@ -76,9 +76,9 @@ export interface ProviderListParams {
 
 /** LLM 模型（凭证在供应商上，模型不再持有 base_url/api_key） */
 export interface LLMModel {
-  id: number
+  id: string
   /** 所属供应商 ID */
-  provider_id: number
+  provider_id: string
   /** 模型标识（API 调用名，如 deepseek-chat） */
   name: string
   /** 显示名 */
@@ -157,7 +157,7 @@ export function createProvider(data: CreateProviderRequest): Promise<Provider> {
 /**
  * 更新供应商
  */
-export function updateProvider(id: number, data: UpdateProviderRequest): Promise<Provider> {
+export function updateProvider(id: string, data: UpdateProviderRequest): Promise<Provider> {
   return put<Provider>(`/providers/${id}`, data)
 }
 
@@ -165,7 +165,7 @@ export function updateProvider(id: number, data: UpdateProviderRequest): Promise
  * 删除供应商
  * 若供应商下仍有模型，后端返回 409（message 为中文描述，data.model_count 为模型数）
  */
-export function deleteProvider(id: number): Promise<void> {
+export function deleteProvider(id: string): Promise<void> {
   return del<void>(`/providers/${id}`)
 }
 
@@ -174,28 +174,28 @@ export function deleteProvider(id: number): Promise<void> {
  * @param id 供应商 ID
  * @param model 可选；缺省用该供应商下第一个启用模型
  */
-export function testProviderConnection(id: number, model?: string): Promise<TestConnectionResult> {
+export function testProviderConnection(id: string, model?: string): Promise<TestConnectionResult> {
   return post<TestConnectionResult>(`/providers/${id}/test-connection`, model ? { model } : {})
 }
 
 /**
  * 获取供应商下的模型列表（含 referenced_by 引用数）
  */
-export function listModels(providerId: number): Promise<LLMModel[]> {
+export function listModels(providerId: string): Promise<LLMModel[]> {
   return get<LLMModel[]>(`/providers/${providerId}/models`)
 }
 
 /**
  * 在供应商下创建模型
  */
-export function createModel(providerId: number, data: CreateModelRequest): Promise<LLMModel> {
+export function createModel(providerId: string, data: CreateModelRequest): Promise<LLMModel> {
   return post<LLMModel>(`/providers/${providerId}/models`, data)
 }
 
 /**
  * 更新模型
  */
-export function updateModel(id: number, data: UpdateModelRequest): Promise<LLMModel> {
+export function updateModel(id: string, data: UpdateModelRequest): Promise<LLMModel> {
   return put<LLMModel>(`/models/${id}`, data)
 }
 
@@ -203,7 +203,7 @@ export function updateModel(id: number, data: UpdateModelRequest): Promise<LLMMo
  * 删除模型
  * 若模型仍被道人引用，后端返回 409（message 为中文描述，data.referenced_by 为引用数）
  */
-export function deleteModel(id: number): Promise<void> {
+export function deleteModel(id: string): Promise<void> {
   return del<void>(`/models/${id}`)
 }
 

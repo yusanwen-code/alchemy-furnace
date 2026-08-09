@@ -20,7 +20,7 @@ export function listPills(params: PillListParams = {}): Promise<PagedList<Pill>>
 /**
  * 获取单个金丹详情
  */
-export function getPill(id: number): Promise<Pill> {
+export function getPill(id: string): Promise<Pill> {
   return get<Pill>(`/pills/${id}`)
 }
 
@@ -34,14 +34,14 @@ export function createPill(data: CreatePillRequest): Promise<Pill> {
 /**
  * 更新金丹
  */
-export function updatePill(id: number, data: UpdatePillRequest): Promise<Pill> {
+export function updatePill(id: string, data: UpdatePillRequest): Promise<Pill> {
   return put<Pill>(`/pills/${id}`, data)
 }
 
 /**
  * 删除金丹
  */
-export function deletePill(id: number): Promise<void> {
+export function deletePill(id: string): Promise<void> {
   return del<void>(`/pills/${id}`)
 }
 

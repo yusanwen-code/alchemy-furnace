@@ -53,8 +53,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   // 根据 URL 参数加载会话
   useEffect(() => {
     if (sessionId) {
-      const sid = Number(sessionId)
-      loadMessages(sid)
+      loadMessages(sessionId)
     } else {
       dispatch({ type: 'CLEAR_CURRENT' })
     }
@@ -74,7 +73,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   }
 
   /** 创建会话并跳转 */
-  const handleCreateSession = async (agentId: number) => {
+  const handleCreateSession = async (agentId: string) => {
     const agent = agents.find(a => a.id === agentId)
     const session = await createSession(agentId, `与${agent?.name || '未知道人'}的论道`)
     setShowAgentSelect(false)
@@ -82,18 +81,18 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
   }
 
   /** 选择会话 */
-  const handleSelectSession = (sid: number) => {
+  const handleSelectSession = (sid: string) => {
     router.push(`/chat/${sid}`)
     setSidebarOpen(false)
   }
 
   /** 获取道人称谓 */
-  const getAgentName = (agentId: number) => {
+  const getAgentName = (agentId: string) => {
     return agents.find(a => a.id === agentId)?.name || `道人 #${agentId}`
   }
 
   /** 获取头像首字 */
-  const getAgentInitial = (agentId: number) => {
+  const getAgentInitial = (agentId: string) => {
     const name = getAgentName(agentId)
     return name.charAt(0)
   }
@@ -357,7 +356,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
               <ChatMessage
                 key={message.id}
                 message={message}
-                streaming={chatState.streaming && message.role === 'assistant' && message.id === -1}
+                streaming={chatState.streaming && message.role === 'assistant' && message.id === '-1'}
               />
             )
           ))}

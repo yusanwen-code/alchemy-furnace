@@ -24,7 +24,7 @@ type AgentAction =
   | { type: 'SET_CURRENT_AGENT'; payload: AgentDetail | null }
   | { type: 'ADD_AGENT'; payload: Agent }
   | { type: 'UPDATE_AGENT'; payload: Agent }
-  | { type: 'REMOVE_AGENT'; payload: number }
+  | { type: 'REMOVE_AGENT'; payload: string }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
 
@@ -76,16 +76,16 @@ interface AgentContextType {
   dispatch: React.Dispatch<AgentAction>
   // 异步操作
   fetchAgents: () => Promise<void>
-  fetchAgent: (id: number) => Promise<void>
+  fetchAgent: (id: string) => Promise<void>
   addAgent: (data: CreateAgentRequest) => Promise<Agent | null>
-  editAgent: (id: number, data: UpdateAgentRequest) => Promise<Agent | null>
-  removeAgent: (id: number) => Promise<boolean>
+  editAgent: (id: string, data: UpdateAgentRequest) => Promise<Agent | null>
+  removeAgent: (id: string) => Promise<boolean>
   /** 服用金丹（绑定），成功后刷新道人详情 */
-  bindPill: (agentId: number, pillId: number, weight?: number, sortOrder?: number) => Promise<boolean>
+  bindPill: (agentId: string, pillId: string, weight?: number, sortOrder?: number) => Promise<boolean>
   /** 更新服用记录（权重/顺序），成功后刷新道人详情 */
-  updateAgentPill: (agentId: number, pillId: number, weight: number, sortOrder: number) => Promise<boolean>
+  updateAgentPill: (agentId: string, pillId: string, weight: number, sortOrder: number) => Promise<boolean>
   /** 解除金丹绑定，成功后刷新道人详情 */
-  unbindPill: (agentId: number, pillId: number) => Promise<boolean>
+  unbindPill: (agentId: string, pillId: string) => Promise<boolean>
 }
 
 const AgentContext = createContext<AgentContextType | null>(null)
@@ -106,7 +106,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 获取单个道人详情 */
-  const fetchAgent = useCallback(async (id: number) => {
+  const fetchAgent = useCallback(async (id: string) => {
     dispatch({ type: 'SET_LOADING', payload: true })
     try {
       const agent = await agentService.getAgent(id)
@@ -130,7 +130,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 更新道人 */
-  const editAgent = useCallback(async (id: number, data: UpdateAgentRequest): Promise<Agent | null> => {
+  const editAgent = useCallback(async (id: string, data: UpdateAgentRequest): Promise<Agent | null> => {
     try {
       const agent = await agentService.updateAgent(id, data)
       dispatch({ type: 'UPDATE_AGENT', payload: agent })
@@ -142,7 +142,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 删除道人 */
-  const removeAgent = useCallback(async (id: number): Promise<boolean> => {
+  const removeAgent = useCallback(async (id: string): Promise<boolean> => {
     try {
       await agentService.deleteAgent(id)
       dispatch({ type: 'REMOVE_AGENT', payload: id })
@@ -154,13 +154,13 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 刷新当前道人详情的辅助逻辑 */
-  const refreshAgent = useCallback(async (agentId: number) => {
+  const refreshAgent = useCallback(async (agentId: string) => {
     const agent = await agentService.getAgent(agentId)
     dispatch({ type: 'SET_CURRENT_AGENT', payload: agent })
   }, [])
 
   /** 服用金丹（绑定） */
-  const bindPill = useCallback(async (agentId: number, pillId: number, weight = 1, sortOrder = 0): Promise<boolean> => {
+  const bindPill = useCallback(async (agentId: string, pillId: string, weight = 1, sortOrder = 0): Promise<boolean> => {
     try {
       await agentService.bindPill(agentId, pillId, weight, sortOrder)
       await refreshAgent(agentId)
@@ -173,8 +173,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 
   /** 更新服用记录（权重/顺序） */
   const updateAgentPill = useCallback(async (
-    agentId: number,
-    pillId: number,
+    agentId: string,
+    pillId: string,
     weight: number,
     sortOrder: number
   ): Promise<boolean> => {
@@ -189,7 +189,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   }, [refreshAgent])
 
   /** 解除金丹绑定 */
-  const unbindPill = useCallback(async (agentId: number, pillId: number): Promise<boolean> => {
+  const unbindPill = useCallback(async (agentId: string, pillId: string): Promise<boolean> => {
     try {
       await agentService.unbindPill(agentId, pillId)
       await refreshAgent(agentId)

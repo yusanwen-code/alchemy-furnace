@@ -33,7 +33,7 @@ export function createSession(data: CreateSessionRequest): Promise<ChatSession> 
 /**
  * 获取会话消息历史（按时间正序）
  */
-export function getMessages(sessionId: number, params: ListParams = {}): Promise<PagedList<ChatMessage>> {
+export function getMessages(sessionId: string, params: ListParams = {}): Promise<PagedList<ChatMessage>> {
   return get<PagedList<ChatMessage>>(`/chat/sessions/${sessionId}/messages`, {
     page: params.page ?? 1,
     page_size: params.page_size ?? 200,
@@ -70,7 +70,7 @@ export function stopStream(): void {
  * 同一时间只允许一条流式请求（重复调用会先中断上一条）
  */
 export async function streamChatMessage(
-  sessionId: number,
+  sessionId: string,
   content: string,
   handlers: StreamHandlers
 ): Promise<void> {

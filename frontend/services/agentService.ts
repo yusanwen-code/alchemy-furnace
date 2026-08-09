@@ -26,7 +26,7 @@ export function listAgents(params: AgentListParams = {}): Promise<PagedList<Agen
 /**
  * 获取道人详情（含已服用金丹 agent_pills 与语言模式缓存）
  */
-export function getAgent(id: number): Promise<AgentDetail> {
+export function getAgent(id: string): Promise<AgentDetail> {
   return get<AgentDetail>(`/agents/${id}`)
 }
 
@@ -40,21 +40,21 @@ export function createAgent(data: CreateAgentRequest): Promise<Agent> {
 /**
  * 更新道人
  */
-export function updateAgent(id: number, data: UpdateAgentRequest): Promise<Agent> {
+export function updateAgent(id: string, data: UpdateAgentRequest): Promise<Agent> {
   return put<Agent>(`/agents/${id}`, data)
 }
 
 /**
  * 删除道人
  */
-export function deleteAgent(id: number): Promise<void> {
+export function deleteAgent(id: string): Promise<void> {
   return del<void>(`/agents/${id}`)
 }
 
 /**
  * 道人服用金丹（绑定），weight 0-10，sort_order >= 0
  */
-export function bindPill(agentId: number, pillId: number, weight = 1, sortOrder = 0): Promise<void> {
+export function bindPill(agentId: string, pillId: string, weight = 1, sortOrder = 0): Promise<void> {
   return post<void>(`/agents/${agentId}/pills`, {
     pill_id: pillId,
     weight,
@@ -66,8 +66,8 @@ export function bindPill(agentId: number, pillId: number, weight = 1, sortOrder 
  * 更新服用记录（权重/顺序）
  */
 export function updateAgentPill(
-  agentId: number,
-  pillId: number,
+  agentId: string,
+  pillId: string,
   weight: number,
   sortOrder: number
 ): Promise<void> {
@@ -80,6 +80,6 @@ export function updateAgentPill(
 /**
  * 道人解除金丹绑定
  */
-export function unbindPill(agentId: number, pillId: number): Promise<void> {
+export function unbindPill(agentId: string, pillId: string): Promise<void> {
   return del<void>(`/agents/${agentId}/pills/${pillId}`)
 }

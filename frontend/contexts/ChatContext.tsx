@@ -52,8 +52,8 @@ const initialState: ChatState = {
 function finalizeStreamMessage(messages: ChatMessage[], patch?: Partial<ChatMessage>): ChatMessage[] {
   const result = [...messages]
   const lastMsg = result[result.length - 1]
-  if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === -1) {
-    result[result.length - 1] = { ...lastMsg, id: Date.now(), ...patch }
+  if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === '-1') {
+    result[result.length - 1] = { ...lastMsg, id: String(Date.now()), ...patch }
   }
   return result
 }
@@ -73,12 +73,12 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // 追加到最后一条 assistant 消息，如果没有则创建
       const messages = [...state.messages]
       const lastMsg = messages[messages.length - 1]
-      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === -1) {
+      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.id === '-1') {
         messages[messages.length - 1] = { ...lastMsg, content: lastMsg.content + action.payload }
       } else {
         messages.push({
-          id: -1, // 临时 ID
-          session_id: state.currentSession?.id || 0,
+          id: '-1', // 临时 ID
+          session_id: state.currentSession?.id || '',
           role: 'assistant',
           content: action.payload,
           created_at: new Date().toISOString(),
@@ -102,8 +102,8 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'ADD_ERROR_MESSAGE': {
       // 服务端错误：以错误气泡内联展示在消息流中
       const errorMessage: ChatMessage = {
-        id: Date.now(),
-        session_id: state.currentSession?.id || 0,
+        id: String(Date.now()),
+        session_id: state.currentSession?.id || '',
         role: 'system',
         content: action.payload,
         created_at: new Date().toISOString(),
@@ -132,9 +132,9 @@ interface ChatContextType {
   dispatch: React.Dispatch<ChatAction>
   // 异步操作
   fetchSessions: () => Promise<void>
-  createSession: (agentId: number, title?: string) => Promise<ChatSession | null>
-  loadMessages: (sessionId: number) => Promise<void>
-  streamMessage: (sessionId: number, content: string) => Promise<void>
+  createSession: (agentId: string, title?: string) => Promise<ChatSession | null>
+  loadMessages: (sessionId: string) => Promise<void>
+  streamMessage: (sessionId: string, content: string) => Promise<void>
   /** 停止当前流式生成（中断 SSE 连接，部分内容落定为「已停止」） */
   stopStream: () => void
 }
@@ -165,7 +165,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 创建会话 */
-  const createSession = useCallback(async (agentId: number, title?: string): Promise<ChatSession | null> => {
+  const createSession = useCallback(async (agentId: string, title?: string): Promise<ChatSession | null> => {
     dispatch({ type: 'SET_LOADING', payload: true })
     try {
       const session = await chatService.createSession({ agent_id: agentId, title })
@@ -178,7 +178,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 加载消息历史并定位当前会话 */
-  const loadMessages = useCallback(async (sessionId: number) => {
+  const loadMessages = useCallback(async (sessionId: string) => {
     dispatch({ type: 'SET_LOADING', payload: true })
     try {
       // 定位会话：先查已有列表，查不到则拉取一次会话列表
@@ -200,10 +200,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /** 发送消息（SSE 流式接收回复） */
-  const streamMessage = useCallback(async (sessionId: number, content: string) => {
+  const streamMessage = useCallback(async (sessionId: string, content: string) => {
     // 先添加用户消息
     const userMessage: ChatMessage = {
-      id: Date.now(),
+      id: String(Date.now()),
       session_id: sessionId,
       role: 'user',
       content,

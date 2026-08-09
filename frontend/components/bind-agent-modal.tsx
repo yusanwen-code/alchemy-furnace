@@ -19,7 +19,7 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null)
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [weight, setWeight] = useState(1)
   const [sortOrder, setSortOrder] = useState(0)
   const [error, setError] = useState<string | null>(null)

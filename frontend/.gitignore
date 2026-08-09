@@ -4,3 +4,8 @@ dist/
 *.log
 .env
 .DS_Store
+
+# Next.js 16 build artifacts
+.next/
+out/
+tsconfig.tsbuildinfo

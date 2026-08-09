@@ -238,7 +238,7 @@ function StringListEditor({
 export default function PillDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const pillId = Number(id)
+  const pillId = id
 
   const { state, fetchPill, editPill, removePill } = usePill()
   const [form, setForm] = useState<FormState | null>(null)
