@@ -9,6 +9,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@9am/fire-flame": "^0.3.2",
+    "@9am/fire-flame-react": "^0.3.2",
     "@base-ui/react": "^1.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
