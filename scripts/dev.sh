@@ -135,7 +135,7 @@ trap 'cleanup; exit $EXIT_CODE' INT TERM
 
 say "🔥 炼丹炉点火中（Go 首次编译约需几秒）..."
 launch "python"   "$C_PY" "$ROOT/backend/python"  .venv/bin/uvicorn app.main:app --reload --port "$PY_PORT"
-launch "go"       "$C_GO" "$ROOT/backend/go"      go run cmd/server/main.go
+launch "go"       "$C_GO" "$ROOT/backend/go"      go run cmd/main/main.go serve
 launch "frontend" "$C_FE" "$ROOT/frontend"        "${FE_PROXY_ENV[@]}" ./node_modules/.bin/next dev -p "$FE_PORT"
 
 printf '\n'
