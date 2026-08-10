@@ -1,13 +1,15 @@
+import { useTranslations } from 'next-intl'
 import { SealDot } from '@/components/alchemy/float-card'
 
 /** 宣纸风页脚：细边框、衬线落款、印章装饰 */
 export function Footer() {
+  const t = useTranslations('footer')
   return (
     <footer className="border-t border-border/70">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-10 sm:flex-row sm:justify-between sm:px-6">
         <p className="font-serif text-sm font-bold text-foreground">
           炼丹炉 <span className="mx-1 text-border">·</span>
-          <span className="font-normal text-muted-foreground">炉中日月长，鼎内乾坤大</span>
+          <span className="font-normal text-muted-foreground">{t('tagline')}</span>
         </p>
         <div className="flex items-center gap-2 text-xs text-sage">
           <SealDot />
