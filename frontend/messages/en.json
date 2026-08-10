@@ -1,0 +1,103 @@
+{
+  "metadata": {
+    "title": "Alchemy Furnace · Skill-Persona Alchemy",
+    "description": "Fire as the spark, herbs as the base — a forge for language-mode golden pills and Daoist agents"
+  },
+  "nav": {
+    "ariaLabel": "Primary",
+    "mobileAriaLabel": "Mobile",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "startCta": "Light the furnace",
+    "items": {
+      "home": { "label": "Furnace" },
+      "pills": {
+        "label": "Pill Vault",
+        "children": {
+          "all": { "title": "All pills", "description": "Browse every pill forged so far — a thousand language modes" },
+          "new": { "title": "Refine a new pill", "description": "Strike the flint, forge a fresh language-mode pill" },
+          "recipes": { "title": "Recipe canon", "description": "Consult the ancient recipes, learn the craft" }
+        }
+      },
+      "agents": {
+        "label": "Daoist Hall",
+        "children": {
+          "all": { "title": "All daoists", "description": "The roster — every agent in the hall" },
+          "invite": { "title": "Recruit a daoist", "description": "Welcome a new agent into the hall and grant a pill" },
+          "bind": { "title": "Bestow a pill", "description": "Bind a pill to a daoist, transform their nature" }
+        }
+      },
+      "chat": {
+        "label": "Discourse",
+        "children": {
+          "new": { "title": "New discourse", "description": "Open a new conversation, debate the subtle Way" },
+          "history": { "title": "Past discourses", "description": "Review past sessions, pick up an unfinished thread" }
+        }
+      },
+      "models": { "label": "Models" },
+      "settings": { "label": "Settings" }
+    }
+  },
+  "footer": {
+    "tagline": "Sun and moon endure in the furnace; heaven and earth fit in the cauldron"
+  },
+  "home": {
+    "dingAlt": "Bronze cauldron",
+    "hero": {
+      "titlePart1": "Alchemy",
+      "titlePart2": "Furnace",
+      "subtitle": "Fire as the spark, herbs as the base. Watch the spirit-flow turn, see the pill form itself —",
+      "subtitleEm": "A quiet chamber, all things afloat, the heart as warm as the furnace.",
+      "statsLine": {
+        "pills": "{count} pills in store",
+        "agents": "{count} daoists",
+        "sessions": "{count} discourses",
+        "fire": "Fire still warm"
+      },
+      "banner": "Sun and moon endure in the furnace · heaven and earth fit in the cauldron"
+    },
+    "stats": {
+      "ariaLabel": "Furnace overview",
+      "pills": { "label": "Pills in store", "unit": "", "caption": "Language modes in the pill vault" },
+      "agents": { "label": "Daoists in hall", "unit": "", "caption": "Agents registered in the daoist hall" },
+      "sessions": { "label": "Discourses held", "unit": "", "caption": "Both concluded and ongoing" },
+      "builtins": { "label": "Built-in recipes", "unit": "", "caption": "Pills pre-shipped with the system" }
+    },
+    "spotlight": {
+      "badge": "Freshly forged",
+      "viewAll": "Enter the vault →",
+      "kindBuiltIn": "Built-in recipe",
+      "kindSelfMade": "Self-forged",
+      "noDescription": "No notes left on this pill — enter the vault for the full record.",
+      "viewCta": "View its nature",
+      "emptyTitle": "No pills yet",
+      "emptyDesc": "The vault is empty, but the fire is warm. Forge the first language-mode pill and shape a daoist's nature.",
+      "emptyCta": "Forge a new pill"
+    },
+    "recipeList": {
+      "title": "Recipe scroll",
+      "count": "{count} recipes · in store",
+      "builtInBadge": "Built-in",
+      "noDescription": "No notes",
+      "empty": "No pills in store yet"
+    },
+    "sessions": {
+      "title": "Past discourses",
+      "count": "{count} sessions · recorded",
+      "fallbackTitle": "Untitled discourse",
+      "fallbackAgent": "Daoist #{id}",
+      "empty": "No past discourses yet"
+    },
+    "closer": {
+      "title": "Pill done · open the furnace",
+      "body": "“Sun and moon endure in the furnace; heaven and earth fit in the cauldron.” Bring a pill to the fire and discourse with a daoist.",
+      "stamp": "Pill",
+      "cta": "Open the furnace"
+    }
+  },
+  "languageSwitcher": {
+    "label": "Language",
+    "zh-CN": "简体中文",
+    "en": "English"
+  }
+}

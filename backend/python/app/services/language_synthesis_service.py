@@ -97,7 +97,7 @@ class LanguageSynthesisService:
         model = model or settings.synthesis_model or settings.default_model
         pills = sorted(
             pills or [],
-            key=lambda p: (p.get("sort_order", 0), p.get("id", 0)),
+            key=lambda p: (p.get("sort_order", 0), str(p.get("id", ""))),
         )
 
         fingerprint = self.compute_fingerprint(personality, pills)
@@ -141,12 +141,12 @@ class LanguageSynthesisService:
         计算来源指纹 SHA256(personality + 排序后的金丹 + 权重)
 
         对 {personality, pills: [{id, name, weight, sort_order, skill_schema}]}
-        （pills 按 sort_order 再按 id 排序）的规范化 JSON 取 SHA256，
+        （pills 按 sort_order 再按 id 字典序排序，id 为 UUID 字符串）的规范化 JSON 取 SHA256，
         返回 "sha256:<hex>" 格式，供 Go 端做缓存失效判断。
         """
         ordered = sorted(
             pills or [],
-            key=lambda p: (p.get("sort_order", 0), p.get("id") or 0),
+            key=lambda p: (p.get("sort_order", 0), str(p.get("id", ""))),
         )
         payload = {
             "personality": personality or "",

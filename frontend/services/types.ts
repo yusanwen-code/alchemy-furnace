@@ -72,7 +72,7 @@ export interface SkillSchema {
 
 /** 金丹（语言模式/人格特质技能包） */
 export interface Pill {
-  id: number
+  id: string
   name: string
   description?: string
   skill_schema: SkillSchema
@@ -91,7 +91,7 @@ export type AgentStatus = 'active' | 'inactive'
 
 /** 道人（AI Agent） */
 export interface Agent {
-  id: number
+  id: string
   name: string
   avatar?: string
   personality?: string
@@ -103,9 +103,9 @@ export interface Agent {
 
 /** 服用记录（Agent 绑定金丹） */
 export interface AgentPill {
-  id: number
-  agent_id: number
-  pill_id: number
+  id: string
+  agent_id: string
+  pill_id: string
   /** 剂量/权重 0-10 */
   weight: number
   /** 服用顺序 */
@@ -145,8 +145,8 @@ export interface AgentDetail extends Agent {
 
 /** 对话会话 */
 export interface ChatSession {
-  id: number
-  agent_id: number
+  id: string
+  agent_id: string
   title?: string
   created_at: string
   updated_at: string
@@ -155,8 +155,9 @@ export interface ChatSession {
 
 /** 对话消息（无 RAG 引用来源） */
 export interface ChatMessage {
-  id: number
-  session_id: number
+  id: string
+  /** 会话 ID（后端消息列表不输出，仅本地构造的临时消息携带） */
+  session_id?: string
   role: 'user' | 'assistant' | 'system'
   content: string
   created_at: string
@@ -198,7 +199,7 @@ export interface UpdateAgentRequest extends Partial<CreateAgentRequest> {
 
 /** 服用金丹请求 */
 export interface BindPillRequest {
-  pill_id: number
+  pill_id: string
   weight: number
   sort_order: number
 }
@@ -211,7 +212,7 @@ export interface UpdateAgentPillRequest {
 
 /** 创建会话请求 */
 export interface CreateSessionRequest {
-  agent_id: number
+  agent_id: string
   title?: string
 }
 

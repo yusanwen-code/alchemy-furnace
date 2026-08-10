@@ -13,15 +13,26 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+/**
+ * Each nav entry is keyed by a dotted path into the `nav` namespace of
+ * the i18n message catalog (see `frontend/messages/{locale}.json`).
+ *
+ *   labelKey   — top-level menu label
+ *   titleKey   — child entry title (full text)
+ *   descKey    — child entry one-line description
+ *
+ * This file owns structure (paths, icons, ordering) only — copy lives
+ * entirely in the locale dictionaries.
+ */
 export interface NavChild {
-  title: string
-  description: string
+  titleKey: string
+  descKey: string
   path: string
   icon: LucideIcon
 }
 
 export interface NavItem {
-  label: string
+  labelKey: string
   path: string
   icon: LucideIcon
   children?: NavChild[]
@@ -29,36 +40,76 @@ export interface NavItem {
 
 /** 顶部导航配置（Dify 式 mega-dropdown，参考 reference/导航栏.png） */
 export const navItems: NavItem[] = [
-  { label: '丹房', path: '/', icon: Home },
+  { labelKey: 'items.home.label', path: '/', icon: Home },
   {
-    label: '金丹阁',
+    labelKey: 'items.pills.label',
     path: '/pills',
     icon: CircleDot,
     children: [
-      { title: '全部金丹', description: '浏览阁中已成之丹，观语言模式万千', path: '/pills', icon: CircleDot },
-      { title: '开炉炼制', description: '以火为引，炼一枚新的语言模式金丹', path: '/pills?action=new', icon: Flame },
-      { title: '丹方典籍', description: '查阅历代丹方，悟炼制之理', path: '/pills?view=recipes', icon: ScrollText },
+      {
+        titleKey: 'items.pills.children.all.title',
+        descKey: 'items.pills.children.all.description',
+        path: '/pills',
+        icon: CircleDot,
+      },
+      {
+        titleKey: 'items.pills.children.new.title',
+        descKey: 'items.pills.children.new.description',
+        path: '/pills?action=new',
+        icon: Flame,
+      },
+      {
+        titleKey: 'items.pills.children.recipes.title',
+        descKey: 'items.pills.children.recipes.description',
+        path: '/pills?view=recipes',
+        icon: ScrollText,
+      },
     ],
   },
   {
-    label: '道人府',
+    labelKey: 'items.agents.label',
     path: '/agents',
     icon: Users,
     children: [
-      { title: '全部道人', description: '府中道人名录，各司其职', path: '/agents', icon: Users },
-      { title: '延请道人', description: '新请一位道人入府，授其金丹', path: '/agents?action=new', icon: UserPlus },
-      { title: '服用金丹', description: '为道人绑定金丹，化性转型', path: '/agents?view=bind', icon: Sparkles },
+      {
+        titleKey: 'items.agents.children.all.title',
+        descKey: 'items.agents.children.all.description',
+        path: '/agents',
+        icon: Users,
+      },
+      {
+        titleKey: 'items.agents.children.invite.title',
+        descKey: 'items.agents.children.invite.description',
+        path: '/agents?action=new',
+        icon: UserPlus,
+      },
+      {
+        titleKey: 'items.agents.children.bind.title',
+        descKey: 'items.agents.children.bind.description',
+        path: '/agents?view=bind',
+        icon: Sparkles,
+      },
     ],
   },
   {
-    label: '论道',
+    labelKey: 'items.chat.label',
     path: '/chat',
     icon: MessageSquare,
     children: [
-      { title: '新的论道', description: '开一场新对话，与道人参详玄理', path: '/chat', icon: MessageSquare },
-      { title: '论道旧录', description: '翻检历史会话，续当日未完之缘', path: '/chat?view=history', icon: History },
+      {
+        titleKey: 'items.chat.children.new.title',
+        descKey: 'items.chat.children.new.description',
+        path: '/chat',
+        icon: MessageSquare,
+      },
+      {
+        titleKey: 'items.chat.children.history.title',
+        descKey: 'items.chat.children.history.description',
+        path: '/chat?view=history',
+        icon: History,
+      },
     ],
   },
-  { label: '模型管理', path: '/models', icon: Cpu },
-  { label: '设置', path: '/settings', icon: Settings },
+  { labelKey: 'items.models.label', path: '/models', icon: Cpu },
+  { labelKey: 'items.settings.label', path: '/settings', icon: Settings },
 ]

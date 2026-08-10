@@ -1,0 +1,103 @@
+{
+  "metadata": {
+    "title": "炼丹炉 · Skill-Persona Alchemy",
+    "description": "以火为引，以药为基 —— 语言模式金丹与道人 Agent 的炼制之所"
+  },
+  "nav": {
+    "ariaLabel": "主导航",
+    "mobileAriaLabel": "移动端导航",
+    "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
+    "startCta": "开炉论道",
+    "items": {
+      "home": { "label": "丹房" },
+      "pills": {
+        "label": "金丹阁",
+        "children": {
+          "all": { "title": "全部金丹", "description": "浏览阁中已成之丹，观语言模式万千" },
+          "new": { "title": "开炉炼制", "description": "以火为引，炼一枚新的语言模式金丹" },
+          "recipes": { "title": "丹方典籍", "description": "查阅历代丹方，悟炼制之理" }
+        }
+      },
+      "agents": {
+        "label": "道人府",
+        "children": {
+          "all": { "title": "全部道人", "description": "府中道人名录，各司其职" },
+          "invite": { "title": "延请道人", "description": "新请一位道人入府，授其金丹" },
+          "bind": { "title": "服用金丹", "description": "为道人绑定金丹，化性转型" }
+        }
+      },
+      "chat": {
+        "label": "论道",
+        "children": {
+          "new": { "title": "新的论道", "description": "开一场新对话，与道人参详玄理" },
+          "history": { "title": "论道旧录", "description": "翻检历史会话，续当日未完之缘" }
+        }
+      },
+      "models": { "label": "模型管理" },
+      "settings": { "label": "设置" }
+    }
+  },
+  "footer": {
+    "tagline": "炉中日月长，鼎内乾坤大"
+  },
+  "home": {
+    "dingAlt": "青铜鼎",
+    "hero": {
+      "titlePart1": "炼丹",
+      "titlePart2": "炉",
+      "subtitle": "以火为引，以药为基。观灵气流转、察丹药自成——",
+      "subtitleEm": "一方静室，万物悬浮，唯心与炉同温。",
+      "statsLine": {
+        "pills": "藏丹 {count} 枚",
+        "agents": "道人 {count} 位",
+        "sessions": "论道 {count} 场",
+        "fire": "炉火正温"
+      },
+      "banner": "炉中日月长 · 鼎内乾坤大"
+    },
+    "stats": {
+      "ariaLabel": "炉房概览",
+      "pills": { "label": "阁中藏丹", "unit": "枚", "caption": "金丹阁所藏语言模式" },
+      "agents": { "label": "府中道人", "unit": "位", "caption": "道人府在册 Agent" },
+      "sessions": { "label": "论道场次", "unit": "场", "caption": "已结与未结之缘" },
+      "builtins": { "label": "内置丹方", "unit": "味", "caption": "系统预置的金丹" }
+    },
+    "spotlight": {
+      "badge": "新成之丹",
+      "viewAll": "入阁观丹 →",
+      "kindBuiltIn": "内置丹方",
+      "kindSelfMade": "自行炼制",
+      "noDescription": "此丹未留丹解，入阁可观其详。",
+      "viewCta": "观其丹性",
+      "emptyTitle": "阁中尚无一丹",
+      "emptyDesc": "丹阁空空，炉火却正温。炼第一枚语言模式金丹，塑道人之性情。",
+      "emptyCta": "炼制新金丹"
+    },
+    "recipeList": {
+      "title": "丹方录",
+      "count": "{count} 味 · 藏丹",
+      "builtInBadge": "内置",
+      "noDescription": "未留丹解",
+      "empty": "暂无藏丹"
+    },
+    "sessions": {
+      "title": "论道旧录",
+      "count": "{count} 场 · 在录",
+      "fallbackTitle": "未命名论道",
+      "fallbackAgent": "道人 #{id}",
+      "empty": "尚无论道旧录"
+    },
+    "closer": {
+      "title": "丹成 · 开炉",
+      "body": "「炉中日月长，鼎内乾坤大。」携丹入炉，与道人论道参玄。",
+      "stamp": "丹",
+      "cta": "开炉论道"
+    }
+  },
+  "languageSwitcher": {
+    "label": "语言",
+    "zh-CN": "简体中文",
+    "en": "English"
+  }
+}

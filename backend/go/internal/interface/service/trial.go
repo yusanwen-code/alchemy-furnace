@@ -1,0 +1,43 @@
+package service
+
+import (
+	"context"
+
+	"github.com/alchemy-furnace/server/internal/errors"
+	"github.com/alchemy-furnace/server/internal/synthesis"
+	"github.com/google/uuid"
+)
+
+// TrialPillInput 试丹请求中的单颗金丹引用(PillID 为对外 UUID)
+type TrialPillInput struct {
+	PillID    uuid.UUID // 金丹 UUID
+	Weight    float64   // 剂量/权重,默认 1.0
+	SortOrder int       // 服用顺序
+}
+
+// TrialChatRequest 试丹-临时对话请求
+type TrialChatRequest struct {
+	Personality string              // 基础性格描述
+	Pills       []TrialPillInput    // 临时组合的金丹列表
+	Messages    []map[string]string // 对话消息(不含 system)
+	Model       string              // 对话模型(可选)
+	Temperature float64             // 温度(可选)
+	MaxTokens   int                 // 最大 token 数(可选)
+}
+
+// TrialChatResponse 试丹-临时对话响应
+type TrialChatResponse struct {
+	Content string                 `json:"content"` // 回复内容
+	Model   string                 `json:"model"`   // 实际使用的模型
+	Usage   map[string]interface{} `json:"usage"`   // token 用量
+}
+
+// Trial 试丹业务逻辑接口
+// 提供无需创建道人即可临时组合「基础性格 + 金丹」快速预览效果的接口
+type Trial interface {
+	// Synthesize 试丹-合成预览:不写入缓存,直接返回合成结果
+	Synthesize(ctx context.Context, personality string, pills []TrialPillInput, modelName string) (*synthesis.CombineResponse, errors.Error)
+
+	// Chat 试丹-临时对话:先合成系统提示词,再调用语言引擎非流式对话
+	Chat(ctx context.Context, req *TrialChatRequest) (*TrialChatResponse, errors.Error)
+}
