@@ -1,11 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import type { NavChild } from '@/components/layout/nav-config'
 
 /**
  * Dify 式 mega-dropdown 面板（参考 reference/导航栏.png）
  * 全宽浅色面板，两列网格：圆形描边图标 + 标题 + 一句话描述
+ *
+ * Each child's `titleKey` / `descKey` is resolved here against the
+ * active locale's message dictionary.
  */
 export function NavDropdown({
   items,
@@ -14,6 +18,7 @@ export function NavDropdown({
   items: NavChild[]
   onNavigate: () => void
 }) {
+  const t = useTranslations('nav')
   return (
     <div
       role="menu"
@@ -24,7 +29,7 @@ export function NavDropdown({
           const Icon = item.icon
           return (
             <Link
-              key={item.title}
+              key={item.titleKey}
               href={item.path}
               role="menuitem"
               onClick={onNavigate}
@@ -35,10 +40,10 @@ export function NavDropdown({
               </span>
               <span className="min-w-0">
                 <span className="block truncate font-serif text-sm font-bold text-foreground">
-                  {item.title}
+                  {t(item.titleKey)}
                 </span>
                 <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">
-                  {item.description}
+                  {t(item.descKey)}
                 </span>
               </span>
             </Link>

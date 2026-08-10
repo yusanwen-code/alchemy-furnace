@@ -8,7 +8,7 @@ import Image from 'next/image'
  * - 悬停生火：鼎下朱砂/金色火舌闪烁，青烟袅袅上升
  * - reduced-motion 时全部静止
  */
-export function DingHero() {
+export function DingHero({ alt = '青铜鼎' }: { alt?: string } = {}) {
   return (
     <div className="group/ding relative cursor-pointer">
       {/* 鼎体 */}
@@ -21,7 +21,7 @@ export function DingHero() {
       >
         <Image
           src="/ding.png"
-          alt="青铜鼎"
+          alt={alt}
           width={1024}
           height={1024}
           priority
