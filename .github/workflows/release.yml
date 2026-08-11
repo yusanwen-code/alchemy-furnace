@@ -25,6 +25,28 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
+# ════════════════════════════════════════════════
+# 通用后处理：build & push 完后,把 3 个 package 改 private
+# 默认 GHCR 继承仓库 public 可见性,本 workflow 强制 private
+# ════════════════════════════════════════════════
+visibility-private: &visibility-private
+  - name: Set package visibility = private
+    if: success()
+    run: |
+      for svc in go-api python-engine frontend; do
+        echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
+          -d '{"visibility":"private"}')
+        echo "  → HTTP ${http_code}"
+        if [ "${http_code}" != "200" ]; then
+          echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
+        fi
+      done
+
 jobs:
   # ───────────────────── 1. release 前置校验 ─────────────────────
   validate:
@@ -78,6 +100,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - *visibility-private
+
   build-python:
     name: Build & push python-engine
     needs: validate
@@ -103,6 +127,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-engine:${{ needs.validate.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - *visibility-private
 
   build-frontend:
     name: Build & push frontend
@@ -132,3 +158,5 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ needs.validate.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - *visibility-private
