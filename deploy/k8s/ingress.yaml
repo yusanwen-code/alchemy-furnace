@@ -1,0 +1,34 @@
+# k3s 默认带 Traefik 2.x，此处用标准 Ingress
+# 实际部署时把 host 改为你的真实域名（或先用 nip.io 测通）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alchemy-furnace
+  namespace: alchemy-furnace
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    # 主入口：所有路径先到 frontend（Next.js 自己处理路由）
+    - host: demo.alchemy.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    # API 单独域名（更推荐，避免前端 Router 兜底）
+    - host: api.demo.alchemy.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: go-api
+                port:
+                  number: 80

@@ -3,7 +3,7 @@
 # 炼丹炉 · 演示模式一键部署脚本 (007-demo-mode)
 # =============================================================================
 # 在干净的 Debian/Ubuntu 机器上一键部署完整产品演示页。
-# 不需要 PostgreSQL;Go/Python 均启用 DEMO_MODE=true,数据走内存 mock。
+# 不需要 PostgreSQL;Go/Python 均启用 APP_MODE=demo,数据走内存 mock。
 #
 # 用法:
 #   sudo bash scripts/deploy-demo.sh
@@ -139,7 +139,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$REPO_DIR/backend/go
-Environment=DEMO_MODE=true
+Environment=APP_MODE=demo
 Environment=PYTHON_ENGINE_BASE_URL=http://127.0.0.1:$PY_PORT
 Environment=GIN_MODE=release
 ExecStart=$GO_BINARY serve
@@ -160,7 +160,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$REPO_DIR/backend/python
-Environment=DEMO_MODE=true
+Environment=APP_MODE=demo
 ExecStart=$PY_VENV/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port $PY_PORT
 Restart=always
 RestartSec=3
@@ -256,4 +256,4 @@ say "  journalctl -u alchemy-go -f"
 say "  journalctl -u alchemy-python -f"
 say ""
 say "如需切回真实模式,编辑 /etc/systemd/system/alchemy-{go,python}.service"
-say "移除 Environment=DEMO_MODE=true,执行 systemctl daemon-reload && systemctl restart alchemy-go alchemy-python"
+say "移除 Environment=APP_MODE=demo,执行 systemctl daemon-reload && systemctl restart alchemy-go alchemy-python"

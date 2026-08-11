@@ -1,31 +1,72 @@
 # ═══════════════════════════════════════════
-# Python RAG 引擎 - 炼丹核心
+# Python 语言模式合成引擎 - 炼丹核心
+#
+# 多阶段构建：
+#   builder —— 安装 build-essential + Python 依赖（pip cache mount）
+#   runtime —— slim 镜像 + 非 root 用户 + 复制 site-packages
+#
+# 受限网络传代理：docker build --build-arg HTTPS_PROXY=http://host:port .
 # ═══════════════════════════════════════════
 
-FROM python:3.11-slim as base
+# ---- builder ----
+FROM python:3.11-slim AS builder
 
-# 安装系统依赖
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    APP_MODE=demo
+
+# 仅构建期需要：gcc / make（某些 pip 包要编译）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    curl \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 先复制依赖文件，利用 Docker 缓存层
+# 依赖层优先
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install -r requirements.txt
 
-# 复制应用代码
-COPY app/ ./app/
+# ---- runtime ----
+FROM python:3.11-slim
 
-# 创建上传目录
-RUN mkdir -p /app/uploads
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_MODE=demo
+
+# 运行时需要：ffmpeg（可选音频处理） + curl（健康检查） + ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 非 root
+RUN addgroup -S app && adduser -S -G app app
+
+# 把 builder 装好的 site-packages 复制到 runtime
+COPY --from=builder /install /usr/local
+
+WORKDIR /app
+
+# 源码：改 app/ 任意文件只重 build 这一层
+COPY --chown=app:app app/ ./app/
+
+RUN mkdir -p /app/uploads && chown -R app:app /app
+USER app
 
 EXPOSE 8000
 
-# 健康检查
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
     CMD curl -f http://localhost:8000/health || exit 1
+
+STOPSIGNAL SIGTERM
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

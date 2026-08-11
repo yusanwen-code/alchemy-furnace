@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master, "feat/**", "chore/**"]
+  push:
+    branches: [master, "feat/**", "chore/**"]
+  workflow_dispatch:
+
+# 取消同分支旧 run，节省 CI 配额
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────── 1. Go lint + test ─────────────────────
+  go:
+    name: Go (backend/go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+          cache-dependency-path: backend/go/go.sum
+
+      - name: go mod download
+        run: go mod download
+
+      - name: go vet
+        run: go vet ./...
+
+      # master 还没写 go test，先用 build 验证编译过
+      - name: go build
+        run: CGO_ENABLED=0 go build -o /tmp/server ./cmd/main
+
+  # ───────────────────── 2. Python smoke test ─────────────────────
+  python:
+    name: Python (backend/python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/python/requirements.txt
+
+      - name: pip install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: syntax check
+        run: |
+          python -m compileall -q app/ || (echo "syntax errors above" && exit 1)
+
+      - name: import smoke
+        run: |
+          python -c "from app.main import app; print('OK', app.title)"
+
+  # ───────────────────── 3. Frontend lint + build ─────────────────────
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: typecheck
+        run: pnpm typecheck || true # 早期版本可能没有此脚本
+
+      - name: lint
+        run: pnpm lint || true # eslint 可选
+
+      # 关键：必须能 build 通过 —— frontend 是输出产物
+      - name: build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: "https://api.example.com"
+          NEXT_PUBLIC_WS_BASE_URL: "wss://api.example.com"
+        run: pnpm build

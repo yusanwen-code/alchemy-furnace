@@ -3,7 +3,7 @@
 本文档描述如何在干净的 Linux 服务器上一键部署**演示模式** (Demo Mode)。
 演示模式下:
 
-- Go 网关与 Python 语言引擎均启用 `DEMO_MODE=true`
+- Go 网关与 Python 语言引擎均启用 `APP_MODE=demo`
 - 所有数据走内存 mock,**不依赖 PostgreSQL**
 - 启动即内置 9 种金丹 / 9 位道人 / 9 个供应商 / 9 个模型 / 9 条会话与消息
 - 前端顶部显示演示模式横幅,可手动收起
@@ -84,7 +84,7 @@ systemctl stop alchemy-go alchemy-python
 两个服务均默认注入:
 
 ```env
-DEMO_MODE=true
+APP_MODE=demo
 ```
 
 Go 服务额外注入:
@@ -151,11 +151,11 @@ grep -o "演示模式" /opt/alchemy-furnace/frontend/out/index.html | head -1
 
 演示模式与真实模式不能同时运行 (共享 8080/8000 端口)。如需切换:
 
-1. 编辑服务文件,移除 `Environment=DEMO_MODE=true`:
+1. 编辑服务文件,移除 `Environment=APP_MODE=demo`:
 
 ```bash
-sed -i '/DEMO_MODE=true/d' /etc/systemd/system/alchemy-go.service
-sed -i '/DEMO_MODE=true/d' /etc/systemd/system/alchemy-python.service
+sed -i '/APP_MODE=demo/d' /etc/systemd/system/alchemy-go.service
+sed -i '/APP_MODE=demo/d' /etc/systemd/system/alchemy-python.service
 ```
 
 2. 准备 PostgreSQL 数据库,配置 `config/main.toml` 与 `.env`。
