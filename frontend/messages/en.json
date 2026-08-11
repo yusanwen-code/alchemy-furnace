@@ -12,7 +12,7 @@
     "items": {
       "home": { "label": "Furnace" },
       "pills": {
-        "label": "Pill Vault",
+        "label": "Pills",
         "children": {
           "all": { "title": "All pills", "description": "Browse every pill forged so far — a thousand language modes" },
           "new": { "title": "Refine a new pill", "description": "Strike the flint, forge a fresh language-mode pill" },
@@ -20,7 +20,7 @@
         }
       },
       "agents": {
-        "label": "Daoist Hall",
+        "label": "Agents",
         "children": {
           "all": { "title": "All daoists", "description": "The roster — every agent in the hall" },
           "invite": { "title": "Recruit a daoist", "description": "Welcome a new agent into the hall and grant a pill" },
@@ -34,27 +34,44 @@
           "history": { "title": "Past discourses", "description": "Review past sessions, pick up an unfinished thread" }
         }
       },
-      "models": { "label": "Models" },
       "settings": { "label": "Settings" }
     }
   },
+  "settings": {
+    "tabs": {
+      "models": "Model Management",
+      "fire": "Furnace",
+      "about": "About"
+    },
+    "fire": {
+      "title": "Furnace",
+      "subtitle": "Tune the flame and smoke on the home cauldron",
+      "preview": "Live preview",
+      "effectLabel": "Flame effect",
+      "smokeLabel": "Smoke density",
+      "smokeHint": "0% = no smoke, 100% = heavy",
+      "options": {
+        "plume": { "label": "Plume", "desc": "Tapered tongue, sharpens upward, like a real hearth" },
+        "ember": { "label": "Ember", "desc": "Slow orange, quiet and low-key" },
+        "flicker": { "label": "Flicker", "desc": "Short bursts, ritual flair" },
+        "veil": { "label": "Veil", "desc": "Multi-layered haze, grand ceremonial flame" },
+        "classic": { "label": "Classic", "desc": "Original water-mist particles, cream-white blend, retro" },
+        "sanmei": { "label": "Sanmei", "desc": "Ice-blue core + cinnabar outer, alchemy fantasy" },
+        "spark": { "label": "Spark", "desc": "Gold/cinnabar embers shooting up, lantern-rise feel" },
+        "dragon": { "label": "Dragon", "desc": "Long ribbon flame, elegant commanding fire" }
+      }
+    }
+  },
   "footer": {
-    "tagline": "Sun and moon endure in the furnace; heaven and earth fit in the cauldron"
+    "tagline": "Sun and moon endure in the furnace; heaven and earth fit in the cauldron",
+    "brand": "Alchemy Furnace"
   },
   "home": {
     "dingAlt": "Bronze cauldron",
     "hero": {
       "titlePart1": "Alchemy",
       "titlePart2": "Furnace",
-      "subtitle": "Fire as the spark, herbs as the base. Watch the spirit-flow turn, see the pill form itself —",
-      "subtitleEm": "A quiet chamber, all things afloat, the heart as warm as the furnace.",
-      "statsLine": {
-        "pills": "{count} pills in store",
-        "agents": "{count} daoists",
-        "sessions": "{count} discourses",
-        "fire": "Fire still warm"
-      },
-      "banner": "Sun and moon endure in the furnace · heaven and earth fit in the cauldron"
+      "banner": "Sun and moon · heaven and earth"
     },
     "stats": {
       "ariaLabel": "Furnace overview",
@@ -101,7 +118,424 @@
     "en": "English"
   },
   "demoBanner": {
-    "text": "Demo Mode · In-memory mock data, resets on restart",
+    "title": "Demo Mode",
+    "text": "In-memory mock data, resets on restart",
     "dismiss": "Dismiss"
+  },
+  "pills": {
+    "title": "Pill Vault",
+    "subtitle": "Forge language-mode pills, shape a daoist's nature",
+    "searchPlaceholder": "Search pill name or description...",
+    "filter": {
+      "all": "All pills",
+      "builtin": "Built-in",
+      "custom": "Self-forged"
+    },
+    "create": "Forge a new pill",
+    "loading": "Searching the vault...",
+    "emptyTitle": "No pills yet",
+    "emptySearchTitle": "No matches",
+    "emptySearchDesc": "Try other keywords or filters",
+    "emptyDesc": "Click the button above to forge your first pill",
+    "modal": {
+      "title": "Forge a new pill",
+      "nameLabel": "Pill name *",
+      "namePlaceholder": "e.g. Classical Chinese",
+      "descLabel": "Description (with triggers / anti-triggers)",
+      "descPlaceholder": "Describe the language mode or persona this pill grants...",
+      "descHint": "After creation, you'll enter the editor to refine expression DNA, mental models, and other structured content",
+      "cancel": "Cancel",
+      "submit": "Start forging"
+    },
+    "closeModal": "Close dialog"
+  },
+  "pill": {
+    "backToList": "Back to Pill Vault",
+    "loading": "Loading pill...",
+    "notFound": "Pill not found or has been removed",
+    "editCta": "Edit recipe",
+    "bindCta": "Bestow on daoist",
+    "deleteCta": "Delete pill",
+    "tab": {
+      "content": "Notes",
+      "schema": "Recipe",
+      "relations": "Bound by"
+    },
+    "meta": {
+      "builtin": "Built-in recipe",
+      "custom": "Self-forged",
+      "createdAt": "Forged on",
+      "updatedAt": "Updated on"
+    },
+    "content": {
+      "title": "Notes",
+      "empty": "No notes on this pill.",
+      "systemPrompt": "System prompt",
+      "userPrompt": "User prompt"
+    },
+    "schema": {
+      "title": "Recipe structure",
+      "empty": "This pill has no structured recipe."
+    },
+    "relations": {
+      "title": "Daoists bound to this pill",
+      "empty": "No daoist has bound this pill yet.",
+      "weight": "Weight {weight}"
+    },
+    "dialog": {
+      "deleteTitle": "Confirm deletion",
+      "deleteDesc": "This cannot be undone. Delete this pill?",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "bindTitle": "Bestow on daoist",
+      "bindDesc": "Bind this pill to {agent} at weight {weight}"
+    },
+    "editor": {
+      "saveCta": "Save pill",
+      "savedFeedback": "Saved to vault",
+      "destroyCta": "Destroy",
+      "deleteConfirm": "Destroy this pill? This cannot be undone.",
+      "builtInBadge": "Built-in",
+      "pillNamePlaceholder": "Pill name",
+      "descPlaceholder": "Pill summary (with triggers / anti-triggers)...",
+      "authorLabel": "Author",
+      "authorPlaceholder": "Author",
+      "versionLabel": "Version",
+      "tagsLabel": "Tags (comma separated)",
+      "tagsPlaceholder": "classical, archaic",
+      "deleteItemAria": "Delete item",
+      "section": {
+        "identity": "Identity card (first person)",
+        "dna": "Expression DNA",
+        "mentalModels": "Mental models",
+        "heuristics": "Decision heuristics",
+        "values": "Values",
+        "antiPatterns": "Anti-patterns (never do)",
+        "honestLimits": "Honest limits",
+        "dialogues": "Example dialogues"
+      },
+      "identityPlaceholder": "e.g. I am a nomadic hacker who time-traveled from 2077...",
+      "dna": {
+        "sentenceLength": "Sentence length",
+        "formality": "Formality ({value})",
+        "casual": "Casual",
+        "formal": "Formal",
+        "vocabulary": "Vocabulary (comma separated)",
+        "vocabularyPlaceholder": "chip, neon, prosthetic",
+        "tabooWords": "Taboo words (comma separated)",
+        "tabooWordsPlaceholder": "Words never to speak",
+        "rhythm": "Rhythm",
+        "rhythmPlaceholder": "e.g. short and punchy, with pauses",
+        "humor": "Humor type",
+        "humorPlaceholder": "e.g. dry humor, self-deprecation",
+        "certainty": "Certainty style",
+        "certaintyPlaceholder": "e.g. speaks plainly / leaves room",
+        "citation": "Citation habit",
+        "citationPlaceholder": "e.g. quotes the Tao Te Ching",
+        "lengthOption": {
+          "short": "Short",
+          "medium": "Medium",
+          "long": "Long",
+          "mixed": "Mixed"
+        }
+      },
+      "mentalModel": {
+        "namePlaceholder": "Model name, e.g. First principles",
+        "oneLinerPlaceholder": "One-sentence summary",
+        "applicationPlaceholder": "How to apply this model",
+        "limitationsPlaceholder": "Limitations (comma separated)",
+        "addLabel": "Add mental model",
+        "deleteAria": "Delete mental model"
+      },
+      "heuristic": {
+        "conditionPlaceholder": "When... (condition)",
+        "actionPlaceholder": "Then... (action)",
+        "casePlaceholder": "Case study (optional)",
+        "addLabel": "Add decision heuristic",
+        "deleteAria": "Delete decision heuristic"
+      },
+      "values": {
+        "placeholder": "e.g. honesty over tact",
+        "addLabel": "Add value"
+      },
+      "antiPatterns": {
+        "placeholder": "e.g. no empty adjectives",
+        "addLabel": "Add anti-pattern"
+      },
+      "honestLimits": {
+        "placeholder": "e.g. admit ignorance in unfamiliar fields",
+        "addLabel": "Add honest limit"
+      },
+      "dialogue": {
+        "userPlaceholder": "Daoist asks: ...",
+        "assistantPlaceholder": "Daoist answers: ...",
+        "addLabel": "Add example dialogue",
+        "deleteAria": "Delete example dialogue"
+      }
+    }
+  },
+  "agents": {
+    "title": "Daoist Hall",
+    "subtitle": "Manage your AI daoists",
+    "searchPlaceholder": "Search daoists...",
+    "create": "Recruit daoist",
+    "loading": "Seeking daoists...",
+    "emptyTitle": "No daoists yet",
+    "emptySearchTitle": "No matches",
+    "emptySearchDesc": "Try other keywords",
+    "emptyDesc": "Click the button above to recruit your first daoist",
+    "modal": {
+      "title": "Recruit a daoist",
+      "nameLabel": "Daoist name *",
+      "namePlaceholder": "e.g. Taixu Zhenren",
+      "personaLabel": "Base persona / system prompt",
+      "personaPlaceholder": "Describe this daoist's character and speaking style...",
+      "personaHint": "Base persona is fused with bound pills' language modes to shape the daoist's expression",
+      "modelLabel": "Choose model",
+      "modelEmpty": "No models available. Configure providers in",
+      "modelLink": "Model Management",
+      "modelEmptySuffix": "first.",
+      "defaultBadge": "default",
+      "cancel": "Cancel",
+      "submit": "Recruit"
+    },
+    "closeModal": "Close dialog"
+  },
+  "agent": {
+    "backToList": "Back to Daoist Hall",
+    "loading": "Loading daoist...",
+    "notFound": "Daoist not found or has been removed",
+    "editCta": "Edit daoist",
+    "deleteCta": "Delete daoist",
+    "saveCta": "Save",
+    "cancelCta": "Cancel",
+    "startChatCta": "Start discourse",
+    "chatSessionTitle": "Discourse with {name}",
+    "pillsCount": "{count} pills",
+    "meta": {
+      "createdAt": "Registered on",
+      "updatedAt": "Updated on"
+    },
+    "persona": {
+      "title": "Base persona",
+      "empty": "No base persona set."
+    },
+    "pills": {
+      "title": "Bound pills",
+      "empty": "This daoist has not bound any pills yet.",
+      "addCta": "Bestow",
+      "weight": "Weight",
+      "unbindCta": "Unbind",
+      "selectFromVault": "Choose from Pill Vault",
+      "allBound": "No pills available (all are already bound)",
+      "emptyHint": "After binding pills, the daoist will learn the corresponding language modes and persona traits",
+      "reordering": "Saving new order...",
+      "dragHint": "Drag the left handle to reorder; weight and order changes will re-synthesize on next discourse",
+      "sortOrder": "Sort order",
+      "unbindTitle": "Unbind",
+      "reorderTitle": "Drag to reorder"
+    },
+    "editor": {
+      "nameLabel": "Daoist name",
+      "personaLabel": "Base persona / system prompt",
+      "personaPlaceholder": "Describe this daoist's character and speaking style...",
+      "modelLabel": "Choose model",
+      "modelEmpty": "No models available. Configure providers in",
+      "modelLink": "Model Management",
+      "modelEmptySuffix": "first.",
+      "modelCurrent": "(currently used)",
+      "defaultBadge": "default"
+    },
+    "languagePattern": {
+      "title": "Language pattern (pill nature)",
+      "synthesized": "Synthesized",
+      "stale": "Stale, re-synthesize",
+      "staleDesc": "The recipes have changed; the current language pattern was forged from old recipes and is for reference only. It will be re-synthesized on the next discourse (with emergence rules and tension detection).",
+      "emergenceRules": "Emergence rules",
+      "tensions": "Pill tensions ({count})"
+    },
+    "severity": {
+      "low": "Subtle",
+      "medium": "Medium",
+      "high": "Severe"
+    },
+    "emergence": {
+      "title": "Emergence status",
+      "ready": "Ready to emerge",
+      "conflict": "Pill conflict",
+      "noPills": "No pills bound"
+    },
+    "intensity": {
+      "label": "Intensity",
+      "subtle": "Subtle",
+      "medium": "Medium",
+      "strong": "Strong"
+    },
+    "dialog": {
+      "deleteTitle": "Confirm deletion",
+      "deleteDesc": "This cannot be undone. Delete this daoist?",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    }
+  },
+  "about": {
+    "pageTitle": "About",
+    "pageSubtitle": "Alchemy Furnace · Pill-Bound Persona System",
+    "sectionTitle": "About Alchemy Furnace",
+    "productName": "Alchemy Furnace",
+    "productBody1": "A pill-bound persona system inspired by Daoist alchemy.",
+    "productBody2": "Pills are language-mode skill packs; daoists are AI agents. Bind a pill to transform a daoist's nature.",
+    "githubRepo": "GitHub repository",
+    "techStack": "Tech stack",
+    "techList": [
+      "Next.js 16",
+      "React 19",
+      "TypeScript",
+      "Tailwind CSS 4",
+      "Go API",
+      "Python language engine",
+      "PostgreSQL"
+    ]
+  },
+  "pillCard": {
+    "builtInBadge": "Built-in",
+    "noDescription": "No notes",
+    "viewCta": "View its nature",
+    "bestowCta": "Bestow",
+    "bestowTitle": "Bestow this pill on a daoist"
+  },
+  "agentCard": {
+    "boundPillsBadge": "{count} pills",
+    "unboundBadge": "Unbound",
+    "noPersona": "No persona",
+    "viewCta": "View details",
+    "status": {
+      "active": "Active",
+      "inactive": "Dormant"
+    }
+  },
+  "chatMessage": {
+    "empty": "Send a message to start the discourse",
+    "emptyHint": "The daoist will reply in a persona shaped by bound pills",
+    "retry": "Retry",
+    "copy": "Copy",
+    "copied": "Copied",
+    "error": "Error: {message}",
+    "streaming": "Responding...",
+    "userLabel": "You",
+    "assistantLabel": "Daoist",
+    "incomplete": "Possibly incomplete",
+    "stopped": "Stopped"
+  },
+  "firePanel": {},
+  "modelsPanel": {
+    "title": "Model Management",
+    "subtitle": "Configure model providers and their language models; one credential works for all",
+    "createProvider": "Add provider",
+    "loading": "Loading providers...",
+    "emptyTitle": "No providers yet",
+    "emptyDesc": "Click the button above to add your first provider from a preset template",
+    "collapseModels": "Collapse model list",
+    "expandModels": "Expand model list",
+    "disabledBadge": "Disabled",
+    "keyConfigured": "Configured",
+    "keyFree": "No key",
+    "modelCount": "{count} models",
+    "clickToDisable": "Click to disable",
+    "clickToEnable": "Click to enable",
+    "testConnection": "Test connection",
+    "edit": "Edit",
+    "delete": "Delete",
+    "connectSuccess": "Connected · {ms}ms",
+    "connectFailed": "Connection failed",
+    "modelList": "Models",
+    "addModel": "Add model",
+    "emptyModels": "No models under this provider. Click \"Add model\" to create one.",
+    "th": {
+      "name": "Name",
+      "displayName": "Display name",
+      "temperature": "Temperature",
+      "default": "Default",
+      "synthesis": "Synthesis",
+      "enabled": "Enabled",
+      "refCount": "Refs",
+      "actions": "Actions"
+    },
+    "providerModal": {
+      "edit": "Edit provider",
+      "selectTemplate": "Choose a provider template",
+      "configure": "Configure provider",
+      "reselectTemplate": "Choose a different template"
+    },
+    "group": {
+      "domestic": "Domestic",
+      "international": "International",
+      "local": "Local"
+    },
+    "groupOther": "Other",
+    "custom": "Custom",
+    "customDesc": "Fill in the provider ID and endpoint URL manually",
+    "providerNameLabel": "Provider ID *",
+    "providerNamePlaceholder": "e.g. deepseek",
+    "displayNameLabel": "Display name",
+    "displayNamePlaceholder": "e.g. DeepSeek",
+    "protocolLabel": "Protocol",
+    "protocolPlaceholder": "openai-compatible",
+    "protocolHint": "Only openai-compatible is supported for now",
+    "baseUrlLabel": "Base URL *",
+    "baseUrlPlaceholder": "e.g. https://api.deepseek.com/v1",
+    "apiKeyLabel": "API Key",
+    "apiKeyConfiguredPlaceholder": "Key configured (leave empty to keep)",
+    "apiKeyNotConfiguredPlaceholder": "No key configured",
+    "apiKeyPlaceholder": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "apiKeyEditHint": "Leave empty to keep the existing key; filling a new value will replace it",
+    "sortOrderLabel": "Sort order",
+    "remarkLabel": "Remark",
+    "optionalPlaceholder": "Optional",
+    "enableLabel": "Enabled",
+    "cancel": "Cancel",
+    "createCta": "Create",
+    "saveCta": "Save",
+    "modelModal": {
+      "edit": "Edit model",
+      "createForProvider": "Add model · {name}"
+    },
+    "modelNameLabel": "Model name *",
+    "modelNamePlaceholder": "e.g. deepseek-chat",
+    "temperatureLabel": "Temperature (0-2)",
+    "maxTokensLabel": "Max tokens",
+    "setDefaultLabel": "Set as default model",
+    "useForSynthesisLabel": "Use for pill synthesis",
+    "deleteProviderTitle": "Delete provider",
+    "deleteProviderDesc": "Delete provider \"{name}\"? This cannot be undone.",
+    "deleteProviderBlocked": "This provider still has {count} models; deletion will be rejected",
+    "deleteModelTitle": "Delete model",
+    "deleteModelDesc": "Delete model \"{name}\"? This cannot be undone.",
+    "deleteModelBlocked": "This model is still referenced by {count} daoist(s); deletion will be rejected",
+    "deleteCta": "Delete",
+    "errorLoadProviders": "Failed to load providers",
+    "errorLoadModels": "Failed to load models",
+    "errorSave": "Save failed",
+    "errorDelete": "Delete failed",
+    "errorToggleProvider": "Failed to update provider status",
+    "errorToggleModel": "Failed to update model status",
+    "errorTestConnection": "Connection test failed"
+  },
+  "bindModal": {
+    "title": "Bind this pill",
+    "pillLabel": "Pill",
+    "agentLabel": "Daoist",
+    "weightLabel": "Weight (0-10)",
+    "weightHint": "Higher weight = stronger influence on the daoist's nature",
+    "cancel": "Cancel",
+    "submit": "Bind",
+    "alreadyBound": "This daoist has already bound this pill",
+    "closeModal": "Close dialog",
+    "prompt": "Bestow “{name}” on a daoist",
+    "noAgents": "No daoists yet. Recruit one in the Daoist Hall first.",
+    "sortOrder": "Sort order",
+    "success": "Bestowed",
+    "errorLoadAgents": "Failed to load daoist list",
+    "errorBind": "Binding failed"
   }
 }

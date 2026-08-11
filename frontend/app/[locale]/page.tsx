@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronRight, Flame, Plus } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { usePill } from '@/contexts/PillContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
@@ -39,6 +39,17 @@ export default function HomePage() {
   const tSessions = useTranslations('home.sessions')
   const tCloser = useTranslations('home.closer')
   const tHero = useTranslations('home.hero')
+
+  // 标题字号按语言分档：中文 3 字用 17rem 还原原始视觉，英文 15 字降到 8.5rem 防越界
+  const locale = useLocale()
+  const isZh = locale === 'zh-CN'
+  const titleSize = isZh
+    ? 'text-[16vw] sm:text-[10rem] md:text-[14rem] lg:text-[17rem]'
+    : 'text-[16vw] sm:text-[8rem] md:text-[7rem] lg:text-[8.5rem]'
+  // max-w 也要按语言分：中文 2 字一行需要更宽容器，英文则继续约束防越界
+  const titleMaxW = isZh
+    ? 'md:max-w-[60%] lg:max-w-[55%]'
+    : 'md:max-w-[42%] lg:max-w-[38%]'
 
   const { state: pillState, fetchPills } = usePill()
   const { state: agentState, fetchAgents } = useAgent()
@@ -96,13 +107,13 @@ export default function HomePage() {
         id="hero"
         className="relative isolate overflow-hidden px-5 pt-8 sm:px-8 md:flex md:min-h-[calc(100vh-4rem)] md:flex-col md:justify-center md:pt-0 lg:px-14"
       >
-        {/* 鼎：更大更靠左，让标题尾部压在其上 */}
-        {/* 鼎：参考 / 炉子动画 的 float-slow + 径向 mask；hover 点火冒烟；累计缩 20% */}
-        {/* 外层 absolute 负责定位；内层 group/ding + relative 是火/烟 absolute 子元素的包含块 */}
-        <div className="relative mx-auto my-6 w-[80%] opacity-90 md:absolute md:right-[8%] md:top-1/2 md:my-0 md:w-[72%] md:-translate-y-1/2 lg:w-[64%]">
+        {/* 鼎：更大更靠左,让标题尾部压在其上 */}
+        {/* 鼎：参考 / 炉子动画 的 float-slow + 径向 mask;hover 点火冒烟 */}
+        {/* 外层 absolute 负责定位;内层 group/ding + relative 是火/烟 absolute 子元素的包含块 */}
+        <div className="relative mx-auto my-6 w-[60%] opacity-90 md:absolute md:right-[6%] md:top-1/2 md:my-0 md:w-[72%] md:-translate-y-1/2 lg:w-[64%]">
           <div className="group/ding relative w-full">
-            {/* 鼎体：scale(1.1) 再大 10%（hero 比例已通过 Image 高度约束协调） */}
-            <div className="origin-center" style={{ transform: 'scale(1.1)' }}>
+            {/* 鼎体：scale(1.15) 放大（hero 比例已通过 Image 高度约束协调） */}
+            <div className="origin-center" style={{ transform: 'scale(1.15)' }}>
               <div
                 className="float-slow relative"
                 style={{
@@ -115,7 +126,7 @@ export default function HomePage() {
                 <div
                   className="relative ml-auto mr-0"
                   style={{
-                    height: 'calc(100vh - 5rem)',
+                    height: 'calc(100vh - 4rem)',
                     aspectRatio: '1 / 1',
                     maxWidth: '100%',
                   }}
@@ -127,36 +138,21 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="relative z-10 mx-auto max-w-3xl text-center md:mx-0 md:text-left">
+        <div className={`relative z-10 mx-auto max-w-3xl text-center md:mx-0 md:-mt-[14vh] md:text-left ${titleMaxW}`}>
           <h1 className="font-serif font-black leading-[1.06] tracking-tight text-foreground">
-            <span className="block text-[18vw] sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">
+            <span className={`block whitespace-nowrap ${titleSize}`}>
               {tHero('titlePart1')}
             </span>
-            <span className="block pl-[0.08em] text-[18vw] text-primary sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">
+            <span className={`block whitespace-nowrap pl-[0.08em] text-primary ${titleSize}`}>
               {tHero('titlePart2')}
             </span>
           </h1>
-
-          <p className="mt-10 max-w-md text-pretty text-lg leading-relaxed text-muted-foreground">
-            {tHero('subtitle')}
-            <span className="text-foreground">{tHero('subtitleEm')}</span>
-          </p>
-
-          <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-border/70 pt-6 font-mono text-xs tracking-wide text-sage">
-            <span>{tHero('statsLine.pills', { count: pills.length })}</span>
-            <span className="text-border">/</span>
-            <span>{tHero('statsLine.agents', { count: agents.length })}</span>
-            <span className="text-border">/</span>
-            <span>{tHero('statsLine.sessions', { count: sessions.length })}</span>
-            <span className="text-border">/</span>
-            <span className="text-primary">{tHero('statsLine.fire')}</span>
-          </div>
         </div>
 
-        {/* 底部横排题字 */}
-        <p className="relative z-10 mt-14 flex items-center gap-4 font-serif text-sm font-bold tracking-[0.5em] text-sage/80">
-          <span className="h-px w-10 bg-gold/70" aria-hidden />
-          {tHero('banner')}
+        {/* 底部横排题字：桌面端钉在 hero 左下角,作画轴落款 */}
+        <p className="relative z-10 mt-14 flex max-w-full items-center gap-4 truncate font-serif text-xl font-bold tracking-[0.2em] md:absolute md:bottom-10 md:left-8 md:mt-0 md:max-w-[calc(100%-4rem)] md:tracking-[0.5em] lg:left-14 lg:max-w-[40%]">
+          <span className="h-px w-10 shrink-0 bg-gold/70" aria-hidden />
+          <span className="truncate">{tHero('banner')}</span>
         </p>
       </header>
 
