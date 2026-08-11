@@ -155,6 +155,29 @@ make dev-front    # React 前端 → http://localhost:3000
 4. **试丹预览**（可选）- 进入「试丹」页面临时组合性格与金丹，快速预览合成效果
 5. **开炉论道** - 进入「论道」，选择道人，开始对话！
 
+## 演示模式
+
+系统支持通过环境变量 `DEMO_MODE=true` 一键进入演示模式，无需 PostgreSQL，适合部署到服务器做产品演示：
+
+```bash
+# 本地开发
+export DEMO_MODE=true
+bash scripts/dev.sh
+
+# 服务器一键部署（Debian/Ubuntu）
+git checkout 007-demo-mode
+sudo bash scripts/deploy-demo.sh
+```
+
+演示模式下：
+
+- Go 网关与 Python 语言引擎都走内存 mock，**不连接数据库**
+- 启动时自动载入 9 颗金丹 / 9 位道人 / 9 个供应商 / 9 个模型 / 9 条会话与消息
+- 前端顶部显示黄色演示横幅，提示访客“数据为内存 mock，重启后重置”
+- 对话与合成都由 mock Provider 返回固定中文回答，无需配置真实 LLM API Key
+
+详细部署说明见 [`docs/operations/deploy.md`](docs/operations/deploy.md)。
+
 ## 概念
 
 ### 金丹（Elixir Pill）

@@ -12,12 +12,14 @@ import (
 
 // HealthCheck 健康检查
 // GET /api/v1/system/health
-// 返回各组件健康状态,用于监控与负载均衡
-// ⚠️ 新架构经 Wrapper 写出统一响应包络 {code,message,request_id,data};
-// 旧实现直接 c.JSON 绕过包络(无 request_id),此处修复为 return (Ok, data, nil)
+// 007-demo-mode: 演示模式返回 mode=demo, db=mock;真实模式返回 mode=real, db=ok/down
 func (cls *System) HealthCheck(c *gin.Context) (response.Code, any, error) {
+	mode := configuration.Mode()
+
 	dbStatus := "ok"
-	if sqlDB, err := dao.GetDB().DB(); err != nil || sqlDB.Ping() != nil {
+	if configuration.IsDemo() {
+		dbStatus = "mock"
+	} else if sqlDB, err := dao.GetDB().DB(); err != nil || sqlDB.Ping() != nil {
 		dbStatus = "down"
 	}
 
@@ -27,7 +29,7 @@ func (cls *System) HealthCheck(c *gin.Context) (response.Code, any, error) {
 	}
 
 	status := "ok"
-	if dbStatus != "ok" || pythonEngine != "ok" {
+	if dbStatus == "down" || pythonEngine != "ok" {
 		status = "degraded"
 	}
 
@@ -37,6 +39,7 @@ func (cls *System) HealthCheck(c *gin.Context) (response.Code, any, error) {
 		Timestamp:    time.Now().Unix(),
 		DB:           dbStatus,
 		PythonEngine: pythonEngine,
+		Mode:         mode,
 	}, nil
 }
 

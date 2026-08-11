@@ -1,10 +1,15 @@
 // Package service wire 装配集(对齐 Luna-CY 模板 server/http/service)
 // 每个域一个 wire.NewSet:dao 实现绑定接口 + service 实现绑定接口
+//
+// 007-demo-mode: DAO provider 函数根据 configuration.IsDemo() 在
+// GORM(internal/dao)与内存(internal/dao/memory)实现间二选一,
+// service 层与 handler 层无感知。
 package service
 
 import (
 	"github.com/alchemy-furnace/server/internal/configuration"
 	"github.com/alchemy-furnace/server/internal/dao"
+	"github.com/alchemy-furnace/server/internal/dao/memory"
 	idao "github.com/alchemy-furnace/server/internal/interface/dao"
 	iservice "github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
@@ -19,17 +24,61 @@ import (
 	"github.com/google/wire"
 )
 
+// ==================== DAO Provider(真实/演示二选一) ====================
+
+// ProvidePillDao 金丹 DAO:演示模式用内存实现,否则用 GORM 实现
+func ProvidePillDao() idao.Pill {
+	if configuration.IsDemo() {
+		return memory.NewPillDao()
+	}
+	return dao.NewPillDao()
+}
+
+// ProvideAgentDao 道人 DAO
+func ProvideAgentDao() idao.Agent {
+	if configuration.IsDemo() {
+		return memory.NewAgentDao()
+	}
+	return dao.NewAgentDao()
+}
+
+// ProvideChatDao 对话域 DAO
+func ProvideChatDao() idao.Chat {
+	if configuration.IsDemo() {
+		return memory.NewChatDao()
+	}
+	return dao.NewChatDao()
+}
+
+// ProvideProviderDao 供应商 DAO
+func ProvideProviderDao() idao.Provider {
+	if configuration.IsDemo() {
+		return memory.NewProviderDao()
+	}
+	return dao.NewProviderDao()
+}
+
+// ProvideModelDao 模型 DAO
+func ProvideModelDao() idao.Model {
+	if configuration.IsDemo() {
+		return memory.NewModelDao()
+	}
+	return dao.NewModelDao()
+}
+
+// ==================== 域装配集 ====================
+
 // PillService 金丹域装配集
 var PillService = wire.NewSet(
-	dao.NewPillDao, wire.Bind(new(idao.Pill), new(*dao.PillDao)),
+	ProvidePillDao,
 	pill_service.New, wire.Bind(new(iservice.Pill), new(*pill_service.Pill)),
 )
 
 // AgentService 道人域装配集(依赖金丹 DAO 与模型查询 DAO)
 var AgentService = wire.NewSet(
-	dao.NewAgentDao, wire.Bind(new(idao.Agent), new(*dao.AgentDao)),
-	dao.NewPillDao, wire.Bind(new(idao.Pill), new(*dao.PillDao)),
-	dao.NewModelDao, wire.Bind(new(idao.Model), new(*dao.ModelDao)),
+	ProvideAgentDao,
+	ProvidePillDao,
+	ProvideModelDao,
 	agent_service.New, wire.Bind(new(iservice.Agent), new(*agent_service.Agent)),
 )
 
@@ -45,8 +94,8 @@ func NewEngineBaseURL() string {
 
 // ChatService 对话域装配集(依赖道人 DAO + 合成客户端 + 凭证解析器 + 语言模式服务)
 var ChatService = wire.NewSet(
-	dao.NewChatDao, wire.Bind(new(idao.Chat), new(*dao.ChatDao)),
-	dao.NewAgentDao, wire.Bind(new(idao.Agent), new(*dao.AgentDao)),
+	ProvideChatDao,
+	ProvideAgentDao,
 	NewSynthesisClient,
 	credential.NewResolver, wire.Bind(new(credential.Resolver), new(*credential.ModelResolver)),
 	NewEngineBaseURL,
@@ -56,7 +105,7 @@ var ChatService = wire.NewSet(
 
 // TrialService 试丹域装配集(依赖金丹 DAO + 合成客户端 + 凭证解析器)
 var TrialService = wire.NewSet(
-	dao.NewPillDao, wire.Bind(new(idao.Pill), new(*dao.PillDao)),
+	ProvidePillDao,
 	NewSynthesisClient,
 	credential.NewResolver, wire.Bind(new(credential.Resolver), new(*credential.ModelResolver)),
 	trial_service.New, wire.Bind(new(iservice.Trial), new(*trial_service.Trial)),
@@ -64,14 +113,12 @@ var TrialService = wire.NewSet(
 
 // ProviderService 供应商域装配集(连接测试回退取首个启用模型,故依赖模型 DAO)
 var ProviderService = wire.NewSet(
-	dao.NewProviderDao, wire.Bind(new(idao.Provider), new(*dao.ProviderDao)),
-	dao.NewModelDao, wire.Bind(new(idao.Model), new(*dao.ModelDao)),
+	ProvideProviderDao,
+	ProvideModelDao,
 	provider_service.New, wire.Bind(new(iservice.Provider), new(*provider_service.ProviderService)),
 )
 
-// ModelService 模型域装配集(凭证解析链需供应商 DAO)
+// ModelService 模型域装配集(DAO 由 ProviderService 提供,NewModel 总与 ProviderService 同用)
 var ModelService = wire.NewSet(
-	dao.NewModelDao, wire.Bind(new(idao.Model), new(*dao.ModelDao)),
-	dao.NewProviderDao, wire.Bind(new(idao.Provider), new(*dao.ProviderDao)),
 	model_service.New, wire.Bind(new(iservice.Model), new(*model_service.ModelService)),
 )

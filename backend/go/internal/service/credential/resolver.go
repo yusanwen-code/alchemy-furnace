@@ -39,6 +39,11 @@ func NewResolver() *ModelResolver {
 //   - 未找到:返回仅含模型名的空凭证(Python 回退环境变量配置,向后兼容)并记录警告
 //   - name 为空:解析默认模型
 func (r *ModelResolver) ResolveCredentials(ctx context.Context, name string) (*ModelCredentials, error) {
+	// 007-demo-mode: 演示模式无 DB,Python 端走 DemoChatProvider,凭证无意义
+	if configuration.IsDemo() {
+		return &ModelCredentials{Model: name}, nil
+	}
+
 	if name == "" {
 		return r.ResolveDefaultCredentials(ctx)
 	}
@@ -97,6 +102,11 @@ func (r *ModelResolver) ResolveDefaultCredentials(ctx context.Context) (*ModelCr
 
 // ResolveSynthesisCredentials 解析语言模式合成专用模型凭证:is_synthesis 优先,回退 is_default
 func (r *ModelResolver) ResolveSynthesisCredentials(ctx context.Context) (*ModelCredentials, error) {
+	// 007-demo-mode: 演示模式无 DB,返回空凭证(Python 端走 DemoSynthesisProvider)
+	if configuration.IsDemo() {
+		return &ModelCredentials{}, nil
+	}
+
 	var m model.LLMModel
 	err := dao.GetDB().WithContext(ctx).Where("is_synthesis = ? AND is_enabled = ?", true, true).First(&m).Error
 	switch {

@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Check, ChevronDown, Globe } from 'lucide-react'
 import { locales, type Locale } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { persistLocale } from '@/components/i18n/locale-provider'
 
 /**
  * Language switcher — a dropdown.
@@ -66,6 +67,8 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       return
     }
     setOpen(false)
+    // 持久化到 localStorage,确保跨页面、刷新后仍然生效
+    persistLocale(next)
     // Hard navigation so the root layout re-runs and the new locale's
     // metadata / fonts apply cleanly. Using `next/navigation`'s router
     // would only re-render the [locale] subtree, which is also fine —

@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
+from app.core import runtime
 
 # ==================== 日志配置 ====================
 
@@ -48,6 +49,9 @@ async def lifespan(app: FastAPI):
 
     if not settings.openai_api_key_valid:
         logger.warning("未配置有效的 OPENAI_API_KEY，合成与对话功能将不可用")
+
+    # 007-demo-mode: 根据 is_demo() 注入真实或演示 Provider
+    runtime.setup_providers()
 
     logger.info("炼丹炉启动完毕，开始接客！")
 
@@ -150,10 +154,16 @@ async def health_check():
 
     overall = "ok" if components["openai"] == "ok" else "degraded"
 
+    # 007-demo-mode: 演示模式下 openai 状态不阻断,overall 强制 ok
+    if runtime.current_mode() == "demo":
+        overall = "ok"
+        components["openai"] = "mock"
+
     return {
         "status": overall,
         "version": settings.app_version,
         "components": components,
+        "mode": runtime.current_mode(),
     }
 
 

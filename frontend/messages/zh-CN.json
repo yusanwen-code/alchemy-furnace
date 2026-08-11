@@ -99,5 +99,9 @@
     "label": "语言",
     "zh-CN": "简体中文",
     "en": "English"
+  },
+  "demoBanner": {
+    "text": "演示模式 · 数据为内存 mock,重启后重置",
+    "dismiss": "收起"
   }
 }
