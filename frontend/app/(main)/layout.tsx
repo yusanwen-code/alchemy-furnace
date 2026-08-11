@@ -1,10 +1,10 @@
-import { NextIntlClientProvider } from 'next-intl'
 import { setRequestLocale } from 'next-intl/server'
 import type { ReactNode } from 'react'
 import { Navbar } from '@/components/layout/navbar'
 import { Footer } from '@/components/layout/footer'
+import { DemoBanner } from '@/components/layout/demo-banner'
+import { LocaleProvider } from '@/components/i18n/locale-provider'
 import { defaultLocale } from '@/i18n'
-import zhCN from '@/messages/zh-CN.json'
 
 /**
  * Layout for non-locale MVP routes (`/agents`, `/chat`, `/pills`,
@@ -24,18 +24,17 @@ import zhCN from '@/messages/zh-CN.json'
  *   default here mirrors what `app/[locale]/layout.tsx` does for
  *   locale routes, and is what makes the chrome render at all.
  *
- * Messages are hard-coded to the default locale because these routes
- * don't carry a `[locale]` segment. The chrome falls back to Chinese
- * for them; on `/zh-CN` or `/en` the inner `app/[locale]/layout.tsx`
- * provider takes over and the chrome re-translates.
+ * `LocaleProvider` 在浏览器端会读取 localStorage 中保存的 locale,让
+ * 语言切换在这些非 locale 路由下也能全局生效。
  */
 export default function MainLayout({ children }: { children: ReactNode }) {
   setRequestLocale(defaultLocale)
   return (
-    <NextIntlClientProvider locale={defaultLocale} messages={zhCN}>
+    <LocaleProvider initialLocale={defaultLocale} preferStored>
+      <DemoBanner />
       <Navbar />
       <div className="flex-1">{children}</div>
       <Footer />
-    </NextIntlClientProvider>
+    </LocaleProvider>
   )
 }

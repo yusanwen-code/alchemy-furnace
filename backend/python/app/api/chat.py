@@ -10,19 +10,28 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from app.core import runtime
 from app.models.schemas import (
     ChatCompletionRequest,
     BaseResponse,
 )
-from app.services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)
 
 # 创建路由 - 对话之门户
 router = APIRouter(prefix="/chat", tags=["对话 - 求道"])
 
-# 服务实例 - 道人智慧核心
-chat_service = ChatService()
+
+# 007-demo-mode: 延迟代理,运行时由 runtime.setup_providers() 注入真实或演示 ChatProvider
+# 路由代码不感知具体实现,保持零修改
+class _ChatServiceProxy:
+    """把所有属性访问委托给 runtime.get_chat_provider()"""
+
+    def __getattr__(self, name):
+        return getattr(runtime.get_chat_provider(), name)
+
+
+chat_service = _ChatServiceProxy()
 
 
 @router.post(

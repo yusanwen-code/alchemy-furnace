@@ -3,7 +3,11 @@
 // 由 internal/configuration/loader.LoadConfig 在进程启动时填充
 package configuration
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"strings"
+)
 
 // Configuration 全局配置实例,启动时加载后只读
 var Configuration Config
@@ -65,4 +69,33 @@ type LLMConfig struct {
 // PythonEngineConfig Python 语言引擎配置
 type PythonEngineConfig struct {
 	BaseURL string `toml:"base_url" mapstructure:"base_url"`
+}
+
+// DemoConfig 演示模式配置(007-demo-mode)
+// 由环境变量 DEMO_MODE 控制,接受 true/1/yes/demo(大小写不敏感)
+type DemoConfig struct {
+	// Enabled 演示模式开关(从 env DEMO_MODE 解析)
+	Enabled bool
+}
+
+// demoConfig 全局只读,启动期由 LoadDemoConfig 写入
+var demoConfig = DemoConfig{Enabled: false}
+
+// IsDemo 报告当前是否处于演示模式
+func IsDemo() bool { return demoConfig.Enabled }
+
+// Mode 返回可读模式字符串("demo" / "real"),供日志与 HTTP 响应使用
+func Mode() string {
+	if IsDemo() {
+		return "demo"
+	}
+	return "real"
+}
+
+// LoadDemoConfig 从环境变量解析演示模式开关(007-demo-mode)
+// 接受 true/1/yes/demo(大小写不敏感),其他值视为 false
+// 由 configuration/loader 在启动期调用一次
+func LoadDemoConfig() {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("DEMO_MODE")))
+	demoConfig.Enabled = v == "true" || v == "1" || v == "yes" || v == "demo"
 }

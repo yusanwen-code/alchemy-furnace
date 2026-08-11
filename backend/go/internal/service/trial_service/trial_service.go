@@ -183,11 +183,16 @@ func (s *Trial) Chat(ctx context.Context, req *iservice.TrialChatRequest) (*iser
 		return nil, errors.New(errors.ErrorTypeServerInternalError, "service.trial.chat_engine", engine.MapEngineError(engineErr))
 	}
 
-	var result iservice.TrialChatResponse
-	if derr := json.NewDecoder(resp.Body).Decode(&result); derr != nil {
+	// Python /chat/completions 以 BaseResponse 信封返回 {code,message,data:{content,...}},
+	// 需解包 data 后再取 Content/Model/Usage(与 /synthesis/combine 直返 CombineResponse 不同)
+	var envelope struct {
+		Code int                         `json:"code"`
+		Data iservice.TrialChatResponse  `json:"data"`
+	}
+	if derr := json.NewDecoder(resp.Body).Decode(&envelope); derr != nil {
 		return nil, errors.ErrorServerInternalError("service.trial.chat_decode")
 	}
-	return &result, nil
+	return &envelope.Data, nil
 }
 
 // resolveTrialCredentials 解析试丹请求指定模型的凭证;空模型名走合成专用解析

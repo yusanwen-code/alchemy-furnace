@@ -38,17 +38,23 @@ func runServe(cmd *cobra.Command) {
 
 	gin.SetMode(cfg.Server.Mode)
 
-	// 数据库连接(迁移/种子由子命令显式执行,启动不自动建表)
-	if err := dao.InitDatabase(&cfg.Database); err != nil {
-		log.Fatalf("[炼丹炉] 初始化数据库失败: %v", err)
+	// 007-demo-mode: 演示模式跳过 PostgreSQL,使用内存 mock DAO
+	if configuration.IsDemo() {
+		log.Println("[炼丹炉] 🧪 演示模式: 跳过数据库连接,使用内存 mock 数据")
+	} else {
+		// 数据库连接(迁移/种子由子命令显式执行,启动不自动建表)
+		if err := dao.InitDatabase(&cfg.Database); err != nil {
+			log.Fatalf("[炼丹炉] 初始化数据库失败: %v", err)
+		}
+		defer dao.CloseDatabase()
 	}
-	defer dao.CloseDatabase()
 	defer logger.Sync()
 
 	r := gin.New()
 
 	// 中间件: request_id 最先注入,保证响应包络与日志均可取到
 	r.Use(middleware.RequestID())
+	r.Use(middleware.ModeHeader()) // 007-demo-mode: 演示模式注入 X-Alchemy-Mode 头
 	r.Use(middleware.ErrorRecovery())
 	r.Use(middleware.GinLogger())
 	r.Use(middleware.CORS(cfg.Server.AllowOrigins))
