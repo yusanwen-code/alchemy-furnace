@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/006-uuid-model-params/plan.md
+specs/008-banner-aesthetics/plan.md
 <!-- SPECKIT END -->

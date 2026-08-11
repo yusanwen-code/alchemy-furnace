@@ -9,8 +9,18 @@ import { usePill } from '@/contexts/PillContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
 import { FloatCard, CoinIcon, SealDot } from '@/components/alchemy/float-card'
-import { DingFlameParticle } from '@/components/alchemy/ding-flame-particle'
+import { BaguaFurnace } from '@/components/alchemy/bagua-furnace'
+import type { FurnaceWindow } from '@/components/alchemy/bagua-furnace-fire'
 import { formatDateTime } from '@/utils/format'
+
+// Image-relative furnace-window geometry (percent of /ding.png), measured
+// from the PNG's near-black connected components: arch windows — semicircle
+// top (radius = width/2), straight sides and bottom.
+const FURNACE_WINDOWS: FurnaceWindow[] = [
+  { id: 'left',   x: 37.35, width: 7.71, top: 50.10, height: 9.08, phase: 0.00 },
+  { id: 'center', x: 50.29, width: 8.79, top: 50.49, height: 8.98, phase: 0.45 },
+  { id: 'right',  x: 63.18, width: 7.81, top: 50.20, height: 9.08, phase: 0.90 },
+]
 
 /**
  * Home page (the furnace / 鼎 hero).
@@ -84,12 +94,12 @@ export default function HomePage() {
       {/* ── hero：通栏铺满，标题压着鼎交叠 ── */}
       <header
         id="hero"
-        className="relative isolate flex min-h-[calc(100vh-4rem)] flex-col justify-center overflow-hidden px-5 pt-16 sm:px-8 md:pt-0 lg:px-14"
+        className="relative isolate overflow-hidden px-5 pt-8 sm:px-8 md:flex md:min-h-[calc(100vh-4rem)] md:flex-col md:justify-center md:pt-0 lg:px-14"
       >
         {/* 鼎：更大更靠左，让标题尾部压在其上 */}
         {/* 鼎：参考 / 炉子动画 的 float-slow + 径向 mask；hover 点火冒烟；累计缩 20% */}
         {/* 外层 absolute 负责定位；内层 group/ding + relative 是火/烟 absolute 子元素的包含块 */}
-        <div className="absolute right-[8%] top-1/2 w-[92%] -translate-y-1/2 opacity-90 sm:right-[8%] md:w-[72%] md:right-[8%] lg:right-[8%] lg:w-[64%]">
+        <div className="relative mx-auto my-6 w-[80%] opacity-90 md:absolute md:right-[8%] md:top-1/2 md:my-0 md:w-[72%] md:-translate-y-1/2 lg:w-[64%]">
           <div className="group/ding relative w-full">
             {/* 鼎体：scale(1.1) 再大 10%（hero 比例已通过 Image 高度约束协调） */}
             <div className="origin-center" style={{ transform: 'scale(1.1)' }}>
@@ -110,124 +120,19 @@ export default function HomePage() {
                     maxWidth: '100%',
                   }}
                 >
-                <Image
-                  src="/ding.png"
-                  alt={t('dingAlt')}
-                  width={1024}
-                  height={1024}
-                  preload
-                  className="h-full w-full mix-blend-multiply"
-                />
-
-                {/* 火焰（hover 点燃）：3 个窗口各 1 组，坐标由 /tmp/measure_y.py 实测 ding.png 暗区得到 */}
-                {/* 容器宽 = 暗区实际宽（每扇窗独立），火苗不溢出铜壁；y 起点 = 暗区顶；h = 暗区高 + 0.2%（约 2px）让 scaleY 起点在暗区下边外侧 */}
-                {/* 点燃用 .ding-flame-window 类（CSS @keyframes flame-ignite）：火星一闪 → 跳动生长 → 稳定燃烧，模拟真实火苗 */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover/ding:opacity-100"
-                >
-                  {[
-                    // 实测暗区 (measure_y.py): 左 y 50.10-59.18% x 33.30-41.21% (8.01% 宽)
-                    { x: 37.26, w: 8.01, top: 50.10, h: 9.38, phase: 0.00 },
-                    // 中 y 50.49-59.47% x 46.00-54.59% (8.69% 宽)
-                    { x: 50.30, w: 8.69, top: 50.49, h: 9.28, phase: 0.45 },
-                    // 右 y 50.20-59.28% x 59.28-67.09% (7.91% 宽)
-                    { x: 63.19, w: 7.91, top: 50.20, h: 9.38, phase: 0.90 },
-                  ].map((w) => (
-                    <div key={w.x} className="contents">
-                    {/* 炉口辉光：从暗区底缘向下溢出 13% 到铜壁承沿上, 让暗→铜的硬切变渐变, 减少图层割裂感 */}
-                    <div
-                      aria-hidden
-                      className="ding-flame pointer-events-none absolute"
-                      style={{
-                        left: `${w.x}%`,
-                        top: `${w.top + 4}%`,
-                        width: `${w.w * 1.9}%`,
-                        height: '14%',
-                        transform: 'translateX(-50%)',
-                        background:
-                          'radial-gradient(ellipse 100% 100% at 50% 0%, rgba(255,160,60,0.85) 0%, rgba(230,100,30,0.6) 20%, rgba(190,55,18,0.35) 45%, rgba(140,40,15,0.15) 70%, transparent 95%)',
-                        filter: 'blur(10px)',
-                        mixBlendMode: 'screen',
-                        animationDelay: `${w.phase}s`,
-                      }}
-                    />
-                    {/* 火焰窗：外层负责定位 + translateX；内层 .ding-flame-window 走 flame-ignite 关键帧动画（火星→跳动→稳定），hover 解除时由 transition 平滑熄灭 */}
-                    {/* 容器 h = 暗区高 + 0.2%（≈2px），底边在暗区下边外侧，scaleY(0) 起点正好在暗区下边外 1px，火苗像从炉口下方升起 */}
-                    <div
-                      className="absolute"
-                      style={{
-                        left: `${w.x}%`,
-                        top: `${w.top}%`,
-                        width: `${w.w}%`,
-                        height: `${w.h}%`,
-                        transform: 'translateX(-50%)',
-                      }}
-                    >
-                      <div
-                        className="ding-flame-window h-full w-full overflow-hidden"
-                        style={{
-                          borderRadius: '55% 55% 8% 8% / 32% 32% 4% 4%',
-                        }}
-                      >
-                      {/* 粒子火苗：fill-glow + tongue + halo 三层合并为一个 canvas 粒子火焰，Hover 时由父级 .ding-flame-window 的 flame-ignite 关键帧整体缩放点燃 */}
-                      <DingFlameParticle />
-                      </div>
-                    </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 青烟（hover 袅袅）：3 缕分别从 3 个窗口上方飘升；delay-200 与火苗错开，duration-500 与火苗同步 */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity delay-200 duration-500 group-hover/ding:opacity-100"
-                >
-                  {[
-                    { x: 37.55, phase: 0.0 },
-                    { x: 50.24, phase: 0.6 },
-                    { x: 63.09, phase: 1.2 },
-                  ].map((w) => (
-                    <div
-                      key={w.x}
-                      className="absolute"
-                      style={{
-                        left: `${w.x}%`,
-                        top: '34%',
-                        width: '8%',
-                        height: '18%',
-                        transform: 'translateX(-50%)',
-                      }}
-                    >
-                      {[0, 1, 2, 3, 4].map((i) => (
-                        <span
-                          key={i}
-                          className="ding-smoke absolute block rounded-full bg-sage/50"
-                          style={{
-                            width: 6 + i * 3,
-                            height: 6 + i * 3,
-                            left: -10 + i * 5,
-                            filter: 'blur(6px)',
-                            animationDuration: `${3.2 + i * 0.5}s`,
-                            animationDelay: `${i * 0.4 + w.phase}s`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
+                <BaguaFurnace alt={t('dingAlt')} windows={FURNACE_WINDOWS} />
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="relative z-10 max-w-3xl">
+        <div className="relative z-10 mx-auto max-w-3xl text-center md:mx-0 md:text-left">
           <h1 className="font-serif font-black leading-[1.06] tracking-tight text-foreground">
-            <span className="block text-[22vw] sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">
+            <span className="block text-[18vw] sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">
               {tHero('titlePart1')}
             </span>
-            <span className="block pl-[0.08em] text-[22vw] text-primary sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">
+            <span className="block pl-[0.08em] text-[18vw] text-primary sm:text-[13rem] md:text-[11rem] lg:text-[13rem]">
               {tHero('titlePart2')}
             </span>
           </h1>
