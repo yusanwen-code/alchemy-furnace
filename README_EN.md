@@ -1,365 +1,261 @@
-# Alchemy Furnace &middot; 炼丹炉
+# Alchemy Furnace · 炼丹炉
 
-<p align="center">
-  <a href="README.md">中文</a> &middot; <b>English</b>
-</p>
+[中文](./README.md) · English
 
-<p align="center">
-  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" />
-  <img src="https://img.shields.io/badge/Go-1.21-00ADD8?logo=go" />
-  <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python" />
-  <img src="https://img.shields.io/badge/PostgreSQL-14-4169E1?logo=postgresql" />
-  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker" />
-  <img src="https://img.shields.io/badge/License-Custom-orange.svg" />
-</p>
+> **Fire as the catalyst, herbs as the base.** Watch the spirit flow, watch the elixir form — all things can be refined into golden pills.
 
-<p align="center">
-  <i>"The Tao gives birth to One, One gives birth to Two, Two gives birth to Three, Three gives birth to all things — and all things can be refined into an Elixir Pill."</i>
-</p>
+Alchemy Furnace is a playground for "language-mode engineering" of AI Agents. Here, an **Elixir Pill** is a structured skill package that encapsulates a persona and writing style, while a **Dao Agent** is an AI Agent that "takes" a pill — once ingested, the agent's voice is shaped by the pill's essence, speaking in a distinctly new register.
 
-<p align="center">
-  <a href="#introduction">Introduction</a> &middot;
-  <a href="#features">Features</a> &middot;
-  <a href="#architecture">Architecture</a> &middot;
-  <a href="#quick-start">Quick Start</a> &middot;
-  <a href="#concepts">Concepts</a> &middot;
-  <a href="#api">API</a> &middot;
-  <a href="#documentation">Documentation</a>
-</p>
+Under the hood: a Go API gateway, a Python synthesis engine, and a Next.js frontend. Multiple OpenAI-compatible model providers are supported.
 
 ---
 
-## Introduction
-
-**Alchemy Furnace** is a **Skill-Persona Alchemy** system inspired by Taoist inner alchemy. Here, language patterns and persona traits are refined into **Elixir Pills**, and AI Agents become **Dao Cultivators**. When a cultivator consumes a pill, their speech and thinking are transformed by the pill's "elixir nature," letting them discourse with you in an entirely new linguistic style.
-
-> The ancients said: "When the pill is complete, dragon and tiger submit; when the Tao is attained, ghosts and gods are awed." Today we use AI as fire and language patterns as ingredients, refining pills of persona and raising cultivators of every temperament.
-
-## About the Author
-
-This project, **Alchemy Furnace (炼丹炉)**, is developed and maintained by **[yusanwen-code](https://github.com/yusanwen-code)**.
-
-- **GitHub**: [https://github.com/yusanwen-code](https://github.com/yusanwen-code)
-- **Repository**: [https://github.com/yusanwen-code/alchemy-furnace](https://github.com/yusanwen-code/alchemy-furnace)
-- **Licensing**: Open source for personal use; closed for commercial use. Free for personal, learning, and research purposes; commercial use requires a separate license and must retain the project name and developer attribution.
-
 ## Features
 
-### Core Capabilities
+**Core**
+- **Pill Workshop** — Structured skill editor: expression DNA, mental models, decision heuristics, taboo words, example dialogues
+- **Agent Hall** — Create and manage multiple AI Agents, each bound to a chosen LLM
+- **Bind Pill** — One agent can ingest multiple pills, with weight and intake-order control
+- **Pill Essence Synthesis** — Engine merges pills by weight, deduplicates, detects conflicts, then an LLM call distills a unified system prompt
+- **Trial Synthesis** — Preview the synthesis without binding any agent
+- **Streaming Discourse** — SSE-based chat; the synthesized prompt is always live
 
-- **Pill Refinement** — Craft Elixir Pills from structured skill schemas: expression DNA, mental models, decision heuristics, taboos, honest limits, and example dialogues
-- **Cultivator Creation** — Create personalized AI Agents (Dao Cultivators) with base personalities and chosen LLMs
-- **Pill Consumption** — A cultivator may consume multiple pills, with adjustable weights and consumption order
-- **Skill-Persona Synthesis** — The synthesis engine structurally merges the cultivator's base personality with consumed pills, then uses LLM-driven emergent inference to produce a unified "elixir nature" system prompt
-- **Multi-Pill Fusion** — Multiple pills blend by weight, with automatic conflict detection (elixir clashes) and emergent rule extraction to avoid stylistic tearing
-- **Pill Trial Preview** — Temporarily combine personalities and pills to preview synthesis results without binding to a cultivator
-- **Tao Discourse** — Streaming chat where the cultivator always replies in the fused linguistic style; supports mid-stream stop and automatic reconnection
-- **Model Management** — Independently configure models from multiple providers (OpenAI / DeepSeek / Qwen / Ollama, etc.), with encrypted API key storage, connection testing, and default/synthesis model settings
+**Engineering**
+- **Three-tier architecture** — Go gateway + Python engine + Next.js frontend, cleanly separated
+- **Responsive UI** — Same code serves desktop and mobile H5
+- **Provider-agnostic** — Built-in templates for common OpenAI-compatible providers (DeepSeek, Qwen, Zhipu GLM, Kimi, Baichuan, Wenxin, Ollama); API keys encrypted at rest
+- **Synthesis cache** — Each agent's synthesized prompt is cached and rebuilt on personality or pill changes
+- **Demo Mode** — `DEMO_MODE=true` runs everything in-memory; no PostgreSQL required
 
-### Technical Highlights
-
-- **Responsive Design** — A single React codebase supports both desktop web and mobile H5
-- **Microservice Architecture** — Go handles the API gateway and business data; Python handles the language-pattern synthesis engine and LLM calls, with clear separation of concerns
-- **Streaming Chat** — WebSocket real-time delivery with typewriter-style AI replies
-- **Synthesis Cache** — Each cultivator's synthesized system prompt is cached on demand and automatically rebuilt when personality or pills change
-- **Taoist Aesthetics** — Cinnabar red, gold-foil yellow, rice-paper white, and CSS-animated furnace effects for an immersive experience
+---
 
 ## Architecture
 
 ```
-                Purple Palace (React Frontend)
-                         │
-                  Southern Heaven Gate (Nginx)
-                    /          \
-            Azure Dragon     White Tiger
-             (Go API)    (Python Language Engine)
-              │              │
-        Jade Archive (PG)   LLM (OpenAI-compatible)
+             Browser / H5
+                 │
+              Nginx
+                 │
+         ┌───────┴───────┐
+         │               │
+       Go API          Python
+     (Gin + GORM)    (FastAPI)
+         │               │
+         └───────┬───────┘
+                 │
+             PostgreSQL
 ```
 
-| Service | Tech | Responsibility | Port |
-|---------|------|----------------|------|
-| **Purple Palace** | React 18 + TypeScript + Tailwind CSS | User interface | 80 (Nginx) |
-| **Azure Dragon** | Go 1.21 + Gin + GORM | API gateway, business logic, cultivator/pill/session persistence | 8080 |
-| **White Tiger** | Python 3.11 + FastAPI | Language-pattern synthesis engine, LLM calls | 8000 |
-| **Jade Archive** | PostgreSQL 14 | Business data persistence | 5432 |
-| **Southern Heaven Gate** | Nginx | Reverse proxy, static files | 80 |
+| Service | Stack | Role | Port |
+|------|--------|------|------|
+| Frontend | Next.js 16 + React 19 + Tailwind 4 | UI (zh-CN / en / responsive) | 3000 |
+| Go API | Go 1.21+ + Gin + GORM | Gateway, agents / pills / sessions persistence | 8080 |
+| Python Engine | Python 3.11+ + FastAPI | Language synthesis, LLM calls | 8000 |
+| PostgreSQL | 14+ | Business data | 5432 |
+| Nginx | — | Reverse proxy, static files | 80 |
+
+---
 
 ## Quick Start
 
-### Requirements
-
-- [Docker](https://docs.docker.com/get-docker/) 20.10+
-- [Docker Compose](https://docs.docker.com/compose/install/) 2.0+
-- An OpenAI-compatible API key (OpenAI, DeepSeek, Qwen, etc.)
-
-### One-Click Deployment
+### 1. One-command Docker deployment
 
 ```bash
-# 1. Clone the repository
+# 1. Clone
 git clone https://github.com/yusanwen-code/alchemy-furnace.git
 cd alchemy-furnace
 
-# 2. Configure the environment
+# 2. Configure env
 cp .env.example .env
-# Edit .env and fill in your OPENAI_API_KEY,
-# and set MODEL_KEY_SECRET (the encryption key for model API keys —
-# any long random string, e.g. `openssl rand -hex 32`);
-# without it, API keys cannot be saved in Model Management
+# Edit .env: set OPENAI_API_KEY and MODEL_KEY_SECRET
+# MODEL_KEY_SECRET encrypts stored model API keys; generate with: openssl rand -hex 32
 
-# 3. Light the furnace
-make deploy
-
-# 4. Open the furnace
-# Visit http://localhost in your browser
+# 3. Launch
+make deploy         # equivalent to: make init && make build && make up
+make ps             # container status
+make logs           # tail logs
 ```
 
-### Make Commands
+Open http://localhost in your browser.
+
+### 2. Local development (no Docker)
+
+You need: PostgreSQL 14+ (try [Postgres.app](https://postgresapp.com/)), Go 1.21+, Python 3.11+, Node.js 20+.
 
 ```bash
-make help       # Show all available commands
-make init       # Initialize the environment
-make build      # Build images
-make up         # Start services
-make down       # Stop services
-make logs       # View logs
-make ps         # View service status
-make clean      # Remove all data
-make dev-front  # Frontend dev mode
-make dev-go     # Go backend dev mode
-make dev-python # Python language engine dev mode
-```
-
-### Local Development (without Docker)
-
-Prerequisites: PostgreSQL 14+ (e.g. [Postgres.app](https://postgresapp.com/)), Go 1.21+, Python 3.11+, Node.js 20+.
-
-```bash
-# 1. Prepare the database (local PostgreSQL on 5432)
+# 1. Prepare the database
 createuser alchemy && createdb -O alchemy alchemy_db
 psql -c "ALTER USER alchemy PASSWORD 'alchemy123';"
 
-# 2. Configure the environment (set DB_HOST to localhost
-#    and PYTHON_ENGINE_BASE_URL to http://localhost:8000)
-cp .env.example .env  # Edit for your local setup
+# 2. Configure .env
+cp .env.example .env
+# Set DB_HOST=localhost and PYTHON_ENGINE_BASE_URL=http://localhost:8000
 
-# 3. Start in three terminals
-make dev-python   # Python language engine → http://localhost:8000
-make dev-go       # Go API gateway (auto-migrate + seed built-in pills) → http://localhost:8080
-make dev-front    # React frontend → http://localhost:3000
+# 3. Launch in three terminals
+make dev-python     # Python engine → http://localhost:8000
+make dev-go         # Go gateway (auto-migrates + seeds built-in pills) → http://localhost:8080
+make dev-front      # Next.js frontend → http://localhost:3000
 ```
 
-### First-Time Guide
+Or run `bash scripts/dev.sh` to bring all three up at once (it handles Docker postgres vs Postgres.app port conflicts).
 
-1. **Refine a Pill** — Go to the Pill Chamber and create an Elixir Pill: fill in expression DNA (sentence length, formality, vocabulary, taboo words), mental models, decision heuristics, example dialogues, and other structured content
-2. **Raise a Cultivator** — Go to the Cultivator Hall, click "Accept Disciple", and configure the cultivator's name, base personality, and chosen LLM
-3. **Consume Pills** — On the cultivator detail page, have the cultivator consume refined pills, adjusting weights and consumption order
-4. **Trial Preview** (optional) — On the Pill Trial page, temporarily combine personalities and pills to preview synthesis results
-5. **Begin the Discourse** — Go to the Discourse page, choose a cultivator, and start chatting!
+### 3. Demo Mode
 
-## Concepts
-
-### Elixir Pill (金丹)
-
-> "The golden pill is the condensation of primordial unity."
-
-An Elixir Pill is a **structured skill package of language patterns and persona traits**. Each pill contains:
-
-| Field | Description |
-|-------|-------------|
-| identity_card | Identity card: the pill-persona's self-conception |
-| expression_dna | Expression DNA: sentence length, formality, vocabulary, taboo words |
-| mental_models | Mental models: thinking frameworks for approaching problems |
-| decision_heuristics | Decision heuristics: expression strategies for specific situations |
-| values / anti_patterns | Value orientation and anti-patterns |
-| honest_limits | Honest limits: candid statements of capability boundaries |
-| example_dialogues | Example dialogues: concrete demonstrations of style |
-
-### Dao Cultivator (道人)
-
-> "The Tao is that to which all things belong."
-
-A Dao Cultivator is an **AI Agent**. Each cultivator has an independent base personality, system prompt, and chosen LLM. Their speech is shaped jointly by "base personality + consumed pills".
-
-### Pill Consumption (服用金丹)
-
-> "Consume the golden pill, shed your mortal bones, and comprehend all ages."
-
-Binding a pill to a cultivator, with configurable **weight** and **sort_order**. One cultivator may consume multiple pills — the natures of many pills fused into one being.
-
-### Skill-Persona Synthesis (金丹化性)
-
-> "Gather herbs → Proportion → Into the furnace → Gentle nurture → Open the furnace and take the pill"
-
-Mapping to the synthesis pipeline:
-
-| Alchemy Step | Synthesis Step | Description |
-|--------------|----------------|-------------|
-| Gather herbs | Read traits | Load the cultivator's base personality and consumed pills |
-| Proportion | Structural merge | Blend expression DNA and mental models by weight; deduplicate; detect conflicts |
-| Into the furnace | Emergent inference | One LLM call distills the fused "elixir nature" and emergent rules |
-| Gentle nurture | Caching | The synthesized system prompt is cached on the cultivator and rebuilt on change |
-| Open the furnace | Discourse | Call the LLM with the synthesized prompt to generate replies |
-
-## Screenshots
-
-<p align="center">
-  <i>🖼️ Pill Chamber — Elixir Pill (skill package) management</i>
-</p>
-
-<p align="center">
-  <i>🖼️ Cultivator Hall — AI Agent management</i>
-</p>
-
-<p align="center">
-  <i>🖼️ Discourse — streaming chat</i>
-</p>
-
-## API
-
-See [docs/api.md](docs/api.md) for details.
-
-### Quick Examples
+Demo Mode needs **no PostgreSQL** — Go and Python both run in-memory mocks. Ideal for product demos and offline exploration.
 
 ```bash
-# Create a pill (structured skill package)
+# Local dev
+export DEMO_MODE=true
+bash scripts/dev.sh
+
+# One-command server deploy
+sudo bash scripts/deploy-demo.sh
+```
+
+On startup, 9 pills / 9 agents / 9 providers / 9 models / 9 sessions are auto-loaded; chat and synthesis return fixed Chinese replies from a mock provider. See [docs/operations/deploy.md](docs/operations/deploy.md).
+
+---
+
+## First Run
+
+1. **Refine a Pill** — Open "Pill Workshop", create a pill: fill in expression DNA (sentence length, formality, vocabulary, taboo words), mental models, example dialogues
+2. **Cultivate an Agent** — Open "Agent Hall", click "Recruit Disciple", set a base personality and a chosen LLM
+3. **Bind Pills** — On the agent's detail page, select pills for the agent to ingest; tune weight and order
+4. **Trial Synthesis** — Open "Trial Synthesis" to combine personality and pills temporarily and preview the result
+5. **Open the Discourse** — Open "Discourse", pick an agent, start the SSE streaming chat
+
+---
+
+## Core Concepts
+
+### Elixir Pill
+
+A structured skill package that defines a language style and persona. Each pill contains:
+
+| Field | Description |
+|------|------|
+| `identity_card` | Self-concept of the persona this pill embodies |
+| `expression_dna` | Expression DNA: sentence length, formality, vocabulary, taboo words |
+| `mental_models` | Frameworks for understanding problems |
+| `decision_heuristics` | Expression strategies for specific situations |
+| `values` / `anti_patterns` | Values and anti-patterns |
+| `honest_limits` | Honest declaration of capability limits |
+| `example_dialogues` | Concrete demonstrations of the style |
+
+### Dao Agent
+
+An AI Agent entity with a base personality, a chosen LLM, and the pills it has ingested. Its reply style is shaped by "base personality + synthesized pill essence".
+
+### Bind Pill
+
+Associates a pill with an agent, configured by **weight** and **intake order** (sort_order). One agent can ingest many pills at once.
+
+### Synthesis (Language Pattern Synthesis)
+
+Merge pills by weight, deduplicate, detect conflicts, then let an LLM distill a unified system prompt. The flow maps to five alchemical steps:
+
+| Alchemy | Synthesis | Description |
+|------|------|------|
+| Gather herbs | Read traits | Read the agent's base personality and bound pills |
+| Compound | Structured merge | Blend by weight, deduplicate, detect conflicts |
+| Kindle | Emergent distillation | LLM call extracts the unified essence and emergent rules |
+| Temper | Cache | The synthesized prompt is cached per-agent; rebuilt on change |
+| Unseal | Discourse | Stream LLM replies using the synthesized prompt |
+
+---
+
+## API Quick Reference
+
+```bash
+# Create a pill
 curl -X POST http://localhost:8080/api/v1/pills \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Classical Chinese Pill",
-    "description": "Makes the cultivator speak in classical Chinese",
-    "skill_schema": {
-      "identity_card": "I am an ancient scholar well-versed in the classics, fond of classical prose.",
-      "expression_dna": {
-        "sentence_length": "medium",
-        "formality": 0.9,
-        "vocabulary": ["之", "乎", "者", "也"],
-        "taboo_words": ["你", "我", "的", "了"]
-      }
-    },
-    "tags": ["classical", "elegant"],
-    "author": "system",
-    "version": "1.0.0"
-  }'
+  -d '{"name": "Classical Chinese Pill", "description": "Makes the agent speak in literary Chinese", "skill_schema": {...}, "tags": ["classical"], "author": "system", "version": "1.0.0"}'
 
-# Create a cultivator
+# Create an agent
 curl -X POST http://localhost:8080/api/v1/agents \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Taishang Laojun",
-    "personality": "You are Taishang Laojun, the patriarch of Taoism. Your speech is filled with supreme wisdom, and you expound all things through the philosophy of the Tao Te Ching.",
-    "model_name": "gpt-4o"
-  }'
+  -d '{"name": "Laozi", "personality": "Daoist founder, full of supreme wisdom", "model_name": "gpt-4o"}'
 
-# Consume a pill (with weight and order)
-curl -X POST http://localhost:8080/api/v1/agents/1/pills \
+# Bind a pill
+curl -X POST http://localhost:8080/api/v1/agents/{agent_uuid}/pills \
   -H "Content-Type: application/json" \
-  -d '{"pill_id": 1, "weight": 1.0, "sort_order": 0}'
+  -d '{"pill_id": "{pill_uuid}", "weight": 1.0, "sort_order": 0}'
 
-# Create a session and chat (WebSocket)
-# See the API docs and specs/001-skill-persona-alchemy-pivot/quickstart.md
+# SSE streaming chat
+curl -N -X POST http://localhost:8080/api/v1/chat/sse/{session_uuid} \
+  -H "Content-Type: application/json" \
+  -d '{"content": "What is the Dao?"}'
 ```
+
+Full reference: [docs/api.md](docs/api.md).
+
+---
 
 ## Documentation
 
 | Document | Description |
-|----------|-------------|
-| [docs/architecture.md](docs/architecture.md) | System architecture deep dive |
-| [docs/api.md](docs/api.md) | API reference |
-| [docs/frontend.md](docs/frontend.md) | Frontend development guide |
-| [docs/deployment.md](docs/deployment.md) | Deployment guide |
-| [specs/001-skill-persona-alchemy-pivot/quickstart.md](specs/001-skill-persona-alchemy-pivot/quickstart.md) | Skill-Persona system quick verification guide |
+|------|------|
+| [docs/architecture.md](docs/architecture.md) | System architecture in depth |
+| [docs/api.md](docs/api.md) | Full API reference |
+| [docs/frontend.md](docs/frontend.md) | Frontend dev guide |
+| [docs/operations/deploy.md](docs/operations/deploy.md) | Demo Mode and server deploy |
+
+---
 
 ## Project Structure
 
 ```
 alchemy-furnace/
-├── README.md                    # Project overview (Chinese)
-├── README_EN.md                 # Project overview (English)
-├── docker-compose.yml           # Docker orchestration
-├── .env.example                 # Environment variable template
-├── Makefile                     # Common commands
-├── docs/                        # Maintenance docs
-│   ├── architecture.md          # Architecture
-│   ├── api.md                   # API reference
-│   ├── frontend.md              # Frontend guide
-│   └── deployment.md            # Deployment guide
+├── README.md                    # 中文
+├── README_EN.md                 # this file
+├── Makefile                     # common commands
+├── docker-compose.yml
+├── .env.example
+├── docs/                        # maintenance docs
 ├── backend/
-│   ├── go/                      # Go API gateway
-│   │   ├── cmd/server/
-│   │   ├── dao/
-│   │   ├── handler/
-│   │   ├── model/
-│   │   ├── pkg/
-│   │   ├── service/
-│   │   ├── go.mod
+│   ├── go/                      # Go API gateway (Gin + GORM)
+│   │   ├── cmd/                 # entry
+│   │   ├── internal/            # handler / service / dao
 │   │   └── Dockerfile
-│   └── python/                  # Python language-pattern synthesis engine
+│   └── python/                  # Python engine (FastAPI)
 │       ├── app/
-│       │   ├── api/
-│       │   ├── core/
-│       │   ├── models/
-│       │   └── services/
-│       ├── requirements.txt
+│       │   ├── api/             # routes
+│       │   ├── core/            # config / runtime
+│       │   ├── models/          # data models
+│       │   └── services/        # synthesis / provider
 │       └── Dockerfile
-└── frontend/                    # React frontend
-    ├── src/
-    ├── public/
-    ├── package.json
+└── frontend/                    # Next.js frontend
+    ├── app/                     # App Router ([locale] + (main))
+    ├── components/              # business components
+    ├── contexts/                # React Context
+    ├── lib/                     # utilities
+    ├── messages/                # i18n message dictionary
+    ├── public/                  # static assets
     └── Dockerfile
 ```
 
+---
+
 ## Tech Stack
 
-### Frontend
-- React 18 + TypeScript
-- Tailwind CSS + shadcn/ui
-- Vite
-- HashRouter (compatible with static deployment)
-- WebSocket client
-- React Context API state management
-
-### Backend
-- Go 1.21 + Gin
-- GORM + PostgreSQL
-- WebSocket
-- RESTful API
-- Zap logging
-
-### Language-Pattern Synthesis Engine
-- Python 3.11 + FastAPI
-- OpenAI SDK (compatible with any OpenAI-style API)
-- Structural merge + LLM emergent inference
-
-## Roadmap
-
-- [x] Pill management (skill package CRUD)
-- [x] Cultivator management (Agent CRUD)
-- [x] Pill consumption (weight and order configuration)
-- [x] Language-pattern synthesis engine (structural merge + LLM emergent inference)
-- [x] Pill trial preview (quick verification with temporary combinations)
-- [x] Streaming chat (WebSocket)
-- [ ] Multi-turn conversation context optimization
-- [ ] Visualized elixir-clash warnings
-- [ ] Multi-user access control
-- [ ] Visualization of the refinement process
-- [ ] Pill sharing and marketplace
-
-## License
-
-This project uses a custom license — see the [LICENSE](LICENSE) file for details.
-
-**In brief:**
-
-- **Personal use, learning, and research**: free to use, modify, and distribute
-- **Commercial use**: you must retain the project name "炼丹炉 (Alchemy Furnace)" and developer attribution "yusanwen-code", and contact the author for a commercial license
+**Frontend** · Next.js 16 · React 19 · Tailwind 4 · next-intl · pnpm
+**Gateway** · Go 1.21+ · Gin · GORM
+**Engine** · Python 3.11+ · FastAPI · OpenAI SDK
+**Storage** · PostgreSQL 14+
+**Deploy** · Docker Compose · Nginx
 
 ---
 
-<p align="center">
-  <i>The Tao follows nature &middot; Refining elixir, forging intelligence</i>
-</p>
+## License
 
-<p align="center">
-  Made with ☯️ by <a href="https://github.com/yusanwen-code">yusanwen-code</a>
-</p>
+Custom license — see [LICENSE](LICENSE).
+
+**Summary**
+- Personal use, learning, research: free to use, modify, distribute
+- Commercial use: must retain the project name "Alchemy Furnace (炼丹炉)" and attribution to "yusanwen-code"; contact the author for a commercial license
+
+---
+
+<p align="center"><i>The Dao follows nature · Forging wisdom in the furnace</i></p>
+<p align="center">Made with ☯️ by <a href="https://github.com/yusanwen-code">yusanwen-code</a></p>
