@@ -25,10 +25,16 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
-# ════════════════════════════════════════════════
-# 注意:不能用顶层 anchor,GitHub Actions 不接受未知顶层 key。
-# 必须在每个 build-* job 的 steps 末尾 inline 同样的步骤。
-# ════════════════════════════════════════════════
+# 注: 早期版本尝试过在 release.yml 末尾 PATCH API 把
+# 3 个 package 改 private,但 GHCR 对 OAuth/GITHUB_TOKEN
+# 不接受 PATCH 改 visibility (x-accepted-oauth-scopes 永远空)。
+# 当前方案: 镜像保持 public visibility,精确控制靠
+#  1) 在 release 之前从本地 ~/alchemy-furnace-deploy/k8s/
+#     部署 (不暴露)
+#  2) 公开仓库 README 只展示设计,不放可 apply 的清单
+#  3) 如需真正 private 镜像,改用 GHCR + GitHub App
+#     (PAT with packages:write 才行,但 GitHub Actions
+#      GITHUB_TOKEN 实际是 GitHub App token,权限受限)
 
 jobs:
   # ───────────────────── 1. release 前置校验 ─────────────────────
@@ -83,23 +89,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Set package visibility = private
-        if: success()
-        run: |
-          for svc in go-api python-engine frontend; do
-            echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
-              -d '{"visibility":"private"}')
-            echo "  → HTTP ${http_code}"
-            if [ "${http_code}" != "200" ]; then
-              echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
-            fi
-          done
-
   build-python:
     name: Build & push python-engine
     needs: validate
@@ -125,23 +114,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-engine:${{ needs.validate.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Set package visibility = private
-        if: success()
-        run: |
-          for svc in go-api python-engine frontend; do
-            echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
-              -d '{"visibility":"private"}')
-            echo "  → HTTP ${http_code}"
-            if [ "${http_code}" != "200" ]; then
-              echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
-            fi
-          done
 
   build-frontend:
     name: Build & push frontend
@@ -171,20 +143,3 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ needs.validate.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Set package visibility = private
-        if: success()
-        run: |
-          for svc in go-api python-engine frontend; do
-            echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
-              -d '{"visibility":"private"}')
-            echo "  → HTTP ${http_code}"
-            if [ "${http_code}" != "200" ]; then
-              echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
-            fi
-          done
