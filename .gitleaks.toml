@@ -1,0 +1,46 @@
+# gitleaks 配置
+# 用途: 拦截 commit 中的 secret/API key/账号凭据
+# 触发: pre-commit hook (见 .githooks/pre-commit)
+# 文档: https://github.com/gitleaks/gitleaks
+
+# 1. 使用 gitleaks 内置默认 rules(覆盖 100+ 种 secret pattern
+#    含 Tencent Cloud AccessKey / GitHub PAT / AWS keys / 私钥等)
+# 2. 只允许在测试文件 / mock 文件中豁免
+[allowlist]
+  paths = [
+    # 测试 fixture / mock
+    '''tests/.*_test\.go$''',
+    '''backend/go/internal/testdata/.*''',
+    '''.*\.example$''',
+    '''.*\.example\.env$''',
+
+    # pre-commit hook 自己
+    '''.githooks/.*''',
+
+    # 本配置文件
+    '''.gitleaks\.toml$''',
+  ]
+
+  # 误报高的字串(如示例)
+  regexes = [
+    '''(?i)example[_-]?(token|key|secret)''',
+    '''(?i)test[_-]?(token|key|secret)''',
+    '''(?i)your[_-]?(token|key|secret)''',
+  ]
+
+# 本项目特定: 拦截 hardcoded 腾讯云账号 ID / registry 域名
+# (gitleaks 默认 rules 不识别这些字面量)
+#
+# 设计: 用绝对字符串而非泛 regex,避免误报 UUID / 假 API key / 测试 fixture
+[[rules]]
+  id = "tencent-account-id"
+  description = "腾讯云账号 ID (本项目 specific 字面量)"
+  # 直接列已知 ID 字面量(账号 ID 一般是公开的,但 commit 里出现就是泄露)
+  regex = '''100019364123'''
+  tags = ["tencent", "account-id", "custom"]
+
+[[rules]]
+  id = "tencent-ccr-registry"
+  description = "腾讯云 CCR 私有 registry 域名"
+  regex = '''ccr\.ccs\.tencentyun\.com'''
+  tags = ["tencent", "registry", "custom"]

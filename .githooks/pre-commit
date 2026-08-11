@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════
+# pre-commit 钩子 — 两层防护:
+#   1. gitleaks       — 工业级 secret 扫描(覆盖 Tencent/AWS/GitHub 等)
+#   2. sensitive-word — 本项目 specific 拦截(账号 ID / registry 域名)
+#
+# 跳过机制:
+#   - SKIP_PRE_COMMIT=1  跳过整个钩子(应急用)
+#   - SKIP_GITLEAKS=1    仅跳过 gitleaks
+#   - SKIP_SENSITIVE=1   仅跳过 sensitive-word
+#
+# 安装 (clone 后一次):
+#   git config core.hooksPath .githooks
+# ═══════════════════════════════════════════════════════════════════
+
+set -e
+
+# ── 0. 准备 ────────────────────────────────────────────────────
+if [ "$SKIP_PRE_COMMIT" = "1" ]; then
+  echo "[pre-commit] SKIP_PRE_COMMIT=1, 跳过整个钩子"
+  exit 0
+fi
+
+# ── 1. sensitive-word 拦截 (本项目 specific) ───────────────────
+# 这些是这次 audit 中暴露的"擦边"信息,即使 gitleaks 漏过,我们也拦
+# (与 .gitleaks.toml 中 custom rules 保持一致 — 精准字符串匹配)
+SENSITIVE_PATTERNS=(
+  # 腾讯云账号 ID (本项目 specific 字面量,不用泛数字 regex 避免误报)
+  '100019364123'
+
+  # 腾讯云 CCR 私有 registry 域名
+  'ccr\.ccs\.tencentyun\.com'
+)
+
+check_sensitive() {
+  if [ "$SKIP_SENSITIVE" = "1" ]; then
+    return 0
+  fi
+
+  local violations=()
+
+  for pattern in "${SENSITIVE_PATTERNS[@]}"; do
+    # 排除钩子配置文件本身(它含拦截模式字面量,不是真泄露)
+    if git diff --cached --diff-filter=ACMR \
+        -- ':!.githooks/*' ':!.gitleaks.toml' | \
+       grep -E -- "$pattern" >/dev/null 2>&1; then
+      violations+=("$pattern")
+    fi
+  done
+
+  if [ ${#violations[@]} -gt 0 ]; then
+    echo "❌ [sensitive-word] 检测到本项目特定敏感字串,拒绝 commit:"
+    for v in "${violations[@]}"; do
+      echo "   模式: $v"
+      echo "   匹配行:"
+      git diff --cached --diff-filter=ACMR | grep -E -- "$v" | head -3 | sed 's/^/     /'
+    done
+    echo ""
+    echo "修复方案:"
+    echo "  1. 改用 GitHub Secrets 引用(见 .github/workflows/release.yml)"
+    echo "  2. 应急跳过: SKIP_SENSITIVE=1 git commit ..."
+    return 1
+  fi
+
+  echo "✅ [sensitive-word] 干净"
+  return 0
+}
+
+# ── 2. gitleaks (工业级 secret 扫描) ──────────────────────────
+check_gitleaks() {
+  if [ "$SKIP_GITLEAKS" = "1" ]; then
+    echo "[pre-commit] SKIP_GITLEAKS=1, 跳过 gitleaks"
+    return 0
+  fi
+
+  if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "⚠️  [gitleaks] 未安装,跳过 secret 扫描"
+    echo "   安装: brew install gitleaks"
+    return 0
+  fi
+
+  if gitleaks protect --staged --redact --no-banner \
+      --config "$(git rev-parse --show-toplevel)/.gitleaks.toml" 2>&1; then
+    echo "✅ [gitleaks] 干净"
+    return 0
+  else
+    echo ""
+    echo "❌ [gitleaks] 检测到 secret,拒绝 commit"
+    echo "   应急跳过: SKIP_GITLEAKS=1 git commit ..."
+    return 1
+  fi
+}
+
+# ── 3. 跑 ─────────────────────────────────────────────────────
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "pre-commit 钩子 (gitleaks + sensitive-word)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+failed=0
+
+check_sensitive || failed=1
+echo ""
+check_gitleaks || failed=1
+
+echo ""
+if [ $failed -ne 0 ]; then
+  echo "❌ pre-commit 失败,commit 拒绝"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  exit 1
+fi
+
+echo "✅ pre-commit 通过"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+exit 0

@@ -203,6 +203,33 @@ curl -N -X POST http://localhost:8080/api/v1/chat/sse/{session_uuid} \
 
 ---
 
+## 贡献者必读（Pre-commit Hook）
+
+仓库自带 **pre-commit 钩子**，在 `git commit` 时自动跑两层扫描：
+
+- **gitleaks** —— 拦截常见 secret（API key / 私钥 / 账号凭据等 100+ 模式）
+- **sensitive-word** —— 拦截本项目 specific 敏感字串（账号 ID、registry 域名）
+
+### 安装（clone 后一次）
+
+```bash
+# 1. 装 gitleaks（macOS）
+brew install gitleaks
+
+# 2. 让 git 用本仓库的 hooks 目录
+git config core.hooksPath .githooks
+```
+
+跳过机制（应急用，**不推荐**）：
+
+```bash
+SKIP_GITLEAKS=1 git commit -m "..."   # 只跳过 gitleaks
+SKIP_SENSITIVE=1 git commit -m "..."  # 只跳过 sensitive-word
+SKIP_PRE_COMMIT=1 git commit -m "..." # 跳过整个钩子
+```
+
+---
+
 ## 项目结构
 
 ```
