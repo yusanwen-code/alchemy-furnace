@@ -42,7 +42,7 @@ ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
-    APP_MODE=demo
+    DEMO_MODE=true
 
 RUN apk --no-cache add ca-certificates curl tzdata
 

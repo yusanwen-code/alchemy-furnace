@@ -16,7 +16,7 @@ ARG HTTPS_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    APP_MODE=demo
+    DEMO_MODE=true
 
 # 仅构建期需要：gcc / make（某些 pip 包要编译）
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,7 +39,7 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    APP_MODE=demo
+    DEMO_MODE=true
 
 # 运行时需要：ffmpeg（可选音频处理） + curl（健康检查） + ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
