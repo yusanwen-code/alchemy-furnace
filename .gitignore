@@ -49,6 +49,12 @@ postgres_data/
 
 # Claude workspace files
 .claude/
+# 个人 AI 指令 / 代理规则（开源项目不入库；无斜杠模式匹配任意层级）
+CLAUDE.md
+AGENTS.md
+
+# AI 工作流过程产物（本地，不提交）
+docs/superpowers/
 
 # Specify tooling files
 .specify/
