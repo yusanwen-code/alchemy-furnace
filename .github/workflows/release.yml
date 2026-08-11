@@ -26,26 +26,9 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 # ════════════════════════════════════════════════
-# 通用后处理：build & push 完后,把 3 个 package 改 private
-# 默认 GHCR 继承仓库 public 可见性,本 workflow 强制 private
+# 注意:不能用顶层 anchor,GitHub Actions 不接受未知顶层 key。
+# 必须在每个 build-* job 的 steps 末尾 inline 同样的步骤。
 # ════════════════════════════════════════════════
-visibility-private: &visibility-private
-  - name: Set package visibility = private
-    if: success()
-    run: |
-      for svc in go-api python-engine frontend; do
-        echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
-        http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
-          -d '{"visibility":"private"}')
-        echo "  → HTTP ${http_code}"
-        if [ "${http_code}" != "200" ]; then
-          echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
-        fi
-      done
 
 jobs:
   # ───────────────────── 1. release 前置校验 ─────────────────────
@@ -100,7 +83,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - *visibility-private
+      - name: Set package visibility = private
+        if: success()
+        run: |
+          for svc in go-api python-engine frontend; do
+            echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
+              -d '{"visibility":"private"}')
+            echo "  → HTTP ${http_code}"
+            if [ "${http_code}" != "200" ]; then
+              echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
+            fi
+          done
 
   build-python:
     name: Build & push python-engine
@@ -128,7 +126,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - *visibility-private
+      - name: Set package visibility = private
+        if: success()
+        run: |
+          for svc in go-api python-engine frontend; do
+            echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
+              -d '{"visibility":"private"}')
+            echo "  → HTTP ${http_code}"
+            if [ "${http_code}" != "200" ]; then
+              echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
+            fi
+          done
 
   build-frontend:
     name: Build & push frontend
@@ -159,4 +172,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - *visibility-private
+      - name: Set package visibility = private
+        if: success()
+        run: |
+          for svc in go-api python-engine frontend; do
+            echo "Setting ghcr.io/yusanwen-code/alchemy-furnace/${svc} to private..."
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user/packages/container/alchemy-furnace%2F${svc}" \
+              -d '{"visibility":"private"}')
+            echo "  → HTTP ${http_code}"
+            if [ "${http_code}" != "200" ]; then
+              echo "::warning::Failed to set ${svc} private (HTTP ${http_code})"
+            fi
+          done
