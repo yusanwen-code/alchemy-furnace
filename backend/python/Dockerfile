@@ -48,8 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 非 root
-RUN addgroup -S app && adduser -S -G app app
+# 非 root（debian 风格：python:3.11-slim 是 debian,不是 alpine）
+RUN groupadd -r app && useradd -r -g app app
 
 # 把 builder 装好的 site-packages 复制到 runtime
 COPY --from=builder /install /usr/local
