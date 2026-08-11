@@ -81,8 +81,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "pnpm"
-          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # 显式装 pnpm —— 不依赖 setup-node 的 cache
+      # (setup-node cache: 'pnpm' 在 lockfileVersion 9 下有路径解析坑)
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
