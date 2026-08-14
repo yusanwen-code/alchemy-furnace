@@ -287,3 +287,72 @@
     display: none;
   }
 }
+
+/* ========== 桌面壳质感基座 (T1: 仅 is-desktop 生效, web/H5 零影响) ========== */
+/* 杀橡皮筋露底 + 字体平滑 */
+.is-desktop,
+.is-desktop body {
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+/* UI 文字默认不可选(网页感第一大来源);输入区/内容/代码放行 */
+.is-desktop * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.is-desktop :where(input, textarea, [contenteditable='true'], .md-selectable, .md-selectable *, pre, code, pre *) {
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* 选中色品牌化(琥珀) */
+.is-desktop ::selection {
+  background: rgb(217 119 6 / 0.35);
+}
+/* 焦点环: 鼠标点击不出蓝框,键盘 Tab 保留可及性 */
+.is-desktop *:focus {
+  outline: none;
+}
+.is-desktop *:focus-visible {
+  outline: 2px solid rgb(217 119 6 / 0.6);
+  outline-offset: 1px;
+}
+/* mac 风格细滚动条 */
+.is-desktop ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.is-desktop ::-webkit-scrollbar-thumb {
+  background: rgb(120 120 128 / 0.35);
+  border-radius: 4px;
+}
+.is-desktop ::-webkit-scrollbar-thumb:hover {
+  background: rgb(120 120 128 / 0.55);
+}
+.is-desktop ::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* 拖拽区钩子 (T2 用) */
+.is-desktop .app-drag {
+  --wails-draggable: drag;
+}
+.is-desktop .app-drag :where(a, button, input, select, textarea, [role='button'], .no-drag) {
+  --wails-draggable: no-drag;
+}
+
+/* ========== T2: mac 红绿灯 inset 留白 ========== */
+/* 桌面壳 + mac 才生效;web 模式 app-drag 不会 drag,此 padding 不影响 */
+.is-desktop.is-mac .app-drag {
+  padding-left: 76px; /* 红绿灯 (~28px) + 间距; webview 通顶后内容从 76px 起 */
+}
+
+/* ========== T5a: mac 毛玻璃侧栏 ========== */
+.is-desktop.is-mac .frosted {
+  background: rgb(24 24 27 / 0.72);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+/* 毛玻璃 webview 透明时,主内容区需要不透明底色防透桌面 */
+.is-desktop.is-mac .frosted + .content-opaque,
+.is-desktop.is-mac:has(.frosted) main {
+  background: var(--background);
+}

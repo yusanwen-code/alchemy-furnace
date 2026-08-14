@@ -89,6 +89,13 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
     return () => { cancelled = true }
   }, [])
 
+  // T4 快捷键 ⌘N: desktop-guards 在 window 派发 alchemy:new-session → 此处复用现有 setShowAgentSelect
+  useEffect(() => {
+    const onNewSession = () => setShowAgentSelect(true)
+    window.addEventListener('alchemy:new-session', onNewSession)
+    return () => window.removeEventListener('alchemy:new-session', onNewSession)
+  }, [])
+
   // 根据 URL 参数加载会话
   useEffect(() => {
     if (sessionId) {
@@ -254,7 +261,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
         transition-all duration-300 overflow-hidden
         border-r border-border/70 bg-muted
       `}>
-        <div className="w-72 h-full flex flex-col">
+        <div className="frosted w-72 h-full flex flex-col">
           {/* 侧边栏头部 */}
           <div className="flex items-center justify-between p-3 border-b border-border/70">
             <span className="text-sm font-medium text-gold">会话列表</span>

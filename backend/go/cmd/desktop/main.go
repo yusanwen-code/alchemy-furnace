@@ -12,7 +12,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 	"os"
+	"sync"
 
 	"github.com/alchemy-furnace/server/internal/configuration"
 	"github.com/alchemy-furnace/server/internal/configuration/loader"
@@ -25,6 +28,9 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"runtime"
 )
 
 // newRedirectHandler webview 资源处理器: 任何请求都返回 200 + JS 跳转到 http origin
@@ -50,11 +56,13 @@ func main() {
 		log.Fatalf("[炼丹炉] 初始化日志失败: %v", err)
 	}
 
-	_, stopEngine, err := engineproc.Start(context.Background())
-	if err != nil {
-		log.Fatalf("[炼丹炉] Python 引擎启动失败: %v", err)
-	}
-
+	// T3 重构: 先开窗,engineproc 走 goroutine,AssetServer 走 splash 三态
+	// 就绪口径: engineproc.Start 成功(DB 在主线程同步 init 几百毫秒,挪回避免 race
+	// 与 GetDB() log.Fatal 冲突;engineproc 3-5s 才是 splash 价值所在)
+	var readyMu sync.Mutex
+	var readyOK bool
+	var readyErr error
+	var stopEngine func()
 	if !configuration.IsDemo() {
 		if err := dao.InitDatabase(&configuration.Configuration.Database); err != nil {
 			log.Fatalf("[炼丹炉] 初始化数据库失败: %v", err)
@@ -63,6 +71,13 @@ func main() {
 			log.Fatalf("[炼丹炉] 自动建表失败: %v", err)
 		}
 	}
+	go func() {
+		_, stop, err := engineproc.Start(context.Background())
+		readyMu.Lock()
+		stopEngine = stop
+		readyOK, readyErr = err == nil, err
+		readyMu.Unlock()
+	}()
 
 	tok := make([]byte, 32)
 	if _, err := rand.Read(tok); err != nil {
@@ -79,6 +94,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("[炼丹炉] 装配路由失败: %v", err)
 	}
+	// T6: 桌面 Dock 弹跳端点(走同一 DesktopGuard)
+	engine.POST("/api/v1/desktop/notify", func(c *gin.Context) {
+		bounceDock()
+		c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": nil})
+	})
 	srv := &http.Server{Handler: engine}
 	go func() {
 		log.Printf("[炼丹炉] 桌面服务已就绪: http://%s", addr)
@@ -86,6 +106,13 @@ func main() {
 			log.Printf("[炼丹炉] 桌面服务退出: %v", err)
 		}
 	}()
+
+	// T5c: 加载上次窗口状态(nil=默认 1280x800 居中);wails v2 options.App 无 X/Y,只能恢复 W/H
+	ws := loadWindowState()
+	width, height := 1280, 800
+	if ws != nil {
+		width, height = ws.Width, ws.Height
+	}
 
 	// ALCHEMY_SMOKE=1: CI smoke,只起 HTTP 不开窗,外部 curl 验证后杀进程
 	if os.Getenv("ALCHEMY_SMOKE") == "1" {
@@ -96,20 +123,46 @@ func main() {
 	app := NewApp()
 	err = wails.Run(&options.App{
 		Title:    "炼丹炉",
-		Width:    1280,
-		Height:   800,
+		Width:    width,
+		Height:   height,
 		MinWidth: 960, MinHeight: 640,
+		// T4: macOS 原生菜单栏(关于/退出 + 剪贴板快捷键)
+		Menu:     buildAppMenu(),
+		// mac: 通顶内容,红绿灯 inset 悬浮(任务 T2)
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarHiddenInset(),
+			About:    &mac.AboutInfo{Title: "炼丹炉", Message: "Alchemy Furnace"},
+			// T5a 毛玻璃前提: webview 透明才能透出桌面
+			WebviewIsTransparent: true,
+		},
+		// win: 深色标题栏(任务 T2);globals.css body 底色 #f7f3ed 浅色但 chrome 跟系统区分
+		Windows: &windows.Options{
+			Theme: windows.Dark,
+		},
+		// T5a 毛玻璃: alpha=0 让 webview 启动前也是透明(透桌面)
+		// (T2 之前用 #f7f3ed 浅色防白闪,与毛玻璃互斥;T5 转入 alpha=0 接受 webview 未渲染前的瞬间透明)
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		AssetServer: &assetserver.Options{
-			Handler: newRedirectHandler(func() string {
-				return fmt.Sprintf("http://%s/?token=%s", addr, token)
-			}),
+			Handler: newSplashHandler(
+				// ready 时跳到真 origin (T2 已加 platform 参数)
+				func() string { return fmt.Sprintf("http://%s/?token=%s&platform=%s", addr, token, runtime.GOOS) },
+				// readiness 读 goroutine 写出的共享状态
+				func() (bool, error) { readyMu.Lock(); defer readyMu.Unlock(); return readyOK, readyErr },
+			),
 		},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "com.alchemyfurnace.desktop"},
 		Bind:               []interface{}{app},
 		OnStartup:          app.startup,
 		OnShutdown: func(ctx context.Context) {
+			// T5c 关窗落盘窗口几何(必须在 srv.Shutdown 前,ctx 仍有效)
+			saveWindowState(ctx)
 			_ = srv.Shutdown(ctx)
-			stopEngine()
+			readyMu.Lock()
+			stop := stopEngine
+			readyMu.Unlock()
+			if stop != nil {
+				stop()
+			}
 			dao.CloseDatabase()
 		},
 	})
