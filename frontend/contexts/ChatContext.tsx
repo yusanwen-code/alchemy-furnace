@@ -721,6 +721,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         turnTerminated = true
         turnPartial = false
         chunker.markDone()
+        dispatch({ type: 'FINISH_STREAM' })
+        // T6: 回合完成提醒(窗口未聚焦时 Dock 弹跳)
         notifyDesktop()
       },
       onStopped: () => {
@@ -775,6 +777,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         speakerPartial = false
         turnPartial = false
         chunker.markDone()
+        dispatch({ type: 'FINISH_STREAM' })
+        // T6: 群聊回合完成提醒
         notifyDesktop()
       },
       onTitle: (title) => {
