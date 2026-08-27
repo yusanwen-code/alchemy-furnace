@@ -20,6 +20,7 @@ import {
   Clock,
   Copy,
   Dna,
+  Download,
   FlaskConical,
   Gift,
   Handshake,
@@ -41,6 +42,7 @@ import { usePill } from '@/contexts/PillContext'
 import { usePillEditorFlow } from '@/hooks/use-pill-editor-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
 import { BindAgentModal } from '@/components/bind-agent-modal'
+import { SkillExportDialog } from '@/components/skill-export-dialog'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { formatDateTime } from '@/utils/format'
 import type {
@@ -192,6 +194,7 @@ export default function PillDetailPage({ pillId }: PillDetailPageProps) {
   useUnsavedChanges(flow.dirty, t('unsavedConfirm'))
 
   const [showBind, setShowBind] = useState(false)
+  const [showSkillExport, setShowSkillExport] = useState(false)
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [deleteStatus, setDeleteStatus] = useState<'idle' | 'submitting' | 'error'>('idle')
 
@@ -440,6 +443,14 @@ export default function PillDetailPage({ pillId }: PillDetailPageProps) {
                 <Gift className="h-4 w-4" />
                 {tPill('bindCta')}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowSkillExport(true)}
+                className="dao-btn-ghost text-sm"
+              >
+                <Download className="h-4 w-4" />
+                {tPill('exportSkillCta')}
+              </button>
               {!pill.is_builtin && (
                 <button
                   type="button"
@@ -605,6 +616,9 @@ export default function PillDetailPage({ pillId }: PillDetailPageProps) {
         </div>
 
         {showBind && <BindAgentModal pill={pill} onClose={() => setShowBind(false)} />}
+        {showSkillExport && (
+          <SkillExportDialog pill={pill} onClose={() => setShowSkillExport(false)} />
+        )}
       </div>
     )
   }

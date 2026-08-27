@@ -307,6 +307,7 @@
     "editCta": "Edit recipe",
     "cancelCta": "Cancel",
     "bindCta": "Bestow on daoist",
+    "exportSkillCta": "Export skill",
     "deleteCta": "Delete pill",
     "tab": {
       "content": "Notes",
@@ -751,6 +752,28 @@
     "success": "Bestowed",
     "errorLoadAgents": "Failed to load daoist list",
     "errorBind": "Binding failed"
+  },
+  "skillExport": {
+    "title": "Export skill",
+    "formatLabel": "Target platform",
+    "codex": "Codex",
+    "claude": "Claude",
+    "filenameLabel": "File name",
+    "contentsLabel": "Package contents",
+    "contents.skillMd": "SKILL.md — behavioral guidance and identity card",
+    "contents.sourcesMd": "references/sources.md — source summaries (titles, links and dimension only)",
+    "contents.readmeMd": "README.md — install and usage notes",
+    "contents.platformJson": "platform/claude.json — Claude platform metadata",
+    "sourceNote": "Sources: the package contains only source summaries and attribution, never full page text; attributed under the nuwa-skill MIT license.",
+    "privacyNote": "Confirmed: no API keys or full web page text will be included",
+    "cancel": "Cancel",
+    "exportCta": "Export and download",
+    "exporting": "Generating…",
+    "success": "Export complete — download started",
+    "error": "Export failed. Try again.",
+    "retry": "Retry",
+    "done": "Done",
+    "closeModal": "Close dialog"
   },
   "groupChat": {
     "create": "Group Chat",

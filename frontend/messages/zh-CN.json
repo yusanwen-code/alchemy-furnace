@@ -307,6 +307,7 @@
     "editCta": "编辑丹方",
     "cancelCta": "取消",
     "bindCta": "赠予道人",
+    "exportSkillCta": "导出 Skill",
     "deleteCta": "删除金丹",
     "tab": {
       "content": "丹解",
@@ -750,6 +751,28 @@
     "success": "已赠予",
     "errorLoadAgents": "获取道人列表失败",
     "errorBind": "绑定失败"
+  },
+  "skillExport": {
+    "title": "导出 Skill",
+    "formatLabel": "目标平台",
+    "codex": "Codex",
+    "claude": "Claude",
+    "filenameLabel": "文件名",
+    "contentsLabel": "包含内容",
+    "contents.skillMd": "SKILL.md — 行为指导与身份卡",
+    "contents.sourcesMd": "references/sources.md — 来源摘要（仅标题、链接与资料维度）",
+    "contents.readmeMd": "README.md — 安装与使用说明",
+    "contents.platformJson": "platform/claude.json — Claude 平台元数据",
+    "sourceNote": "来源说明：导出的包只包含来源摘要与归属信息，不含网页全文；按 nuwa-skill MIT 许可标注归属。",
+    "privacyNote": "确认：不会包含 API Key 与网页全文",
+    "cancel": "取消",
+    "exportCta": "导出下载",
+    "exporting": "正在生成…",
+    "success": "导出完成，已开始下载",
+    "error": "导出失败，请重试",
+    "retry": "重试",
+    "done": "完成",
+    "closeModal": "关闭弹窗"
   },
   "groupChat": {
     "create": "开坛群聊",

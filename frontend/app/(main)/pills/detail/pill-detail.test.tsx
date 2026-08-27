@@ -113,6 +113,11 @@ vi.mock('@/components/bind-agent-modal', () => ({
   BindAgentModal: () => null,
 }))
 
+// 隔离导出弹窗:详情页只负责入口显隐,弹窗行为由组件测试单独覆盖
+vi.mock('@/components/skill-export-dialog', () => ({
+  SkillExportDialog: () => <div data-testid="skill-export-dialog-probe" />,
+}))
+
 // ---- fixtures ----
 const customPill: Pill = {
   id: PILL_CUSTOM_ID,
@@ -288,6 +293,24 @@ describe('PillDetailPage', () => {
       expect(screen.getByRole('button', { name: '保存金丹' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
     })
+
+    it('只读态(已保存)显示导出 Skill 入口,点击打开导出弹窗', async () => {
+      setDetailState({ pill: customPill })
+      const user = userEvent.setup()
+      renderPage()
+      expect(screen.getByRole('button', { name: '导出 Skill' })).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: '导出 Skill' }))
+      expect(screen.getByTestId('skill-export-dialog-probe')).toBeInTheDocument()
+    })
+
+    it('编辑态隐藏导出 Skill 入口(导出只针对已保存金丹)', async () => {
+      setDetailState({ pill: customPill })
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
+      expect(screen.queryByRole('button', { name: '导出 Skill' })).toBeNull()
+    })
   })
 
   describe('内置金丹', () => {
@@ -299,6 +322,12 @@ describe('PillDetailPage', () => {
       expect(screen.queryByRole('button', { name: '销毁' })).toBeNull()
       expect(screen.queryByRole('button', { name: '保存金丹' })).toBeNull()
       expect(screen.getByText('内置')).toBeInTheDocument()
+    })
+
+    it('内置金丹只读态同样提供导出 Skill 入口', () => {
+      setDetailState({ pill: builtinPill })
+      renderPage()
+      expect(screen.getByRole('button', { name: '导出 Skill' })).toBeInTheDocument()
     })
 
     it('点击制作副本:克隆成功后跳转到副本详情(静态查询路由)', async () => {
