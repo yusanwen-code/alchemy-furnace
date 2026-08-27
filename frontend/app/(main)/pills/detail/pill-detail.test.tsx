@@ -2,30 +2,51 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import PillDetailPage from '@/app/(main)/pills/[id]/pill-detail'
+import PillDetailPage from '@/app/(main)/pills/detail/pill-detail'
 import { ApiError } from '@/services/api'
 import type { Pill } from '@/services/types'
 
-// ---- 可变的测试替身 ----
-const td = vi.hoisted(() => ({
-  push: vi.fn(),
-  getPill: vi.fn(),
-  clonePill: vi.fn(),
-  fetchPill: vi.fn(),
-  fetchPills: vi.fn(),
-  addPill: vi.fn(),
-  editPill: vi.fn(),
-  removePill: vi.fn(),
-  dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
-  pillState: {
-    pills: [] as Pill[],
-    total: 0,
-    currentPill: null as Pill | null,
-    loading: false,
-    error: null as string | null,
-  },
-  params: { id: 'pill-custom-1' },
-}))
+// ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
+const td = vi.hoisted(() => {
+  const IDS = {
+    PILL_CUSTOM_ID: '88888888-8888-4888-8888-888888888888',
+    PILL_BUILTIN_ID: '99999999-9999-4999-8999-999999999999',
+    PILL_EMPTY_ID: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    PILL_COPY_ID: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  }
+  return {
+    IDS,
+    push: vi.fn(),
+    getPill: vi.fn(),
+    clonePill: vi.fn(),
+    fetchPill: vi.fn(),
+    fetchPills: vi.fn(),
+    addPill: vi.fn(),
+    editPill: vi.fn(),
+    removePill: vi.fn(),
+    dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
+    propId: IDS.PILL_CUSTOM_ID as string | undefined,
+    pillState: {
+      pills: [] as Pill[],
+      total: 0,
+      currentPill: null as Pill | null,
+      loading: false,
+      error: null as string | null,
+      detailLoad: {
+        id: null,
+        status: 'idle' as 'idle' | 'loading' | 'ready' | 'not-found' | 'error',
+        error: null as string | null,
+      },
+    },
+  }
+})
+
+const {
+  PILL_CUSTOM_ID,
+  PILL_BUILTIN_ID,
+  PILL_EMPTY_ID,
+  PILL_COPY_ID,
+} = td.IDS
 
 // 真实消息解析(命名空间与键都为点路径 + {value} 插值),用于英文长标签等真实文案断言
 // 注意:namespace 可能是嵌套路径(如 'pill.editor'),需整段点路径逐层解析
@@ -56,7 +77,6 @@ vi.mock('next-intl', async () => {
 })
 
 vi.mock('next/navigation', () => ({
-  useParams: () => ({ id: td.params.id }),
   useRouter: () => ({ push: td.push }),
 }))
 
@@ -95,7 +115,7 @@ vi.mock('@/components/bind-agent-modal', () => ({
 
 // ---- fixtures ----
 const customPill: Pill = {
-  id: 'pill-custom-1',
+  id: PILL_CUSTOM_ID,
   name: '丹心妙语',
   description: '温润如茶',
   skill_schema: {
@@ -134,21 +154,41 @@ const customPill: Pill = {
   updated_at: '2026-08-20T00:00:00Z',
 }
 
-const builtinPill: Pill = { ...customPill, id: 'pill-builtin-1', is_builtin: true }
+const builtinPill: Pill = { ...customPill, id: PILL_BUILTIN_ID, is_builtin: true }
 
 const emptyPill: Pill = {
   ...customPill,
-  id: 'pill-empty-1',
+  id: PILL_EMPTY_ID,
   name: '空丹',
   skill_schema: {},
   tags: [],
 }
 
-function setPill(pill: Pill | null, opts: { loading?: boolean; error?: string | null } = {}) {
-  td.pillState.currentPill = pill
-  td.pillState.loading = opts.loading ?? false
-  td.pillState.error = opts.error ?? null
-  td.params.id = pill?.id ?? 'pill-custom-1'
+type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
+
+/**
+ * 设置详情页状态机(组件按 pillId prop + pillState.detailLoad 决策)。
+ * 缺省:金丹就绪 + 对应 UUID;status 单独传可覆盖(loading/error/not-found)。
+ */
+function setDetailState(opts: {
+  pill?: Pill | null
+  status?: DetailStatus
+  error?: string | null
+  id?: string
+}) {
+  const id = opts.id ?? opts.pill?.id ?? PILL_CUSTOM_ID
+  td.propId = id
+  td.pillState.currentPill = opts.pill ?? null
+  td.pillState.detailLoad = {
+    id,
+    status: opts.status ?? (opts.pill ? 'ready' : 'idle'),
+    error: opts.error ?? null,
+  }
+}
+
+/** 渲染组件(统一入口:pillId 来自 td.propId) */
+function renderPage() {
+  return render(<PillDetailPage pillId={td.propId} />)
 }
 
 describe('PillDetailPage', () => {
@@ -156,6 +196,9 @@ describe('PillDetailPage', () => {
     vi.clearAllMocks()
     td.dispatchCalls.length = 0
     td.pillState.pills = []
+    td.pillState.currentPill = null
+    td.pillState.detailLoad = { id: null, status: 'idle', error: null }
+    td.propId = PILL_CUSTOM_ID
     i18n.locale = 'zh-CN'
     td.fetchPill.mockResolvedValue(undefined)
   })
@@ -165,43 +208,57 @@ describe('PillDetailPage', () => {
     i18n.locale = 'zh-CN'
   })
 
-  describe('五种状态', () => {
-    it('静态导出 "_" 占位不触发拉取', () => {
-      // Next output:export 将 [id] 预渲染为 "_";硬加载/深链时 useParams()
-      // 短暂返回 "_"。它不是真 ID,绝不能 GET /pills/_(400 且弹错)。
-      setPill(null)
-      td.params.id = '_'
-      render(<PillDetailPage />)
+  describe('链接/加载/错误/不存在四态', () => {
+    it('无效链接(缺 id):不发 API 且不误报已删除', () => {
+      td.propId = undefined
+      renderPage()
       expect(td.fetchPill).not.toHaveBeenCalled()
+      expect(td.fetchPills).not.toHaveBeenCalled()
+      expect(screen.getByText('金丹链接无效，请返回金丹阁重新选择')).toBeInTheDocument()
+      expect(screen.queryByText('金丹不存在或已被删除')).toBeNull()
+    })
+
+    it('有效 id 发起详情拉取', () => {
+      renderPage()
+      expect(td.fetchPill).toHaveBeenCalledWith(PILL_CUSTOM_ID)
     })
 
     it('加载态:显示加载提示', () => {
-      setPill(null, { loading: true })
-      render(<PillDetailPage />)
+      setDetailState({ status: 'loading' })
+      renderPage()
       expect(screen.getByText('加载金丹...')).toBeInTheDocument()
     })
 
-    it('错误态:显示错误并可重试拉取', async () => {
-      setPill(null, { error: '服务器内部错误' })
-      const user = userEvent.setup()
-      render(<PillDetailPage />)
-      expect(screen.getByText('服务器内部错误')).toBeInTheDocument()
-      const retry = screen.getByRole('button', { name: '重试' })
-      td.fetchPill.mockClear()
-      await user.click(retry)
-      expect(td.fetchPill).toHaveBeenCalledWith('pill-custom-1')
+    it('快速切换:旧实体残留时按加载处理,不闪现旧金丹', () => {
+      const oldPill: Pill = { ...customPill, id: PILL_EMPTY_ID, name: '老前任' }
+      setDetailState({ pill: oldPill, status: 'loading' })
+      renderPage()
+      expect(screen.getByText('加载金丹...')).toBeInTheDocument()
+      expect(screen.queryByText('老前任')).toBeNull()
     })
 
-    it('空态:金丹不存在时给出返回入口', () => {
-      setPill(null)
-      render(<PillDetailPage />)
+    it('错误态:显示错误并可重试,重试用同一 UUID', async () => {
+      setDetailState({ status: 'error', error: '服务器内部错误' })
+      const user = userEvent.setup()
+      renderPage()
+      expect(screen.getByText('服务器内部错误')).toBeInTheDocument()
+      td.fetchPill.mockClear()
+      await user.click(screen.getByRole('button', { name: '重试' }))
+      expect(td.fetchPill).toHaveBeenCalledWith(PILL_CUSTOM_ID)
+    })
+
+    it('404 态:只有 API 明确 404 才显示不存在,且给出返回入口', () => {
+      setDetailState({ status: 'not-found' })
+      renderPage()
       expect(screen.getByText('金丹不存在或已被删除')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: '返回金丹阁' })).toHaveAttribute('href', '/pills')
     })
+  })
 
-    it('只读态:展示名称、全部 8 个 schema 区块与操作入口', () => {
-      setPill(customPill)
-      render(<PillDetailPage />)
+  describe('只读态', () => {
+    it('展示名称、全部 8 个 schema 区块与操作入口', () => {
+      setDetailState({ pill: customPill })
+      renderPage()
       expect(screen.getByRole('heading', { name: '丹心妙语' })).toBeInTheDocument()
       for (const title of [
         '身份卡（第一人称）', '表达 DNA', '心智模型', '决策启发式',
@@ -215,17 +272,17 @@ describe('PillDetailPage', () => {
     })
 
     it('空字段:空 schema 的金丹在只读态展示各区块空状态', () => {
-      setPill(emptyPill)
-      render(<PillDetailPage />)
+      setDetailState({ pill: emptyPill })
+      renderPage()
       expect(screen.getByRole('heading', { name: '空丹' })).toBeInTheDocument()
       // 各区块空兜底文案出现多次(每个空区块一处)
       expect(screen.getAllByText('此丹无结构化丹方。').length).toBeGreaterThan(0)
     })
 
     it('编辑态:点击编辑后出现表单与保存栏', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       expect(screen.getByDisplayValue('丹心妙语')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: '保存金丹' })).toBeInTheDocument()
@@ -235,8 +292,8 @@ describe('PillDetailPage', () => {
 
   describe('内置金丹', () => {
     it('只读态显示「制作副本」,隐藏编辑/销毁/保存', () => {
-      setPill(builtinPill)
-      render(<PillDetailPage />)
+      setDetailState({ pill: builtinPill })
+      renderPage()
       expect(screen.getByRole('button', { name: '制作副本' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '编辑丹方' })).toBeNull()
       expect(screen.queryByRole('button', { name: '销毁' })).toBeNull()
@@ -244,23 +301,25 @@ describe('PillDetailPage', () => {
       expect(screen.getByText('内置')).toBeInTheDocument()
     })
 
-    it('点击制作副本:克隆成功后跳转到副本详情', async () => {
-      setPill(builtinPill)
-      const copy: Pill = { ...customPill, id: 'pill-copy-9', name: '丹心妙语 副本', is_builtin: false }
+    it('点击制作副本:克隆成功后跳转到副本详情(静态查询路由)', async () => {
+      setDetailState({ pill: builtinPill })
+      const copy: Pill = { ...customPill, id: PILL_COPY_ID, name: '丹心妙语 副本', is_builtin: false }
       td.clonePill.mockResolvedValue(copy)
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '制作副本' }))
-      await waitFor(() => expect(td.push).toHaveBeenCalledWith('/pills/pill-copy-9'))
-      expect(td.clonePill).toHaveBeenCalledWith('pill-builtin-1')
+      await waitFor(() =>
+        expect(td.push).toHaveBeenCalledWith(`/pills/detail?id=${PILL_COPY_ID}`),
+      )
+      expect(td.clonePill).toHaveBeenCalledWith(PILL_BUILTIN_ID)
     })
 
     it('制作副本失败:给出错误反馈且不跳转', async () => {
-      setPill(builtinPill)
+      setDetailState({ pill: builtinPill })
       td.clonePill.mockRejectedValue(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '制作副本' }))
       expect(await screen.findByRole('alert')).toHaveTextContent('制作副本失败，请重试')
@@ -270,11 +329,11 @@ describe('PillDetailPage', () => {
 
   describe('自定义编辑与保存', () => {
     it('编辑覆盖基础信息与全部 schema 区块,保存时未知键原样保留', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.editPill.mockResolvedValue(customPill)
       td.getPill.mockResolvedValue(customPill)
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
 
       // 基础信息
@@ -320,7 +379,7 @@ describe('PillDetailPage', () => {
 
       await waitFor(() => expect(td.editPill).toHaveBeenCalled())
       const [calledId, payload] = td.editPill.mock.calls[0]
-      expect(calledId).toBe('pill-custom-1')
+      expect(calledId).toBe(PILL_CUSTOM_ID)
       expect(payload.name).toBe('丹心妙语·改')
       expect(payload.skill_schema.identity_card).toBe('冷静的史官')
       expect(payload.skill_schema.expression_dna.sentence_length).toBe('long')
@@ -337,19 +396,19 @@ describe('PillDetailPage', () => {
     })
 
     it('保存成功:PUT 之后必须重新 GET,只有 GET 成功才退出编辑', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       const fresh: Pill = { ...customPill, name: '丹心妙语·改', updated_at: '2026-08-22T00:00:00Z' }
       td.editPill.mockResolvedValue({ ...customPill, name: 'PUT回显' })
       td.getPill.mockResolvedValue(fresh)
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       const nameInput = screen.getByDisplayValue('丹心妙语')
       await user.clear(nameInput)
       await user.type(nameInput, '丹心妙语·改')
       await user.click(screen.getByRole('button', { name: '保存金丹' }))
 
-      await waitFor(() => expect(td.getPill).toHaveBeenCalledWith('pill-custom-1'))
+      await waitFor(() => expect(td.getPill).toHaveBeenCalledWith(PILL_CUSTOM_ID))
       // PUT 先于 GET
       expect(td.editPill.mock.invocationCallOrder[0]).toBeLessThan(td.getPill.mock.invocationCallOrder[0])
       // 退出编辑,回到只读,展示 GET 回源的最新名称
@@ -359,10 +418,10 @@ describe('PillDetailPage', () => {
     })
 
     it('保存失败:保留全部字段与编辑态,错误可重试', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.editPill.mockRejectedValueOnce(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       const nameInput = screen.getByDisplayValue('丹心妙语')
       await user.clear(nameInput)
@@ -383,11 +442,11 @@ describe('PillDetailPage', () => {
     })
 
     it('保存后 GET 失败:不算完成,保留编辑态与草稿', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.editPill.mockResolvedValue(customPill)
       td.getPill.mockRejectedValue(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       const nameInput = screen.getByDisplayValue('丹心妙语')
       await user.clear(nameInput)
@@ -402,9 +461,9 @@ describe('PillDetailPage', () => {
 
   describe('删除', () => {
     it('自定义删除需二次确认:第一次点击仅进入待确认态', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '销毁' }))
       expect(td.removePill).not.toHaveBeenCalled()
@@ -412,22 +471,22 @@ describe('PillDetailPage', () => {
     })
 
     it('二次确认后删除成功并返回列表', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.removePill.mockResolvedValue(undefined)
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '销毁' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认销毁' }))
       await waitFor(() => expect(td.push).toHaveBeenCalledWith('/pills'))
-      expect(td.removePill).toHaveBeenCalledWith('pill-custom-1')
+      expect(td.removePill).toHaveBeenCalledWith(PILL_CUSTOM_ID)
     })
 
     it('删除失败:保留页面并给出错误反馈', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.removePill.mockRejectedValue(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '销毁' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认销毁' }))
@@ -438,10 +497,10 @@ describe('PillDetailPage', () => {
     })
 
     it('删除失败后点「重试」直接重发删除请求(不再停在待确认态)', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.removePill.mockRejectedValueOnce(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '销毁' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认销毁' }))
@@ -464,9 +523,9 @@ describe('PillDetailPage', () => {
     }
 
     it('编辑且有改动时,浏览器关闭被阻止', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       const nameInput = screen.getByDisplayValue('丹心妙语')
       await user.type(nameInput, '改')
@@ -475,17 +534,17 @@ describe('PillDetailPage', () => {
     })
 
     it('只读/未改动时,浏览器关闭不被阻止', () => {
-      setPill(customPill)
-      render(<PillDetailPage />)
+      setDetailState({ pill: customPill })
+      renderPage()
       expect(dispatchBeforeUnload().defaultPrevented).toBe(false)
     })
 
     it('保存成功后退出编辑,不再阻止离开', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       td.editPill.mockResolvedValue(customPill)
       td.getPill.mockResolvedValue(customPill)
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       const nameInput = screen.getByDisplayValue('丹心妙语')
       await user.type(nameInput, '改')
@@ -497,9 +556,9 @@ describe('PillDetailPage', () => {
     })
 
     it('放弃修改后回到只读,不再阻止离开', async () => {
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '编辑丹方' }))
       const nameInput = screen.getByDisplayValue('丹心妙语')
       await user.type(nameInput, '改')
@@ -514,9 +573,9 @@ describe('PillDetailPage', () => {
   describe('英文长标签', () => {
     it('en locale 下区块标题可换行(无 truncate),按钮不被覆盖', async () => {
       i18n.locale = 'en'
-      setPill(customPill)
+      setDetailState({ pill: customPill })
       const user = userEvent.setup()
-      render(<PillDetailPage />)
+      renderPage()
 
       // 只读态长标题
       for (const title of [

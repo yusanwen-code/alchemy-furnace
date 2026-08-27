@@ -6,7 +6,17 @@
  */
 import React, { createContext, useContext, useReducer, useCallback, useRef } from 'react'
 import * as pillService from '@/services/pillService'
+import { ApiError } from '@/services/api'
 import type { Pill, CreatePillRequest, UpdatePillRequest, PillListParams } from '@/services/types'
+
+/** 金丹详情加载状态(按 ID 归属;只有 API 明确 404 才判定不存在) */
+type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
+
+interface DetailLoadState {
+  id: string | null
+  status: DetailStatus
+  error: string | null
+}
 
 /** 金丹状态 */
 interface PillState {
@@ -15,6 +25,7 @@ interface PillState {
   currentPill: Pill | null
   loading: boolean
   error: string | null
+  detailLoad: DetailLoadState
 }
 
 /** 操作类型 */
@@ -26,6 +37,10 @@ type PillAction =
   | { type: 'REMOVE_PILL'; payload: string }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'DETAIL_START'; payload: { id: string } }
+  | { type: 'DETAIL_READY'; payload: { id: string; pill: Pill } }
+  | { type: 'DETAIL_NOT_FOUND'; payload: { id: string } }
+  | { type: 'DETAIL_ERROR'; payload: { id: string; error: string } }
 
 /** 初始状态 */
 const initialState: PillState = {
@@ -34,6 +49,12 @@ const initialState: PillState = {
   currentPill: null,
   loading: false,
   error: null,
+  detailLoad: { id: null, status: 'idle', error: null },
+}
+
+/** 详情完成类 action 的竞态守卫:只在 id 归属匹配时接受结果,防旧请求覆盖新页 */
+function acceptDetail(state: PillState, id: string): boolean {
+  return state.detailLoad.id === id
 }
 
 /** Reducer */
@@ -61,6 +82,22 @@ function pillReducer(state: PillState, action: PillAction): PillState {
       return { ...state, loading: action.payload }
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false }
+    case 'DETAIL_START':
+      return { ...state, detailLoad: { id: action.payload.id, status: 'loading', error: null } }
+    case 'DETAIL_READY':
+      if (!acceptDetail(state, action.payload.id)) return state
+      // 守卫通过才原子落库:状态与金丹一起更新,防旧请求的 success 污染新页
+      return {
+        ...state,
+        detailLoad: { id: action.payload.id, status: 'ready', error: null },
+        currentPill: action.payload.pill,
+      }
+    case 'DETAIL_NOT_FOUND':
+      if (!acceptDetail(state, action.payload.id)) return state
+      return { ...state, detailLoad: { id: action.payload.id, status: 'not-found', error: null } }
+    case 'DETAIL_ERROR':
+      if (!acceptDetail(state, action.payload.id)) return state
+      return { ...state, detailLoad: { id: action.payload.id, status: 'error', error: action.payload.error } }
     default:
       return state
   }
@@ -103,16 +140,21 @@ export function PillProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /** 获取单个金丹 */
+  /** 获取单个金丹(按 ID 归属;只有 API 明确 404 才判定"不存在或已删除";旧请求晚到不覆盖新页) */
   const fetchPill = useCallback(async (id: string) => {
-    dispatch({ type: 'SET_ERROR', payload: null })
-    dispatch({ type: 'SET_CURRENT_PILL', payload: null })
-    dispatch({ type: 'SET_LOADING', payload: true })
+    dispatch({ type: 'DETAIL_START', payload: { id } })
     try {
       const pill = await pillService.getPill(id)
-      dispatch({ type: 'SET_CURRENT_PILL', payload: pill })
+      dispatch({ type: 'DETAIL_READY', payload: { id, pill } })
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '获取金丹详情失败' })
+      if (error instanceof ApiError && error.status === 404) {
+        dispatch({ type: 'DETAIL_NOT_FOUND', payload: { id } })
+      } else {
+        dispatch({
+          type: 'DETAIL_ERROR',
+          payload: { id, error: error instanceof Error ? error.message : '获取金丹详情失败' },
+        })
+      }
     }
   }, [])
 

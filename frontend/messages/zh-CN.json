@@ -298,6 +298,7 @@
   },
   "pill": {
     "backToList": "返回金丹阁",
+    "invalidLink": "金丹链接无效，请返回金丹阁重新选择",
     "loading": "加载金丹...",
     "notFound": "金丹不存在或已被删除",
     "editCta": "编辑丹方",

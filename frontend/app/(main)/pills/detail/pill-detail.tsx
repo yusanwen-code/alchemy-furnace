@@ -9,9 +9,10 @@
  * - 动态数组使用稳定本地 key(非数组下标);未知 skill_schema 键原样保留
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { pillDetailHref } from '@/lib/entity-detail-route'
 import {
   AlertCircle,
   ArrowLeft,
@@ -171,21 +172,22 @@ function StringListEditor({
 
 // ========== 页面组件 ==========
 
-export default function PillDetailPage() {
+interface PillDetailPageProps {
+  pillId?: string
+}
+
+export default function PillDetailPage({ pillId }: PillDetailPageProps) {
   const t = useTranslations('pill.editor')
   const tPill = useTranslations('pill')
   const tCommon = useTranslations('common')
-  const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  // Next output:export prerenders [id] as "_"; ignore that static shell param
-  // so we never GET /pills/_ (400 "金丹ID格式不正确"). Real UUIDs aren't "_".
-  const pillId = id === '_' ? undefined : id
 
   const { state, fetchPill, removePill } = usePill()
   const pill = state.currentPill
+  const detailLoad = state.detailLoad
 
   const flow = usePillEditorFlow(pill, {
-    onCopied: (newPillId) => router.push(`/pills/${newPillId}`),
+    onCopied: (newPillId) => router.push(pillDetailHref(newPillId)),
   })
   useUnsavedChanges(flow.dirty, t('unsavedConfirm'))
 
@@ -272,8 +274,23 @@ export default function PillDetailPage() {
     void performDelete()
   }
 
-  // ========== 加载 / 错误 / 空 三态 ==========
-  if (!pill && state.loading) {
+  // ========== 链接无效 / 加载 / 错误 / 不存在 四态(顺序与道人详情一致) ==========
+  if (!pillId) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <div className="flex flex-col items-center justify-center py-16">
+          <AlertCircle className="mb-3 h-12 w-12 text-primary" />
+          <p className="text-sm text-muted-foreground">{tPill('invalidLink')}</p>
+          <Link href="/pills" className="dao-btn-primary mt-4 whitespace-nowrap">
+            <ArrowLeft className="h-4 w-4" />
+            {tPill('backToList')}
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (detailLoad.id !== pillId || detailLoad.status === 'loading') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
@@ -284,15 +301,15 @@ export default function PillDetailPage() {
     )
   }
 
-  if (!pill && state.error) {
+  if (detailLoad.status === 'error') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
           <AlertCircle className="mb-3 h-12 w-12 text-primary" />
           <p className="mb-4 max-w-xl break-words text-center text-sm text-muted-foreground">
-            {state.error}
+            {detailLoad.error}
           </p>
-          <button type="button" onClick={() => pillId && fetchPill(pillId)} className="dao-btn-ghost">
+          <button type="button" onClick={() => fetchPill(pillId)} className="dao-btn-ghost">
             {tCommon('retry')}
           </button>
         </div>
@@ -300,7 +317,7 @@ export default function PillDetailPage() {
     )
   }
 
-  if (!pill) {
+  if (detailLoad.status === 'not-found') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
@@ -310,6 +327,18 @@ export default function PillDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             {tPill('backToList')}
           </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // 兜底:缺 id 外的任何状态未就绪(含旧实体残留)都按加载处理,不闪现旧金丹
+  if (!(detailLoad.status === 'ready' && pill?.id === pillId)) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <div className="flex flex-col items-center justify-center py-16">
+          <Loader2 className="mb-3 h-8 w-8 animate-spin text-gold" />
+          <p className="text-sm text-muted-foreground">{tPill('loading')}</p>
         </div>
       </div>
     )

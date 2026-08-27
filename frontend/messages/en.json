@@ -298,6 +298,7 @@
   },
   "pill": {
     "backToList": "Back to Pill Vault",
+    "invalidLink": "This pill link is invalid. Return to the pill list and choose again.",
     "loading": "Loading pill...",
     "notFound": "Pill not found or has been removed",
     "editCta": "Edit recipe",
