@@ -9,4 +9,5 @@ import (
 
 type Distillation interface {
 	Distill(ctx context.Context, subject, brief, locale string) (*distillation.Response, errors.Error)
+	SkillExport(ctx context.Context, input *distillation.SkillExportInput) (*distillation.ExportResult, errors.Error)
 }

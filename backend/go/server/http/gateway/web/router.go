@@ -106,6 +106,8 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 	distillationGroup := v1.Group("/distillation")
 	{
 		distillationGroup.POST("/nuwa", router.Wrapper(distillationHandler.Nuwa))
+		// RAW: 成功直接写 ZIP 二进制流(不经 Wrapper 的 JSON 信封)
+		distillationGroup.POST("/skill-export", distillationHandler.SkillExport)
 	}
 
 	// 供应商与模型管理(UUID 对外标识;/templates 与 /options 静态路由先于 :uuid 注册)

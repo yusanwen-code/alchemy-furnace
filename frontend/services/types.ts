@@ -112,6 +112,51 @@ export interface DistillationDraft {
   research: DistillationResearchSummary
 }
 
+// ========== Skill 导出 ==========
+
+/** 导出目标平台 */
+export type ExportFormat = 'codex' | 'claude'
+
+/** 导出来源引用(仅标题/URL/维度,不含网页正文) */
+export interface ExportableSkillSource {
+  title: string
+  url: string
+  dimension: string
+}
+
+/**
+ * 可导出的规范化 Skill 模型(plan §2)。
+ * 独立于数据库 Pill 的投影: 名称/slug/描述/指令/结构化技能包/来源/归属;
+ * instructions 由结构化字段稳定渲染,slug 由服务端派生。
+ */
+export interface ExportableSkill {
+  name: string
+  slug: string
+  description: string
+  instructions: string
+  skillSchema: SkillSchema
+  tags: string[]
+  sources: ExportableSkillSource[]
+  attribution: { name: 'nuwa-skill'; license: 'MIT'; url: string }
+  generatedAt: string
+}
+
+/**
+ * Skill 导出请求: 已保存金丹的结构化数据(skill)或合法 pill ID(pill_id),二选一。
+ * 接口绝不接收 API Key。
+ */
+export interface SkillExportRequest {
+  pill_id?: string
+  skill?: ExportableSkill
+  format: ExportFormat
+}
+
+/** Skill 导出结果: ZIP 字节 + 浏览器下载文件名 */
+export interface SkillExportResult {
+  blob: Blob
+  filename: string
+}
+
 /** 融合血统：父代金丹 + 算子 + 时间 */
 export interface FusionLineage {
   parents: Array<{ uuid: string; name: string }>

@@ -68,9 +68,10 @@ func NewFusion() *fusion.Fusion {
 }
 
 func NewDistillation() *distillation.Handler {
+	daoPill := service.ProvidePillDao()
 	client := service.NewDistillationClient()
 	modelResolver := credential.NewResolver()
-	distillationService := distillation_service.New(client, modelResolver)
+	distillationService := distillation_service.New(client, modelResolver, daoPill)
 	return distillation.New(distillationService)
 }
 

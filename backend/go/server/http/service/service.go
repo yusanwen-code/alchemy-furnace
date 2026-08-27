@@ -113,6 +113,7 @@ func NewDistillationClient() distillation.Client {
 }
 
 var DistillationService = wire.NewSet(
+	ProvidePillDao,
 	NewDistillationClient,
 	credential.NewResolver, wire.Bind(new(credential.Resolver), new(*credential.ModelResolver)),
 	distillation_service.New, wire.Bind(new(iservice.Distillation), new(*distillation_service.Service)),

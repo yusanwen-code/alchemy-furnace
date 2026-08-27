@@ -232,3 +232,30 @@ class FuseResponse(BaseModel):
     operator: FuseOperatorInfo
     model: str = ""
     degraded: bool = Field(default=False, description="是否走了保底方案(LLM 连续失败)")
+
+
+# ==================== Skill 导出相关模型 ====================
+
+
+class SkillExportSource(BaseModel):
+    """导出来源引用(仅标题/URL/维度,不含网页正文)"""
+
+    title: str
+    url: str
+    dimension: str
+
+
+class SkillExportRequest(BaseModel):
+    """Skill 导出请求: 已保存金丹的规范化投影字段 + 目标平台。
+
+    接口绝不接收 API Key 或数据库内部 ID;名称/slug 校验由渲染器统一执行。
+    """
+
+    name: str
+    description: str
+    skill_schema: Dict[str, Any] = Field(..., description="nuwa-skill 结构化内容")
+    tags: List[str] = []
+    sources: List[SkillExportSource] = []
+    generated_at: str = Field(..., description="生成时间(ISO)")
+    evidence_level: Literal["insufficient", "limited", "standard"] = "limited"
+    format: Literal["codex", "claude"]
