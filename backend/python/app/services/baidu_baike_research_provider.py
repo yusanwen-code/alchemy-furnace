@@ -4,6 +4,9 @@
 （URL 编码），只有返回的最终 URL 仍属于 baike.baidu.com、正文达到
 ``MIN_CHARACTERS`` 且摘录中出现主题词时才接受为有效文档；其余情况一律判为
 "empty"（内容不合格），请求失败判为 "blocked"（该源当前不可达，触发熔断）。
+
+安全验证(challenge)页按 HTTP 200 返回但内容为反爬验证页，特征词命中即判为
+"blocked"（提供者被拦截，可熔断），绝不能当作"资料不足"或证据。
 """
 from __future__ import annotations
 
@@ -21,6 +24,8 @@ from app.services.web_document_fetcher import WebDocumentFetcher
 BAIDU_BAIKE_HOST = "baike.baidu.com"
 MIN_CHARACTERS = 800
 MAX_EXCERPT_CHARACTERS = 4000
+# 百度安全验证/反爬页特征：命中即提供者被拦截（熔断），与"内容不足"区分开
+CHALLENGE_MARKERS = ("百度安全验证", "安全验证", "验证码", "captcha")
 
 
 def _mentions_subject(excerpt: str, subject: str) -> bool:
@@ -35,6 +40,11 @@ def _mentions_subject(excerpt: str, subject: str) -> bool:
         for part in normalized.replace("·", " ").split()
         if len(part.strip()) >= 2
     )
+
+
+def _looks_like_challenge(excerpt: str) -> bool:
+    lowered = excerpt.lower()
+    return any(marker in lowered for marker in CHALLENGE_MARKERS)
 
 
 class BaiduBaikeResearchProvider(ResearchProvider):
@@ -61,6 +71,12 @@ class BaiduBaikeResearchProvider(ResearchProvider):
                 EvidenceLevel.INSUFFICIENT,
             )
         excerpt = result.excerpt or ""
+        if _looks_like_challenge(excerpt):
+            return ResearchReport(
+                [],
+                [ResearchAttempt(self.provider_id, "blocked", 0, 0, "challenge")],
+                EvidenceLevel.INSUFFICIENT,
+            )
         final_host = urlparse(result.url).hostname
         if (
             final_host != BAIDU_BAIKE_HOST

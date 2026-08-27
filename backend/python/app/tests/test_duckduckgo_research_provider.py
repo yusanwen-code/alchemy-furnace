@@ -6,9 +6,11 @@ import pytest
 
 from app.services.duckduckgo_research_provider import (
     DuckDuckGoDiscovery,
+    DuckDuckGoResearchProvider,
     DuckDuckGoResultParser,
+    SearchCandidate,
 )
-from app.services.research_provider import ResearchError
+from app.services.research_provider import EvidenceLevel, ResearchAttempt, ResearchError
 
 
 def test_parser_ignores_attribute_order_and_quote_style(load_fixture):
@@ -33,3 +35,28 @@ def test_search_classifies_valid_empty_page(fake_http):
     results, attempt = DuckDuckGoDiscovery(client=fake_http).search("unlikely query")
     assert results == []
     assert attempt.status == "empty"
+
+
+class _FakeDiscovery:
+    """固定返回一组候选的假 discovery，避免真实搜索请求。"""
+
+    def __init__(self, candidates):
+        self.candidates = candidates
+        self.attempt = ResearchAttempt(
+            "duckduckgo", "ok", len(candidates), len(candidates), None
+        )
+
+    def search(self, query):
+        return self.candidates, self.attempt
+
+
+def test_single_long_authoritative_document_is_limited_not_insufficient(fake_fetcher):
+    """证据判定用组合判断：单篇 2000 字权威资料应为 limited，而非"至少两篇"。"""
+    discovery = _FakeDiscovery([SearchCandidate("Single Essay", "https://example.com/essay")])
+    fake_fetcher.add("https://example.com/essay", "x" * 2000)
+    provider = DuckDuckGoResearchProvider(
+        timeout=4, sleep=lambda _: None, discovery=discovery, fetcher=fake_fetcher
+    )
+    report = provider.collect("某人", "提炼决策方式", "zh-CN")
+    assert report.evidence_level == EvidenceLevel.LIMITED
+    assert len(report.documents) == 1

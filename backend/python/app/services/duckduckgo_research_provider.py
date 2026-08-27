@@ -22,8 +22,8 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import httpx
 
+from app.services.research_orchestrator import classify_evidence
 from app.services.research_provider import (
-    EvidenceLevel,
     ResearchAttempt,
     ResearchCredentials,
     ResearchDocument,
@@ -235,9 +235,7 @@ class DuckDuckGoResearchProvider(ResearchProvider):
         return ResearchReport(
             documents=documents,
             attempts=attempts,
-            evidence_level=(
-                EvidenceLevel.LIMITED if len(documents) >= 2 else EvidenceLevel.INSUFFICIENT
-            ),
+            evidence_level=classify_evidence(documents),
         )
 
     @staticmethod
