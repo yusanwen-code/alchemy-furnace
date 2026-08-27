@@ -60,6 +60,13 @@ func Handler() http.Handler {
 			http.Redirect(w, r, "/chat?"+query.Encode(), http.StatusTemporaryRedirect)
 			return
 		}
+		// 旧版实体深链 /agents/<uuid>、/pills/<uuid> → 规范查询参数地址（307，保留查询含桌面 token）
+		if targetPath, id, ok := legacyEntityDetail(p); ok {
+			query := r.URL.Query()
+			query.Set("id", id)
+			http.Redirect(w, r, targetPath+"?"+query.Encode(), http.StatusTemporaryRedirect)
+			return
+		}
 		// 根路径:优先默认 locale(zh-CN),回退 index.html 占位
 		if p == "" {
 			if serveFile(w, sub, defaultHTML) {
@@ -113,6 +120,20 @@ func legacyChatSessionID(cleanPath string) (string, bool) {
 		return "", false
 	}
 	return parts[1], true
+}
+
+// legacyEntityDetail 识别旧版实体详情深链 /agents/<uuid>、/pills/<uuid>（可带尾斜杠）。
+// 只有恰好两段、首段为 agents/pills、第二段为合法 UUID 时才匹配;
+// 其余路径（如 /agents/detail、/agents/not-a-uuid）不视为实体详情，返回 ok=false。
+func legacyEntityDetail(cleanPath string) (targetPath string, id string, ok bool) {
+	parts := strings.Split(strings.Trim(cleanPath, "/"), "/")
+	if len(parts) != 2 || (parts[0] != "agents" && parts[0] != "pills") {
+		return "", "", false
+	}
+	if _, err := uuid.Parse(parts[1]); err != nil {
+		return "", "", false
+	}
+	return "/" + parts[0] + "/detail", parts[1], true
 }
 
 // serveFile 读取 embed 文件并写响应(正确 Content-Type + 缓存头),成功返回 true

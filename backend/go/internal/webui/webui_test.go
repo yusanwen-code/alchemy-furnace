@@ -153,3 +153,35 @@ func TestHandler_LegacyChatSessionRedirect(t *testing.T) {
 	require.Empty(t, rec.Header().Get("Location"))
 	require.True(t, isWebuiBody(rec.Body.String()))
 }
+
+// TestHandler_LegacyEntityDetailRedirect: 旧的 /agents/<uuid>、/pills/<uuid> 深链必须
+// 307 规范化到 /agents/detail?id=<uuid>、/pills/detail?id=<uuid>,
+// 且保留 DesktopGuard token / platform 等查询参数;非 UUID 不误转。
+func TestHandler_LegacyEntityDetailRedirect(t *testing.T) {
+	const id = "11111111-1111-4111-8111-111111111111"
+	tests := []struct {
+		name       string
+		target     string
+		wantPath   string
+		wantQuery  url.Values
+		wantStatus int
+	}{
+		{"agent", "/agents/" + id, "/agents/detail", url.Values{"id": []string{id}}, http.StatusTemporaryRedirect},
+		{"pill with token", "/pills/" + id + "?token=opaque&platform=darwin", "/pills/detail", url.Values{"id": []string{id}, "token": []string{"opaque"}, "platform": []string{"darwin"}}, http.StatusTemporaryRedirect},
+		{"invalid", "/agents/not-a-uuid", "", nil, http.StatusOK},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.target, nil))
+			require.Equal(t, tc.wantStatus, rec.Code)
+			if tc.wantStatus != http.StatusTemporaryRedirect {
+				return
+			}
+			u, err := url.Parse(rec.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, tc.wantPath, u.Path)
+			require.Equal(t, tc.wantQuery, u.Query())
+		})
+	}
+}
