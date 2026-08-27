@@ -221,7 +221,9 @@
     "limitedEvidence": "Limited evidence — review the draft manually",
     "searchBlockedHint": "Public search is temporarily rate-limited. Try again later.",
     "insufficientHint": "Not enough public evidence. Try a better-known subject or add background to your goal.",
-    "modelConfigHint": "No synthesis model configured. Set one up under Settings → Model management."
+    "modelConfigHint": "No synthesis model configured. Set one up under Settings → Model management.",
+    "fetchFailedHint": "Some sources could not be fetched. Retry later, or add the key material to your goal manually.",
+    "invalidOutputHint": "The model returned an invalid draft. Retry — no partial result is saved."
   },
   "pills": {
     "title": "Pill Vault",

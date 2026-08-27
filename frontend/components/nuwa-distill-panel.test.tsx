@@ -166,6 +166,63 @@ describe('NuwaDistillPanel', () => {
     expect(onApply).not.toHaveBeenCalled()
   })
 
+  it('模型输出非法时提示"重试不写半成品"并提供重试按钮', async () => {
+    distillNuwa.mockRejectedValue(
+      new ApiError('模型未返回有效的结构化丹方，请重试', 422, {
+        error_code: 'model_invalid_output',
+        data: { stage: 'distill', retryable: true },
+      })
+    )
+    const onApply = vi.fn()
+    const user = userEvent.setup()
+    render(<NuwaDistillPanel onApply={onApply} />)
+
+    await runDistill(user)
+
+    expect(await screen.findByText('模型未返回有效的结构化丹方，请重试')).toBeInTheDocument()
+    expect(screen.getByText('invalidOutputHint')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
+  it('模型超时错误展示阶段·错误码并提供重试', async () => {
+    distillNuwa.mockRejectedValue(
+      new ApiError('模型响应超时，请重试', 503, {
+        error_code: 'model_timeout',
+        data: { stage: 'distill', retryable: true },
+      })
+    )
+    const onApply = vi.fn()
+    const user = userEvent.setup()
+    render(<NuwaDistillPanel onApply={onApply} />)
+
+    await runDistill(user)
+
+    expect(await screen.findByText('模型响应超时，请重试')).toBeInTheDocument()
+    expect(screen.getByText('distill · model_timeout')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
+  it('正文抓取失败时给出重试或手动补资料建议', async () => {
+    distillNuwa.mockRejectedValue(
+      new ApiError('正文抓取失败，部分来源不可用', 503, {
+        error_code: 'research_fetch_failed',
+        data: { stage: 'research', retryable: true },
+      })
+    )
+    const onApply = vi.fn()
+    const user = userEvent.setup()
+    render(<NuwaDistillPanel onApply={onApply} />)
+
+    await runDistill(user)
+
+    expect(await screen.findByText('正文抓取失败，部分来源不可用')).toBeInTheDocument()
+    expect(screen.getByText('fetchFailedHint')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
   it('草稿就绪时提示"生成的是草稿,应用后仍需提交保存"', async () => {
     distillNuwa.mockResolvedValue(nuwaDraft)
     const onApply = vi.fn()

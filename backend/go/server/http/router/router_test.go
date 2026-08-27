@@ -172,6 +172,53 @@ func TestWrapperKeepsPublicMessageForServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestWrapperCarriesStructuredDataEnvelope(t *testing.T) {
+	// 蒸馏失败链路:远端 Python 稳定错误(code/stage/retryable/details)
+	// 必须经 Wrapper 原样进入响应 envelope 的 data 字段,不能被吞成单一 message。
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/distill", Wrapper(func(c *gin.Context) (int, any, error) {
+		return 0, nil, internalerrors.NewWithData(
+			internalerrors.ErrorTypeServiceUnavailable,
+			"model_timeout",
+			map[string]any{
+				"stage":     "distill",
+				"retryable": true,
+				"details":   map[string]any{"documents": 3},
+			},
+			"模型响应超时，请重试",
+		)
+	}))
+
+	recorder := httptest.NewRecorder()
+	r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/distill", nil))
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("HTTP status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := body["error_code"]; got != "model_timeout" {
+		t.Errorf("error_code = %v, want model_timeout", got)
+	}
+	if got := body["message"]; got != "模型响应超时，请重试" {
+		t.Errorf("message = %v, want public message preserved for 503", got)
+	}
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v, want object envelope", body["data"])
+	}
+	if data["stage"] != "distill" || data["retryable"] != true {
+		t.Errorf("data = %#v, want {stage:distill retryable:true}", data)
+	}
+	details, ok := data["details"].(map[string]any)
+	if !ok || details["documents"] != float64(3) {
+		t.Errorf("details = %#v, want {documents:3}", data["details"])
+	}
+}
+
 type assertiveError string
 
 func (e assertiveError) Error() string { return string(e) }

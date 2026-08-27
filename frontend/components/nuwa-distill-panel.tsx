@@ -21,26 +21,29 @@ import type { DistillationDraft } from '@/services/types'
  * 走正式网络/模型链路(distillNuwa),不加入任何 Mock fallback。
  * 蒸馏完成后只展示候选草稿与来源,只有用户显式「应用」才经 onApply 写入外层表单。
  * 失败按稳定错误码分派动作:可重试错误给重试按钮,资料不足给输入建议,未知错误附 request id。
+ * 结构化错误的 stage/code 原样展示,便于定位阶段;可操作建议按失败阶段表(计划 §1.3)给出。
  */
 interface DistillFailure {
   message: string
   retryable: boolean
   code?: string
+  stage?: string
   requestId?: string
 }
 
 /** 从 ApiError 信封解析阶段化失败信息(Go 网关透传 Python 稳定错误协议) */
 function parseFailure(err: unknown, fallback: string): DistillFailure {
   const apiError = err instanceof ApiError ? err : null
-  const retryable = !!(
-    apiError?.data?.data &&
-    typeof apiError.data.data === 'object' &&
-    (apiError.data.data as { retryable?: unknown }).retryable === true
-  )
+  const envelopeData =
+    apiError?.data?.data && typeof apiError.data.data === 'object'
+      ? (apiError.data.data as Record<string, unknown>)
+      : null
+  const retryable = envelopeData?.retryable === true
   return {
     message: apiError?.message ?? fallback,
     retryable,
     code: apiError?.errorCode,
+    stage: typeof envelopeData?.stage === 'string' ? envelopeData.stage : undefined,
     requestId:
       typeof apiError?.data?.request_id === 'string' ? apiError.data.request_id : undefined,
   }
@@ -135,6 +138,18 @@ export function NuwaDistillPanel({
             <p className="text-muted-foreground">{t('modelConfigHint')}</p>
           )}
           {searchBlocked && <p className="text-muted-foreground">{t('searchBlockedHint')}</p>}
+          {failure.code === 'research_fetch_failed' && (
+            <p className="text-muted-foreground">{t('fetchFailedHint')}</p>
+          )}
+          {(failure.code === 'model_invalid_output' || failure.code === 'distill_invalid_output') && (
+            <p className="text-muted-foreground">{t('invalidOutputHint')}</p>
+          )}
+          {/* 阶段·错误码:后端结构化错误原样透传,便于定位失败阶段 */}
+          {failure.code && (
+            <p className="break-all text-[10px] text-muted-foreground/70">
+              {failure.stage ? `${failure.stage} · ${failure.code}` : failure.code}
+            </p>
+          )}
           {failure.retryable && (
             <button type="button" onClick={run} className="dao-btn-ghost text-xs">
               <RotateCw className="h-3.5 w-3.5" />

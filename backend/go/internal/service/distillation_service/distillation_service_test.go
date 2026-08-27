@@ -110,6 +110,10 @@ func TestDistillMapsRemoteServiceUnavailableWithCodeAndData(t *testing.T) {
 	if !ok || payload["stage"] != "research" || payload["retryable"] != true {
 		t.Fatalf("data = %#v, want {stage:research retryable:true}", withData.GetData())
 	}
+	details, ok := payload["details"].(map[string]any)
+	if !ok || details["documents"] != 0 {
+		t.Fatalf("details = %#v, want {documents:0} 原样透传", payload["details"])
+	}
 }
 
 func TestDistillMapsRemoteInvalidRequestTo400WithPublicMessage(t *testing.T) {
