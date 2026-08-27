@@ -7,6 +7,7 @@ import {
   BrainCircuit,
   Check,
   ExternalLink,
+  Info,
   Loader2,
   RotateCw,
   Search,
@@ -185,6 +186,12 @@ export function NuwaDistillPanel({
               ))}
             </div>
           </div>
+
+          {/* draft_ready 状态提示:应用只填表单,提交保存后才真正生效 */}
+          <p className="mt-2 flex items-start gap-1 text-[11px] text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {t('draftHint')}
+          </p>
 
           {/* 资料来源 */}
           <details className="mt-2 text-[11px] text-muted-foreground">

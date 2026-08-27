@@ -166,6 +166,19 @@ describe('NuwaDistillPanel', () => {
     expect(onApply).not.toHaveBeenCalled()
   })
 
+  it('草稿就绪时提示"生成的是草稿,应用后仍需提交保存"', async () => {
+    distillNuwa.mockResolvedValue(nuwaDraft)
+    const onApply = vi.fn()
+    const user = userEvent.setup()
+    render(<NuwaDistillPanel onApply={onApply} />)
+
+    await runDistill(user)
+    await screen.findByText('女娲草稿')
+
+    // draft_ready 状态:明确告知应用不等于保存,仍需提交表单
+    expect(screen.getByText('draftHint')).toBeInTheDocument()
+  })
+
   it('有限证据草稿显示人工核对警告', async () => {
     distillNuwa.mockResolvedValue({
       ...nuwaDraft,

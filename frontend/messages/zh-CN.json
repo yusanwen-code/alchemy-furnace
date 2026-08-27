@@ -212,6 +212,7 @@
     "researching": "正在收集公开资料并生成草稿…",
     "draftReady": "候选草稿已生成 · {count} 个公开来源",
     "previewTitle": "候选草稿预览",
+    "draftHint": "生成的是草稿，应用后仍需提交保存",
     "apply": "应用到表单",
     "discard": "丢弃",
     "sources": "查看资料来源",

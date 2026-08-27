@@ -14,6 +14,16 @@ const td = vi.hoisted(() => ({
   listModelOptions: vi.fn(),
 }))
 
+// 女娲面板探针:道人创建页必须不再渲染女娲(唯一入口在金丹创建弹窗)
+const NuwaDistillPanelSpy = vi.hoisted(() => vi.fn())
+
+vi.mock('@/components/nuwa-distill-panel', () => ({
+  NuwaDistillPanel: () => {
+    NuwaDistillPanelSpy()
+    return <div data-testid="nuwa-panel" />
+  },
+}))
+
 // 真实消息解析(命名空间点路径 + {value} 插值)
 function resolveMsg(
   messages: unknown,
@@ -167,6 +177,18 @@ describe('AgentsPage', () => {
     td.listAgents.mockResolvedValue({ list: [], total: 0, page: 1, page_size: 100 })
     await user.click(screen.getByRole('button', { name: '重新加载' }))
     await waitFor(() => expect(td.listAgents).toHaveBeenLastCalledWith(undefined))
+  })
+
+  it('创建道人弹窗不渲染女娲面板(唯一入口在金丹创建弹窗)', async () => {
+    td.listAgents.mockResolvedValue({ list: [activeAgent], total: 1, page: 1, page_size: 100 })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('太上老君·active')
+
+    await user.click(screen.getByRole('button', { name: '招募道人' }))
+    expect(screen.getByRole('heading', { name: '招募道人' })).toBeInTheDocument()
+    expect(NuwaDistillPanelSpy).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('nuwa-panel')).toBeNull()
   })
 
   it('创建入口保留:提交创建请求并关闭弹窗', async () => {

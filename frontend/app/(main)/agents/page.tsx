@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
 import { AgentCard } from '@/components/agent-card'
-import { NuwaDistillPanel } from '@/components/nuwa-distill-panel'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
 import type { AgentListParams, AgentStatus } from '@/services/types'
@@ -167,13 +166,6 @@ export default function AgentsPage() {
             </div>
 
             <form onSubmit={handleCreate} className="space-y-4">
-              <NuwaDistillPanel
-                onApply={(draft) => {
-                  setName((current) => current || draft.name)
-                  setPersonality(draft.persona_summary)
-                }}
-              />
-
               <div>
                 <label className="dao-label">{t('modal.nameLabel')}</label>
                 <input

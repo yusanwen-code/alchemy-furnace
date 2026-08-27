@@ -212,6 +212,7 @@
     "researching": "Collecting public evidence and drafting…",
     "draftReady": "Draft ready · {count} public sources",
     "previewTitle": "Draft preview",
+    "draftHint": "This is a draft — after applying, submit the form to save it.",
     "apply": "Apply to form",
     "discard": "Discard",
     "sources": "View research sources",
