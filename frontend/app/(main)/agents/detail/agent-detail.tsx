@@ -8,7 +8,7 @@
  * 删除: 有会话历史(409 delete_has_history)时引导停用;无历史才二次确认硬删除
  */
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -75,18 +75,18 @@ const SEVERITY_CLASS: Record<TensionSeverity, string> = {
   high: 'bg-primary/10 text-primary border-primary/30',
 }
 
-export default function AgentDetailPage() {
+interface AgentDetailPageProps {
+  agentId?: string
+}
+
+export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   const t = useTranslations('agent')
   const tStatus = useTranslations('agentCard.status')
   const tEditor = useTranslations('agentDetail.editor')
   const tSev = useTranslations('agent.severity')
   const tLaunch = useTranslations('chatView.launch')
   const tCommon = useTranslations('common')
-  const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  // Next output:export prerenders [id] as "_"; ignore that static shell param
-  // so we never GET /agents/_ (400 "道人ID格式不正确"). Real UUIDs aren't "_".
-  const agentId = id === '_' ? undefined : id
 
   const { state: agentState, fetchAgent, dispatch } = useAgent()
   const { state: pillState, fetchPills } = usePill()
@@ -179,8 +179,27 @@ export default function AgentDetailPage() {
     void flow.save()
   }
 
-  // ========== 加载 / 错误 / 空 三态 ==========
-  if (!agent && agentState.loading) {
+  // ========== 链接无效 / 加载 / 错误 / 不存在 四态 ==========
+  // 状态顺序必须是:无 id 判定为无效链接;id 与加载归属不符按加载;
+  // 只有详情 API 明确 404 才判定"不存在或已删除";其余一律不闪现删除。
+  if (!agentId) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <div className="flex flex-col items-center justify-center py-16">
+          <AlertCircle className="mb-3 h-12 w-12 text-primary" />
+          <p className="text-sm text-muted-foreground">{t('invalidLink')}</p>
+          <Link href="/agents" className="dao-btn-primary mt-4 whitespace-nowrap">
+            <ArrowLeft className="h-4 w-4" />
+            {t('backToList')}
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const detailLoad = agentState.detailLoad
+
+  if (detailLoad.id !== agentId || detailLoad.status === 'loading') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
@@ -191,15 +210,15 @@ export default function AgentDetailPage() {
     )
   }
 
-  if (!agent && agentState.error) {
+  if (detailLoad.status === 'error') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
           <AlertCircle className="mb-3 h-12 w-12 text-primary" />
           <p className="mb-4 max-w-xl break-words text-center text-sm text-muted-foreground">
-            {agentState.error}
+            {detailLoad.error}
           </p>
-          <button type="button" onClick={() => agentId && fetchAgent(agentId)} className="dao-btn-ghost">
+          <button type="button" onClick={() => fetchAgent(agentId)} className="dao-btn-ghost">
             {tCommon('retry')}
           </button>
         </div>
@@ -207,7 +226,7 @@ export default function AgentDetailPage() {
     )
   }
 
-  if (!agent) {
+  if (detailLoad.status === 'not-found') {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <div className="flex flex-col items-center justify-center py-16">
@@ -217,6 +236,18 @@ export default function AgentDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             {t('backToList')}
           </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // 兜底:就绪状态与当前实体未同时到位(如快速切换)时按加载处理,绝不误报"已删除"
+  if (!(detailLoad.status === 'ready' && agent?.id === agentId)) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <div className="flex flex-col items-center justify-center py-16">
+          <Loader2 className="mb-3 h-8 w-8 animate-spin text-gold" />
+          <p className="text-sm text-muted-foreground">{t('loading')}</p>
         </div>
       </div>
     )

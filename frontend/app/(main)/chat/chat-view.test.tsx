@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import AgentDetailPage from '@/app/(main)/agents/[id]/agent-detail'
+import AgentDetailPage from '@/app/(main)/agents/detail/agent-detail'
 import { ChatView } from '@/app/(main)/chat/chat-view'
 import { ApiError } from '@/services/api'
 import type { Agent, ChatSession } from '@/services/types'
@@ -83,6 +83,7 @@ const testDoubles = vi.hoisted(() => ({
     },
     loading: false,
     error: null as string | null,
+    detailLoad: { id: 'agent-1', status: 'ready' as const, error: null as string | null },
   },
 }))
 
@@ -463,7 +464,7 @@ describe('chat launch surfaces', () => {
       409,
       { error_code: 'service.chat.model_unavailable' },
     ))
-    render(<AgentDetailPage />)
+    render(<AgentDetailPage agentId="agent-1" />)
 
     await user.click(screen.getByRole('button', { name: 'startChatCta' }))
 

@@ -2,13 +2,24 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import AgentDetailPage from '@/app/(main)/agents/[id]/agent-detail'
+import AgentDetailPage from '@/app/(main)/agents/detail/agent-detail'
 import { ApiError } from '@/services/api'
 import type { AgentDetail, DistillationDraft, Pill } from '@/services/types'
 
-// ---- 可变的测试替身 ----
-const td = vi.hoisted(() => ({
-  push: vi.fn(),
+// ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
+const td = vi.hoisted(() => {
+  const IDS = {
+    AGENT_ID: '11111111-1111-4111-8111-111111111111',
+    OTHER_AGENT_ID: '22222222-2222-4222-8222-222222222222',
+    PILL_A_ID: '33333333-3333-4333-8333-333333333333',
+    PILL_B_ID: '44444444-4444-4444-8444-444444444444',
+    PILL_C_ID: '55555555-5555-4555-8555-555555555555',
+    AP_1_ID: '66666666-6666-4666-8666-666666666666',
+    AP_2_ID: '77777777-7777-4777-8777-777777777777',
+  }
+  return {
+    IDS,
+    push: vi.fn(),
   fetchAgent: vi.fn(),
   fetchPills: vi.fn(),
   getAgent: vi.fn(),
@@ -19,12 +30,14 @@ const td = vi.hoisted(() => ({
   launchSingle: vi.fn(),
   launchRetry: vi.fn(),
   dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
+  propId: IDS.AGENT_ID as string | undefined,
   agentState: {
     agents: [] as AgentDetail[],
     total: 0,
     currentAgent: null as AgentDetail | null,
     loading: false,
     error: null as string | null,
+    detailLoad: { id: null, status: 'idle' as DetailStatus, error: null as string | null },
   },
   pillState: {
     pills: [] as Pill[],
@@ -37,8 +50,12 @@ const td = vi.hoisted(() => ({
     | { status: 'idle' }
     | { status: 'submitting' }
     | { status: 'error'; message: string; errorCode?: string },
-  params: { id: 'agent-1' },
-}))
+  }
+})
+
+const { AGENT_ID, OTHER_AGENT_ID, PILL_A_ID, PILL_B_ID, PILL_C_ID, AP_1_ID, AP_2_ID } = td.IDS
+
+type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
 
 // 真实消息解析(命名空间点路径 + {value} 插值)
 function resolveMsg(
@@ -73,7 +90,6 @@ vi.mock('next-intl', async () => {
 })
 
 vi.mock('next/navigation', () => ({
-  useParams: () => ({ id: td.params.id }),
   useRouter: () => ({ push: td.push }),
 }))
 
@@ -155,7 +171,7 @@ vi.mock('@/components/nuwa-distill-panel', () => ({
 
 // ---- fixtures ----
 const pillA: Pill = {
-  id: 'pill-a',
+  id: PILL_A_ID,
   name: '丹心妙语',
   description: '温润如茶',
   skill_schema: {},
@@ -165,11 +181,11 @@ const pillA: Pill = {
   created_at: '2026-08-20T00:00:00Z',
   updated_at: '2026-08-20T00:00:00Z',
 }
-const pillB: Pill = { ...pillA, id: 'pill-b', name: '浩然正气' }
-const pillC: Pill = { ...pillA, id: 'pill-c', name: '清风徐来' }
+const pillB: Pill = { ...pillA, id: PILL_B_ID, name: '浩然正气' }
+const pillC: Pill = { ...pillA, id: PILL_C_ID, name: '清风徐来' }
 
 const baseAgent: AgentDetail = {
-  id: 'agent-1',
+  id: AGENT_ID,
   name: '太上老君',
   avatar: '',
   personality: '沉稳如山',
@@ -179,8 +195,8 @@ const baseAgent: AgentDetail = {
   created_at: '2026-08-20T00:00:00Z',
   updated_at: '2026-08-20T00:00:00Z',
   agent_pills: [
-    { id: 'ap-1', agent_id: 'agent-1', pill_id: 'pill-a', weight: 2, sort_order: 1, created_at: '2026-08-20T00:00:00Z', pill: pillA },
-    { id: 'ap-2', agent_id: 'agent-1', pill_id: 'pill-b', weight: 1, sort_order: 2, created_at: '2026-08-20T00:00:00Z', pill: pillB },
+    { id: AP_1_ID, agent_id: AGENT_ID, pill_id: PILL_A_ID, weight: 2, sort_order: 1, created_at: '2026-08-20T00:00:00Z', pill: pillA },
+    { id: AP_2_ID, agent_id: AGENT_ID, pill_id: PILL_B_ID, weight: 1, sort_order: 2, created_at: '2026-08-20T00:00:00Z', pill: pillB },
   ],
   language_pattern: {
     is_valid: true,
@@ -195,11 +211,29 @@ const modelOptions = [
   { name: 'deepseek-chat', display_name: 'DeepSeek Chat', provider_name: 'deepseek', provider_display_name: 'DeepSeek', is_default: false },
 ]
 
-function setAgent(agent: AgentDetail | null, opts: { loading?: boolean; error?: string | null } = {}) {
-  td.agentState.currentAgent = agent
-  td.agentState.loading = opts.loading ?? false
-  td.agentState.error = opts.error ?? null
-  td.params.id = agent?.id ?? 'agent-1'
+/**
+ * 设置详情页状态机(组件按 agentId prop + agentState.detailLoad 决策)。
+ * 缺省:agent 就绪 + 对应 UUID;status 单独传可覆盖(loading/error/not-found)。
+ */
+function setDetailState(opts: {
+  agent?: AgentDetail | null
+  status?: DetailStatus
+  error?: string | null
+  id?: string
+}) {
+  const id = opts.id ?? opts.agent?.id ?? AGENT_ID
+  td.propId = id
+  td.agentState.currentAgent = opts.agent ?? null
+  td.agentState.detailLoad = {
+    id,
+    status: opts.status ?? (opts.agent ? 'ready' : 'idle'),
+    error: opts.error ?? null,
+  }
+}
+
+/** 渲染组件(统一入口:agentId 来自 td.propId) */
+function renderPage() {
+  return render(<AgentDetailPage agentId={td.propId} />)
 }
 
 async function enterEditing(user: ReturnType<typeof userEvent.setup>) {
@@ -211,6 +245,9 @@ describe('AgentDetailPage', () => {
     vi.clearAllMocks()
     td.dispatchCalls.length = 0
     td.agentState.agents = []
+    td.agentState.currentAgent = null
+    td.agentState.detailLoad = { id: null, status: 'idle', error: null }
+    td.propId = AGENT_ID
     td.pillState.pills = [pillA, pillB, pillC]
     td.launchState = { status: 'idle' }
     i18n.locale = 'zh-CN'
@@ -225,36 +262,49 @@ describe('AgentDetailPage', () => {
     i18n.locale = 'zh-CN'
   })
 
-  describe('加载/错误/空三态', () => {
-    it('静态导出 "_" 占位不触发任何拉取', () => {
-      // Next output:export 将 [id] 预渲染为 "_";硬加载/深链时 useParams()
-      // 短暂返回 "_"。它不是真 ID,绝不能 GET /agents/_(400 且弹错)。
-      setAgent(null)
-      td.params.id = '_'
-      render(<AgentDetailPage />)
+  describe('链接/加载/错误/不存在四态', () => {
+    it('无效链接(缺 id):不发 API 且不误报已删除', () => {
+      td.propId = undefined
+      renderPage()
       expect(td.fetchAgent).not.toHaveBeenCalled()
       expect(td.fetchPills).not.toHaveBeenCalled()
+      expect(screen.getByText('道人链接无效，请返回道人府重新选择')).toBeInTheDocument()
+      expect(screen.queryByText('道人不存在或已被删除')).toBeNull()
+    })
+
+    it('有效 id 发起详情拉取', () => {
+      renderPage()
+      expect(td.fetchAgent).toHaveBeenCalledWith(AGENT_ID)
+      expect(td.fetchPills).toHaveBeenCalled()
     })
 
     it('加载态:显示加载提示', () => {
-      setAgent(null, { loading: true })
-      render(<AgentDetailPage />)
+      setDetailState({ status: 'loading' })
+      renderPage()
       expect(screen.getByText('加载道人...')).toBeInTheDocument()
     })
 
-    it('错误态:显示错误并可重试拉取', async () => {
-      setAgent(null, { error: '服务器内部错误' })
+    it('快速切换:旧实体残留时按加载处理,不闪现旧道人', () => {
+      const oldAgent: AgentDetail = { ...baseAgent, id: OTHER_AGENT_ID, name: '老前任' }
+      setDetailState({ agent: oldAgent, status: 'loading' })
+      renderPage()
+      expect(screen.getByText('加载道人...')).toBeInTheDocument()
+      expect(screen.queryByText('老前任')).toBeNull()
+    })
+
+    it('错误态:显示错误并可重试,重试用同一 UUID', async () => {
+      setDetailState({ status: 'error', error: '服务器内部错误' })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       expect(screen.getByText('服务器内部错误')).toBeInTheDocument()
       td.fetchAgent.mockClear()
       await user.click(screen.getByRole('button', { name: '重试' }))
-      expect(td.fetchAgent).toHaveBeenCalledWith('agent-1')
+      expect(td.fetchAgent).toHaveBeenCalledWith(AGENT_ID)
     })
 
-    it('空态:道人不存在时给出返回入口', () => {
-      setAgent(null)
-      render(<AgentDetailPage />)
+    it('404 态:只有 API 明确 404 才显示不存在,且给出返回入口', () => {
+      setDetailState({ status: 'not-found' })
+      renderPage()
       expect(screen.getByText('道人不存在或已被删除')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: '返回道人府' })).toHaveAttribute('href', '/agents')
     })
@@ -262,8 +312,8 @@ describe('AgentDetailPage', () => {
 
   describe('只读态', () => {
     it('展示完整资料:名称/性格/模型/状态/主动性/服丹编排(顺序+剂量)', () => {
-      setAgent(baseAgent)
-      render(<AgentDetailPage />)
+      setDetailState({ agent: baseAgent })
+      renderPage()
       expect(screen.getByRole('heading', { name: '太上老君' })).toBeInTheDocument()
       expect(screen.getByText('沉稳如山')).toBeInTheDocument()
       expect(screen.getByText('gpt-4o')).toBeInTheDocument()
@@ -279,8 +329,8 @@ describe('AgentDetailPage', () => {
     })
 
     it('语言模式缓存状态:有效时展示涌现规则与丹性相冲', () => {
-      setAgent(baseAgent)
-      render(<AgentDetailPage />)
+      setDetailState({ agent: baseAgent })
+      renderPage()
       expect(screen.getByText('已合成')).toBeInTheDocument()
       expect(screen.getByText('开门见山')).toBeInTheDocument()
       expect(screen.getByText(/丹性相冲/)).toBeInTheDocument()
@@ -288,51 +338,53 @@ describe('AgentDetailPage', () => {
     })
 
     it('语言模式缓存失效时展示待重新合成提示', () => {
-      setAgent({
-        ...baseAgent,
-        language_pattern: { is_valid: false, system_prompt: '', emergence_rules: [], inner_tensions: [] },
+      setDetailState({
+        agent: {
+          ...baseAgent,
+          language_pattern: { is_valid: false, system_prompt: '', emergence_rules: [], inner_tensions: [] },
+        },
       })
-      render(<AgentDetailPage />)
+      renderPage()
       expect(screen.getByText('待重新合成')).toBeInTheDocument()
       expect(screen.getByText(/旧方所炼/)).toBeInTheDocument()
     })
 
     it('当前模型不在启用列表时展示失效警告', async () => {
       td.listModelOptions.mockResolvedValue([modelOptions[1]]) // 仅 deepseek-chat
-      setAgent(baseAgent)
-      render(<AgentDetailPage />)
+      setDetailState({ agent: baseAgent })
+      renderPage()
       expect(await screen.findByText('模型失效')).toBeInTheDocument()
     })
 
     it('当前模型在启用列表时不展示失效警告', async () => {
-      setAgent(baseAgent)
-      render(<AgentDetailPage />)
+      setDetailState({ agent: baseAgent })
+      renderPage()
       await waitFor(() => expect(td.listModelOptions).toHaveBeenCalled())
       expect(screen.queryByText('模型失效')).toBeNull()
     })
 
     it('inactive 道人发起会话按钮禁用并带原因提示', () => {
-      setAgent({ ...baseAgent, status: 'inactive' })
-      render(<AgentDetailPage />)
+      setDetailState({ agent: { ...baseAgent, status: 'inactive' } })
+      renderPage()
       const chat = screen.getByRole('button', { name: '开始论道' })
       expect(chat).toBeDisabled()
       expect(chat).toHaveAttribute('title', expect.stringContaining('停用'))
     })
 
     it('active 道人可发起会话', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await user.click(screen.getByRole('button', { name: '开始论道' }))
-      expect(td.launchSingle).toHaveBeenCalledWith('agent-1')
+      expect(td.launchSingle).toHaveBeenCalledWith(AGENT_ID)
     })
   })
 
   describe('编辑态', () => {
     it('进入编辑:字段回显,保存前编辑不发起任何 API', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
 
       expect(screen.getByDisplayValue('太上老君')).toBeInTheDocument()
@@ -352,9 +404,9 @@ describe('AgentDetailPage', () => {
     })
 
     it('编辑态提供状态切换与头像字段', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
 
       expect(screen.getByRole('button', { name: '活跃' })).toHaveAttribute('aria-pressed', 'true')
@@ -367,13 +419,13 @@ describe('AgentDetailPage', () => {
     })
 
     it('保存成功:基础资料 → 完整编排 → GET 回读,顺序与新编排正确', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const fresh: AgentDetail = { ...baseAgent, name: '改名老君', updated_at: '2026-08-23T00:00:00Z' }
       td.updateAgent.mockResolvedValue(fresh)
       td.replacePills.mockResolvedValue(fresh)
       td.getAgent.mockResolvedValue(fresh)
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
 
       const nameInput = screen.getByDisplayValue('太上老君')
@@ -381,15 +433,15 @@ describe('AgentDetailPage', () => {
       await user.type(nameInput, '改名老君')
       // 下移第一枚 + 新增一枚,编排变化进入同一保存事务
       await user.click(screen.getByRole('button', { name: /下移 丹心妙语/ }))
-      await user.selectOptions(screen.getByRole('combobox', { name: '添加金丹' }), 'pill-c')
+      await user.selectOptions(screen.getByRole('combobox', { name: '添加金丹' }), PILL_C_ID)
       await user.click(screen.getByRole('button', { name: '保存' }))
 
-      await waitFor(() => expect(td.getAgent).toHaveBeenCalledWith('agent-1'))
-      expect(td.updateAgent).toHaveBeenCalledWith('agent-1', expect.objectContaining({ name: '改名老君' }))
-      expect(td.replacePills).toHaveBeenCalledWith('agent-1', [
-        { pill_id: 'pill-b', weight: 1 },
-        { pill_id: 'pill-a', weight: 2 },
-        { pill_id: 'pill-c', weight: 1 },
+      await waitFor(() => expect(td.getAgent).toHaveBeenCalledWith(AGENT_ID))
+      expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, expect.objectContaining({ name: '改名老君' }))
+      expect(td.replacePills).toHaveBeenCalledWith(AGENT_ID, [
+        { pill_id: PILL_B_ID, weight: 1 },
+        { pill_id: PILL_A_ID, weight: 2 },
+        { pill_id: PILL_C_ID, weight: 1 },
       ])
       expect(td.updateAgent.mock.invocationCallOrder[0]).toBeLessThan(td.replacePills.mock.invocationCallOrder[0])
       expect(td.replacePills.mock.invocationCallOrder[0]).toBeLessThan(td.getAgent.mock.invocationCallOrder[0])
@@ -398,10 +450,10 @@ describe('AgentDetailPage', () => {
     })
 
     it('保存失败:错误反馈可重试且草稿不丢', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       td.updateAgent.mockRejectedValueOnce(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
       const nameInput = screen.getByDisplayValue('太上老君')
       await user.clear(nameInput)
@@ -421,9 +473,9 @@ describe('AgentDetailPage', () => {
     })
 
     it('道号为空白时拒绝保存:字段错误展示且零 API', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
       const nameInput = screen.getByDisplayValue('太上老君')
       await user.clear(nameInput)
@@ -436,9 +488,9 @@ describe('AgentDetailPage', () => {
     })
 
     it('恢复服务端版本:草稿回到基线但保持编辑态', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
       const nameInput = screen.getByDisplayValue('太上老君')
       await user.clear(nameInput)
@@ -450,9 +502,9 @@ describe('AgentDetailPage', () => {
     })
 
     it('取消:放弃修改回到只读,零 API', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
       const nameInput = screen.getByDisplayValue('太上老君')
       await user.type(nameInput, '改')
@@ -464,9 +516,9 @@ describe('AgentDetailPage', () => {
 
     it('失效模型在编辑下拉中作为警告项保留,不静默丢失', async () => {
       td.listModelOptions.mockResolvedValue([modelOptions[1]])
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
 
       const select = await screen.findByRole('combobox', { name: '选择模型' })
@@ -476,12 +528,12 @@ describe('AgentDetailPage', () => {
     })
 
     it('女娲蒸馏草稿显式应用后才落入表单,且不触碰服丹编排', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       td.updateAgent.mockImplementation(async (_id, data) => ({ ...baseAgent, ...data }))
       td.replacePills.mockResolvedValue(baseAgent)
       td.getAgent.mockResolvedValue({ ...baseAgent, name: '女娲造人', personality: '悲天悯人的造物主' })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       // 只读态不出现蒸馏入口
       expect(screen.queryByText('nuwa-apply')).toBeNull()
 
@@ -492,23 +544,23 @@ describe('AgentDetailPage', () => {
 
       await user.click(screen.getByRole('button', { name: '保存' }))
       await waitFor(() => expect(td.updateAgent).toHaveBeenCalled())
-      expect(td.updateAgent).toHaveBeenCalledWith('agent-1', expect.objectContaining({
+      expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, expect.objectContaining({
         name: '女娲造人',
         personality: '悲天悯人的造物主',
       }))
       // 编排原样提交,蒸馏不触碰
-      expect(td.replacePills).toHaveBeenCalledWith('agent-1', [
-        { pill_id: 'pill-a', weight: 2 },
-        { pill_id: 'pill-b', weight: 1 },
+      expect(td.replacePills).toHaveBeenCalledWith(AGENT_ID, [
+        { pill_id: PILL_A_ID, weight: 2 },
+        { pill_id: PILL_B_ID, weight: 1 },
       ])
     })
   })
 
   describe('删除与停用', () => {
     it('删除需二次确认:第一次点击不发起请求', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '删除道人' }))
       expect(td.deleteAgent).not.toHaveBeenCalled()
@@ -516,20 +568,20 @@ describe('AgentDetailPage', () => {
     })
 
     it('无历史:二次确认后删除成功并返回列表', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       td.deleteAgent.mockResolvedValue(undefined)
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '删除道人' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认删除' }))
       await waitFor(() => expect(td.push).toHaveBeenCalledWith('/agents'))
-      expect(td.deleteAgent).toHaveBeenCalledWith('agent-1')
-      expect(td.dispatchCalls.some(a => a.type === 'REMOVE_AGENT' && a.payload === 'agent-1')).toBe(true)
+      expect(td.deleteAgent).toHaveBeenCalledWith(AGENT_ID)
+      expect(td.dispatchCalls.some(a => a.type === 'REMOVE_AGENT' && a.payload === AGENT_ID)).toBe(true)
     })
 
     it('有历史:409 冲突后显示会话数与停用动作,不再显示永久删除确认', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       td.deleteAgent.mockRejectedValue(
         new ApiError('道人有 3 段会话历史，只能停用不能删除', 409, {
           code: 409,
@@ -539,7 +591,7 @@ describe('AgentDetailPage', () => {
         }),
       )
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '删除道人' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认删除' }))
@@ -551,7 +603,7 @@ describe('AgentDetailPage', () => {
     })
 
     it('停用动作:调用 updateAgent 置 inactive 并回读详情', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       td.deleteAgent.mockRejectedValue(
         new ApiError('有历史', 409, {
           error_code: 'service.agent.delete_has_history',
@@ -562,23 +614,23 @@ describe('AgentDetailPage', () => {
       td.updateAgent.mockResolvedValue(inactiveAgent)
       td.getAgent.mockResolvedValue(inactiveAgent)
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '删除道人' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认删除' }))
       await user.click(await screen.findByRole('button', { name: '停用道人' }))
 
       await waitFor(() =>
-        expect(td.updateAgent).toHaveBeenCalledWith('agent-1', { status: 'inactive' }),
+        expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, { status: 'inactive' }),
       )
       await screen.findByText('沉睡')
     })
 
     it('删除其他失败:错误反馈可重试,停留在详情页', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       td.deleteAgent.mockRejectedValue(new ApiError('服务器内部错误', 500))
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
 
       await user.click(screen.getByRole('button', { name: '删除道人' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认删除' }))
@@ -596,9 +648,9 @@ describe('AgentDetailPage', () => {
     }
 
     it('编辑且有改动时,浏览器关闭被阻止', async () => {
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
       await enterEditing(user)
       const nameInput = screen.getByDisplayValue('太上老君')
       await user.type(nameInput, '改')
@@ -607,8 +659,8 @@ describe('AgentDetailPage', () => {
     })
 
     it('只读时不阻止离开', () => {
-      setAgent(baseAgent)
-      render(<AgentDetailPage />)
+      setDetailState({ agent: baseAgent })
+      renderPage()
       expect(dispatchBeforeUnload().defaultPrevented).toBe(false)
     })
   })
@@ -616,9 +668,9 @@ describe('AgentDetailPage', () => {
   describe('英文布局', () => {
     it('en locale 下按钮与区块标题可达且不截断', async () => {
       i18n.locale = 'en'
-      setAgent(baseAgent)
+      setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
-      render(<AgentDetailPage />)
+      renderPage()
 
       // 只读态:长标题可换行
       const heading = screen.getByRole('heading', { name: 'Language pattern (pill nature)' })

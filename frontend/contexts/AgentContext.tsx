@@ -7,7 +7,17 @@
  */
 import React, { createContext, useContext, useReducer, useCallback, useRef } from 'react'
 import * as agentService from '@/services/agentService'
+import { ApiError } from '@/services/api'
 import type { Agent, AgentDetail, AgentListParams, CreateAgentRequest, UpdateAgentRequest } from '@/services/types'
+
+/** 道人详情加载状态(按 ID 归属;只有 API 明确 404 才判定不存在) */
+type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
+
+interface DetailLoadState {
+  id: string | null
+  status: DetailStatus
+  error: string | null
+}
 
 /** 道人状态 */
 interface AgentState {
@@ -16,6 +26,7 @@ interface AgentState {
   currentAgent: AgentDetail | null
   loading: boolean
   error: string | null
+  detailLoad: DetailLoadState
 }
 
 /** 操作类型 */
@@ -27,6 +38,10 @@ type AgentAction =
   | { type: 'REMOVE_AGENT'; payload: string }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'DETAIL_START'; payload: { id: string } }
+  | { type: 'DETAIL_READY'; payload: { id: string; agent: AgentDetail } }
+  | { type: 'DETAIL_NOT_FOUND'; payload: { id: string } }
+  | { type: 'DETAIL_ERROR'; payload: { id: string; error: string } }
 
 /** 初始状态 */
 const initialState: AgentState = {
@@ -35,6 +50,12 @@ const initialState: AgentState = {
   currentAgent: null,
   loading: false,
   error: null,
+  detailLoad: { id: null, status: 'idle', error: null },
+}
+
+/** 详情完成类 action 的竞态守卫:只在 id 归属匹配时接受结果,防旧请求覆盖新页 */
+function acceptDetail(state: AgentState, id: string): boolean {
+  return state.detailLoad.id === id
 }
 
 /** Reducer */
@@ -65,6 +86,22 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
       return { ...state, loading: action.payload }
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false }
+    case 'DETAIL_START':
+      return { ...state, detailLoad: { id: action.payload.id, status: 'loading', error: null } }
+    case 'DETAIL_READY':
+      if (!acceptDetail(state, action.payload.id)) return state
+      // 守卫通过才原子落库:状态与道人一起更新,防旧请求的 success 污染新页
+      return {
+        ...state,
+        detailLoad: { id: action.payload.id, status: 'ready', error: null },
+        currentAgent: action.payload.agent,
+      }
+    case 'DETAIL_NOT_FOUND':
+      if (!acceptDetail(state, action.payload.id)) return state
+      return { ...state, detailLoad: { id: action.payload.id, status: 'not-found', error: null } }
+    case 'DETAIL_ERROR':
+      if (!acceptDetail(state, action.payload.id)) return state
+      return { ...state, detailLoad: { id: action.payload.id, status: 'error', error: action.payload.error } }
     default:
       return state
   }
@@ -111,16 +148,21 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /** 获取单个道人详情 */
+  /** 获取单个道人详情(按 ID 归属;只有 API 明确 404 才判定"不存在或已删除";旧请求晚到不覆盖新页) */
   const fetchAgent = useCallback(async (id: string) => {
-    dispatch({ type: 'SET_ERROR', payload: null })
-    dispatch({ type: 'SET_CURRENT_AGENT', payload: null })
-    dispatch({ type: 'SET_LOADING', payload: true })
+    dispatch({ type: 'DETAIL_START', payload: { id } })
     try {
       const agent = await agentService.getAgent(id)
-      dispatch({ type: 'SET_CURRENT_AGENT', payload: agent })
+      dispatch({ type: 'DETAIL_READY', payload: { id, agent } })
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '获取道人详情失败' })
+      if (error instanceof ApiError && error.status === 404) {
+        dispatch({ type: 'DETAIL_NOT_FOUND', payload: { id } })
+      } else {
+        dispatch({
+          type: 'DETAIL_ERROR',
+          payload: { id, error: error instanceof Error ? error.message : '获取道人详情失败' },
+        })
+      }
     }
   }, [])
 

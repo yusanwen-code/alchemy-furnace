@@ -473,6 +473,7 @@
   },
   "agent": {
     "backToList": "返回道人府",
+    "invalidLink": "道人链接无效，请返回道人府重新选择",
     "loading": "加载道人...",
     "notFound": "道人不存在或已被删除",
     "editCta": "编辑道人",

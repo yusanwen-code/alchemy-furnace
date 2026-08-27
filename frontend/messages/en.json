@@ -473,6 +473,7 @@
   },
   "agent": {
     "backToList": "Back to Daoist Hall",
+    "invalidLink": "This agent link is invalid. Return to the agent list and choose again.",
     "loading": "Loading daoist...",
     "notFound": "Daoist not found or has been removed",
     "editCta": "Edit daoist",
