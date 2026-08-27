@@ -124,6 +124,8 @@ test-python:
 test-frontend:
 	@echo "🧪 运行前端类型检查与构建..."
 	cd frontend && npm run build
+	@echo "🧪 校验静态实体详情路由产物契约..."
+	bash scripts/check-static-detail-routes.sh
 
 migrate:
 	@echo "🗃️  执行数据库迁移..."

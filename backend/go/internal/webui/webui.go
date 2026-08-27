@@ -35,7 +35,7 @@ func defaultLocaleHTML(sub fs.FS) string {
 
 // Handler 静态文件服务 + SPA fallback + 正确 Content-Type
 //
-// 映射:精确文件 → Next export 的 route.html → 动态 route/_.html → 默认页 → 404
+// 映射:精确文件 → Next export 的 route.html → 默认页 → 404
 //
 // 根路径 / 处理:优先默认 locale(zh-CN.html)→ index.html(占位)
 //   - 生产:real build 有 zh-CN.html,直接服务真实首页
@@ -82,15 +82,7 @@ func Handler() http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		// 2) 动态导出路由: /pills/<id>、/agents/<id> → <dir>/_.html。
-		//    注意:/chat/<uuid> 已在上方 307 规范化,不会落入这里。
-		if !strings.Contains(path.Base(p), ".") {
-			if dir := path.Dir(p); dir != "." && serveFile(w, sub, path.Join(dir, "_.html")) {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		}
-		// 3) 未导出的无扩展路径回退默认页，让客户端路由接管。
+		// 2) 未导出的无扩展路径回退默认页，让客户端路由接管。
 		base := path.Base(p)
 		if base == "index.html" || !strings.Contains(base, ".") {
 			if serveFile(w, sub, defaultHTML) {
@@ -98,7 +90,7 @@ func Handler() http.Handler {
 				return
 			}
 		}
-		// 4) 真没有 → 404 页
+		// 3) 真没有 → 404 页
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)

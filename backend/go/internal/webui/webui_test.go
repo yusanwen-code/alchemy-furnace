@@ -176,6 +176,8 @@ func TestHandler_LegacyEntityDetailRedirect(t *testing.T) {
 			Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.target, nil))
 			require.Equal(t, tc.wantStatus, rec.Code)
 			if tc.wantStatus != http.StatusTemporaryRedirect {
+				// 非 UUID 动态段不再依赖 `_` 占位路由:回退默认页而非 404
+				require.True(t, isWebuiBody(rec.Body.String()), "无效实体段应回退默认页")
 				return
 			}
 			u, err := url.Parse(rec.Header().Get("Location"))
