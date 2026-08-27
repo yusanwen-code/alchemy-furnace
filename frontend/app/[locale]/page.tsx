@@ -9,6 +9,7 @@ import { usePill } from '@/contexts/PillContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
 import { chatSessionHref } from '@/lib/chat-route'
+import { pillDetailHref } from '@/lib/entity-detail-route'
 import { FloatCard, CoinIcon, SealDot } from '@/components/alchemy/float-card'
 import { BaguaFurnace } from '@/components/alchemy/bagua-furnace'
 import type { FurnaceWindow } from '@/components/alchemy/bagua-furnace-fire'
@@ -232,7 +233,7 @@ export default function HomePage() {
                     </div>
                   )}
                   <Link
-                    href={`/pills/${spotlight.id}`}
+                    href={pillDetailHref(spotlight.id)}
                     className="mt-8 inline-flex w-fit items-center gap-2 rounded-full bg-foreground px-7 py-3 text-sm font-medium text-background transition-transform duration-300 hover:scale-[1.03]"
                   >
                     {tSpot('viewCta')}
@@ -274,7 +275,7 @@ export default function HomePage() {
                 {recentPills.map((p, i) => (
                   <li key={p.id}>
                     <Link
-                      href={`/pills/${p.id}`}
+                      href={pillDetailHref(p.id)}
                       className="group flex w-full items-center gap-4 rounded-2xl px-2 py-2.5 text-left transition-colors duration-300 hover:bg-secondary/70"
                     >
                       <CoinIcon tone={(['gold', 'sage', 'cinnabar'] as const)[i % 3]}>

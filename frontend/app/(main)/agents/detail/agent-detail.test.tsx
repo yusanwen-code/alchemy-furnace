@@ -37,7 +37,7 @@ const td = vi.hoisted(() => {
     currentAgent: null as AgentDetail | null,
     loading: false,
     error: null as string | null,
-    detailLoad: { id: null, status: 'idle' as DetailStatus, error: null as string | null },
+    detailLoad: { id: null as string | null, status: 'idle' as DetailStatus, error: null as string | null },
   },
   pillState: {
     pills: [] as Pill[],

@@ -16,8 +16,11 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }))
 
+const CUSTOM_PILL_ID = '33333333-3333-4333-8333-333333333333'
+const BUILTIN_PILL_ID = '44444444-4444-4444-8444-444444444444'
+
 const customPill: Pill = {
-  id: 'pill-custom-1',
+  id: CUSTOM_PILL_ID,
   name: '丹心妙语',
   description: '温润如茶',
   skill_schema: {},
@@ -29,7 +32,7 @@ const customPill: Pill = {
   updated_at: '2026-08-20T00:00:00Z',
 }
 
-const builtinPill: Pill = { ...customPill, id: 'pill-builtin-1', is_builtin: true }
+const builtinPill: Pill = { ...customPill, id: BUILTIN_PILL_ID, is_builtin: true }
 
 describe('PillCard', () => {
   beforeEach(() => {
@@ -49,7 +52,7 @@ describe('PillCard', () => {
 
     await user.click(screen.getByRole('link', { name: '丹心妙语' }))
     expect(push).toHaveBeenCalledTimes(1)
-    expect(push).toHaveBeenCalledWith('/pills/pill-custom-1')
+    expect(push).toHaveBeenCalledWith(`/pills/detail?id=${CUSTOM_PILL_ID}`)
   })
 
   it('键盘 Enter 与 Space 均可触发导航', () => {
@@ -57,7 +60,7 @@ describe('PillCard', () => {
     const nav = screen.getByRole('link', { name: '丹心妙语' })
 
     fireEvent.keyDown(nav, { key: 'Enter' })
-    expect(push).toHaveBeenCalledWith('/pills/pill-custom-1')
+    expect(push).toHaveBeenCalledWith(`/pills/detail?id=${CUSTOM_PILL_ID}`)
 
     fireEvent.keyDown(nav, { key: ' ' })
     expect(push).toHaveBeenCalledTimes(2)

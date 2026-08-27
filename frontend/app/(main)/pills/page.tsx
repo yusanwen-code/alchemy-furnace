@@ -24,6 +24,7 @@ import { PillCard } from '@/components/pill-card'
 import { BindAgentModal } from '@/components/bind-agent-modal'
 import { TopTabs } from '@/components/interaction/top-tabs'
 import { NuwaDistillPanel } from '@/components/nuwa-distill-panel'
+import { pillDetailHref } from '@/lib/entity-detail-route'
 import { emptySkillSchema } from '@/services/pillService'
 import type { DistillationDraft, Pill } from '@/services/types'
 
@@ -77,7 +78,7 @@ export default function PillsPage() {
       setName('')
       setDescription('')
       setDistilledDraft(null)
-      router.push(`/pills/${pill.id}`)
+      router.push(pillDetailHref(pill.id))
     } catch {
       // 失败原因已由 Context SET_ERROR 展示，留在创建面板
     } finally {

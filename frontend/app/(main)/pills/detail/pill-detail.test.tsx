@@ -33,7 +33,7 @@ const td = vi.hoisted(() => {
       loading: false,
       error: null as string | null,
       detailLoad: {
-        id: null,
+        id: null as string | null,
         status: 'idle' as 'idle' | 'loading' | 'ready' | 'not-found' | 'error',
         error: null as string | null,
       },

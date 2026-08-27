@@ -58,8 +58,11 @@ vi.mock('@/hooks/use-chat-launch-flow', () => ({
   }),
 }))
 
+const AGENT_1_ID = '11111111-1111-4111-8111-111111111111'
+const AGENT_2_ID = '22222222-2222-4222-8222-222222222222'
+
 const activeAgent: Agent = {
-  id: 'agent-1',
+  id: AGENT_1_ID,
   name: '太上老君',
   personality: '沉稳如山',
   model_name: 'gpt-4o',
@@ -69,7 +72,7 @@ const activeAgent: Agent = {
   updated_at: '2026-08-20T00:00:00Z',
 }
 
-const inactiveAgent: Agent = { ...activeAgent, id: 'agent-2', name: '沉睡道人', status: 'inactive' }
+const inactiveAgent: Agent = { ...activeAgent, id: AGENT_2_ID, name: '沉睡道人', status: 'inactive' }
 
 describe('AgentCard', () => {
   beforeEach(() => {
@@ -86,7 +89,7 @@ describe('AgentCard', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1)
     await user.click(screen.getByRole('link', { name: '太上老君' }))
     expect(td.push).toHaveBeenCalledTimes(1)
-    expect(td.push).toHaveBeenCalledWith('/agents/agent-1')
+    expect(td.push).toHaveBeenCalledWith(`/agents/detail?id=${AGENT_1_ID}`)
   })
 
   it('键盘 Enter 与 Space 均可触发导航', () => {
@@ -94,7 +97,7 @@ describe('AgentCard', () => {
     const nav = screen.getByRole('link', { name: '太上老君' })
 
     fireEvent.keyDown(nav, { key: 'Enter' })
-    expect(td.push).toHaveBeenCalledWith('/agents/agent-1')
+    expect(td.push).toHaveBeenCalledWith(`/agents/detail?id=${AGENT_1_ID}`)
     fireEvent.keyDown(nav, { key: ' ' })
     expect(td.push).toHaveBeenCalledTimes(2)
   })
@@ -105,7 +108,7 @@ describe('AgentCard', () => {
 
     await user.click(screen.getByRole('button', { name: /论道/ }))
     expect(td.launchSingle).toHaveBeenCalledTimes(1)
-    expect(td.launchSingle).toHaveBeenCalledWith('agent-1')
+    expect(td.launchSingle).toHaveBeenCalledWith(AGENT_1_ID)
     expect(td.push).not.toHaveBeenCalled()
   })
 
@@ -132,7 +135,7 @@ describe('AgentCard', () => {
 
     // 整卡仍可进入详情(详情页可恢复 active)
     await user.click(screen.getByRole('link', { name: '沉睡道人' }))
-    expect(td.push).toHaveBeenCalledWith('/agents/agent-2')
+    expect(td.push).toHaveBeenCalledWith(`/agents/detail?id=${AGENT_2_ID}`)
   })
 
   it('active 卡片不显示停用提示,论道按钮可用', () => {
@@ -150,6 +153,9 @@ describe('AgentCard', () => {
 
   it('紧凑模式保持链接行为', () => {
     render(<AgentCard agent={activeAgent} compact />)
-    expect(screen.getByRole('link', { name: /太上老君/ })).toHaveAttribute('href', '/agents/agent-1')
+    expect(screen.getByRole('link', { name: /太上老君/ })).toHaveAttribute(
+      'href',
+      `/agents/detail?id=${AGENT_1_ID}`,
+    )
   })
 })

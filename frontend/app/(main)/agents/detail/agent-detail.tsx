@@ -36,6 +36,7 @@ import { usePill } from '@/contexts/PillContext'
 import { useAgentEditorFlow } from '@/hooks/use-agent-editor-flow'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
+import { pillDetailHref } from '@/lib/entity-detail-route'
 import { AgentPillComposer } from '@/components/agent-pill-composer'
 import { NuwaDistillPanel } from '@/components/nuwa-distill-panel'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
@@ -567,7 +568,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
                     <FlaskConical className="h-4 w-4" />
                   </span>
                   <Link
-                    href={`/pills/${agentPill.pill_id}`}
+                    href={pillDetailHref(agentPill.pill_id)}
                     className="min-w-0 flex-1 truncate text-sm font-medium text-foreground transition-colors hover:text-gold"
                   >
                     {agentPill.pill?.name ?? t('composer.unknownPill')}

@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { FlaskConical, X, Search, Loader2, AlertCircle, AlertTriangle, Check } from 'lucide-react'
+import { pillDetailHref } from '@/lib/entity-detail-route'
 import { listPills, createPill, deletePill } from '@/services/pillService'
 import { fusePills, withLineage, type FuseResult } from '@/services/fusionService'
 import { listProviders, listModels, updateModel } from '@/services/modelService'
@@ -177,7 +178,7 @@ export default function FusionPage() {
       }
 
       if (goEdit) {
-        router.push(`/pills/${created.id}`)
+        router.push(pillDetailHref(created.id))
       } else {
         setResult(null)
         setSelected([])

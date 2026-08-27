@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ChevronRight, Cpu, Loader2, MessageSquare, Sparkles } from 'lucide-react'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
+import { agentDetailHref } from '@/lib/entity-detail-route'
 import type { Agent } from '@/services/types'
 import { truncateText } from '@/utils/format'
 
@@ -54,7 +55,7 @@ export function AgentCard({ agent, compact = false }: AgentCardProps) {
   const statusLabel = agent.status === 'active' ? tStatus('active') : tStatus('inactive')
 
   const avatarGradient = getAvatarColor(agent.name)
-  const href = `/agents/${agent.id}`
+  const href = agentDetailHref(agent.id)
 
   if (compact) {
     // 紧凑模式:整卡 Link,无内部按钮

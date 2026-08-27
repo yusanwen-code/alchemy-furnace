@@ -4,6 +4,11 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { chatLobbyHref, chatSessionHref, parseLegacyChatPath } from '@/lib/chat-route'
+import {
+  agentDetailHref,
+  parseLegacyEntityDetailPath,
+  pillDetailHref,
+} from '@/lib/entity-detail-route'
 
 /** 旧 HashRouter 链接 → App Router 映射 */
 const HASH_MAP: Record<string, string> = {
@@ -16,7 +21,8 @@ const HASH_MAP: Record<string, string> = {
 
 /**
  * 旧 hash 链接兼容：进入站点时若带 #/xxx 形式 hash，重定向到对应新路由
- * 动态段（#/pills/123）按前缀匹配
+ * 实体动态段（#/pills/<uuid>、#/agents/<uuid>）规范化到查询参数详情地址，
+ * 占位/畸形段回列表页
  */
 export function HashRedirect() {
   const router = useRouter()
@@ -40,12 +46,24 @@ export function HashRedirect() {
       router.replace(chatLobbyHref())
       return
     }
-    // 前缀匹配动态段：/pills/:id、/agents/:id
-    for (const prefix of ['/pills/', '/agents/']) {
-      if (path.startsWith(prefix)) {
-        router.replace(path)
-        return
-      }
+    // 历史实体动态段 #/agents/<uuid>、#/pills/<uuid> → 规范查询地址
+    const legacyEntity = parseLegacyEntityDetailPath(path)
+    if (legacyEntity) {
+      router.replace(
+        legacyEntity.kind === 'agents'
+          ? agentDetailHref(legacyEntity.id)
+          : pillDetailHref(legacyEntity.id),
+      )
+      return
+    }
+    // 占位/畸形实体段回列表页（静态导出无动态路由可直达）
+    if (path.startsWith('/agents/')) {
+      router.replace('/agents')
+      return
+    }
+    if (path.startsWith('/pills/')) {
+      router.replace('/pills')
+      return
     }
   }, [router])
 

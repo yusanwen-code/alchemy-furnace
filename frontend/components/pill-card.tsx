@@ -8,6 +8,7 @@
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { CircleDot, Clock, ChevronRight, FlaskConical, Tag, UserPlus } from 'lucide-react'
+import { pillDetailHref } from '@/lib/entity-detail-route'
 import type { Pill } from '@/services/types'
 import { formatDateTime } from '@/utils/format'
 
@@ -20,7 +21,7 @@ interface PillCardProps {
 export function PillCard({ pill, onBind }: PillCardProps) {
   const t = useTranslations('pillCard')
   const router = useRouter()
-  const href = `/pills/${pill.id}`
+  const href = pillDetailHref(pill.id)
 
   const navigate = () => router.push(href)
 
