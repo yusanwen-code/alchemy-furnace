@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -343,6 +343,23 @@ describe('AgentDetailPage', () => {
       const chat = screen.getByRole('button', { name: '开始论道' })
       expect(chat).toBeDisabled()
       expect(chat).toHaveAttribute('title', expect.stringContaining('停用'))
+    })
+
+    it('详情头部:有效头像显示图片,加载失败回退首字', () => {
+      setDetailState({ agent: { ...baseAgent, avatar: 'https://example.com/laojun.png' } })
+      renderPage()
+      const img = screen.getByRole('img', { name: '太上老君' })
+      expect(img).toHaveAttribute('src', 'https://example.com/laojun.png')
+      fireEvent.error(img)
+      expect(screen.queryByRole('img')).toBeNull()
+      expect(screen.getByText('太')).toBeInTheDocument()
+    })
+
+    it('详情头部:空头像不创建图片,显示首字', () => {
+      setDetailState({ agent: baseAgent })
+      renderPage()
+      expect(screen.queryByRole('img')).toBeNull()
+      expect(screen.getByText('太')).toBeInTheDocument()
     })
 
     it('active 道人可发起会话', async () => {

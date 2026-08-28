@@ -11,6 +11,7 @@ import { X, UserMinus, UserPlus, Check } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
 import { ProfilePopover } from '@/components/profile-popover'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import type { Agent, ChatSession, GroupMember } from '@/services/types'
 
 export function GroupMembersPanel({
@@ -128,12 +129,7 @@ export function GroupMembersPanel({
                         }
                       `}
                     >
-                      <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-white text-xs flex-shrink-0">
-                        {a.avatar ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={a.avatar} alt={a.name} className="h-full w-full object-cover" />
-                        ) : a.name.charAt(0)}
-                      </div>
+                      <EntityAvatar name={a.name} src={a.avatar} size="sm" />
                       <span className="flex-1 truncate">{a.name}</span>
                       {selected.has(a.id) && <Check className="w-4 h-4 text-gold" />}
                     </button>
@@ -219,12 +215,9 @@ function MemberProfileButton({ member, agent }: { member: GroupMember; agent?: A
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`查看 ${member.name} 简介`}
-        className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-gold/60 to-gold/30 font-serif font-bold text-foreground transition hover:ring-2 hover:ring-gold/40"
+        className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-xl transition hover:ring-2 hover:ring-gold/40"
       >
-        {member.avatar ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
-        ) : member.name.charAt(0)}
+        <EntityAvatar name={member.name} src={member.avatar} size="sm" />
       </button>
       <ProfilePopover
         kind="agent"

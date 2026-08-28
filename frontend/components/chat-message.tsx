@@ -15,10 +15,11 @@
  */
 import { useRef, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
-import { User, Bot, TriangleAlert, CircleStop } from 'lucide-react'
+import { TriangleAlert, CircleStop } from 'lucide-react'
 import type { ChatMessage as ChatMessageType, Agent } from '@/services/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { ProfilePopover } from '@/components/profile-popover'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { useUser } from '@/contexts/UserContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
@@ -131,14 +132,15 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
           }
         `}
       >
-        {avatarSrc
-          ? // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarSrc} alt={isUser ? userProfile?.display_name : agentProfile?.name} className="h-full w-full rounded-xl object-cover" />
-          : isUser
-            ? <User className="w-5 h-5" />
-            : message.agent_name
-              ? <span className="font-serif font-bold">{message.agent_name.charAt(0)}</span>
-              : <Bot className="w-5 h-5" />}
+        {/* 头像(金刚位):固定顶端,不被气泡高度拉长;失败/空值统一回退首字或 Bot 图标 */}
+        <EntityAvatar
+          name={isUser
+            ? (userProfile?.display_name || t('userLabel'))
+            : (message.agent_name || t('assistantLabel'))}
+          src={avatarSrc}
+          size="sm"
+          fallback={isUser ? 'initial' : message.agent_name ? 'initial' : 'bot'}
+        />
       </button>
 
       {/* 名字 + 气泡(竖直堆叠,与头像独立列) */}

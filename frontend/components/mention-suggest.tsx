@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { AtSign } from 'lucide-react'
 import type { GroupMember } from '@/services/types'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 
 export interface MentionSuggestProps {
   candidates: GroupMember[]
@@ -85,12 +86,7 @@ export function MentionSuggest({
               ${active ? 'bg-gold/15 text-foreground' : 'text-foreground/80 hover:bg-secondary/60'}
             `}
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-white font-serif font-bold text-xs shrink-0 overflow-hidden">
-              {c.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.avatar} alt={c.name} className="h-full w-full object-cover" />
-              ) : c.name.charAt(0)}
-            </div>
+            <EntityAvatar name={c.name} src={c.avatar} size="sm" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{c.name}</p>
               <p className="text-[10px] text-muted-foreground">表达欲 {c.proactivity}</p>

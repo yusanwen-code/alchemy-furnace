@@ -13,9 +13,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Settings, X, Bot, User, Sparkles, Cpu, Flame } from 'lucide-react'
+import { Settings, X, Sparkles, Cpu, Flame } from 'lucide-react'
 import type { Agent } from '@/services/types'
 import type { UserProfile } from '@/services/userService'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 
 export type ProfileKind = 'user' | 'agent'
 
@@ -252,45 +253,19 @@ export function ProfilePopover({
 
 function UserAvatar({ profile }: { profile?: UserProfile | null }) {
   const t = useTranslations('profile')
-  const initial = (profile?.display_name || t('defaultUser')).charAt(0)
-  if (profile?.avatar) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={profile.avatar}
-        alt={profile.display_name}
-        className="w-12 h-12 rounded-full object-cover border-2 border-gold/40 shrink-0"
-      />
-    )
-  }
-  return (
-    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary/30 flex items-center justify-center text-primary font-serif font-bold shrink-0">
-      {initial}
-    </div>
-  )
+  const displayName = profile?.display_name || t('defaultUser')
+  return <EntityAvatar name={displayName} src={profile?.avatar} size="md" shape="circle" fallback="initial" />
 }
 
 function AgentAvatar({ agent }: { agent?: Agent | null }) {
-  if (!agent) {
-    return (
-      <div className="w-12 h-12 rounded-full bg-sage/15 border-2 border-sage/30 flex items-center justify-center text-sage shrink-0">
-        <Bot className="w-6 h-6" />
-      </div>
-    )
-  }
-  if (agent.avatar) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={agent.avatar}
-        alt={agent.name}
-        className="w-12 h-12 rounded-full object-cover border-2 border-gold/40 shrink-0"
-      />
-    )
-  }
   return (
-    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-sage to-sage/70 border-2 border-gold/40 flex items-center justify-center text-white font-serif font-bold shrink-0">
-      {agent.name.charAt(0)}
-    </div>
+    <EntityAvatar
+      name={agent?.name || ''}
+      src={agent?.avatar}
+      size="md"
+      shape="circle"
+      fallback={agent ? 'initial' : 'bot'}
+      alt={agent?.name || undefined}
+    />
   )
 }

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -6,6 +6,7 @@ import { ChatView } from '@/app/(main)/chat/chat-view'
 import { ChatProvider } from '@/contexts/ChatContext'
 import type { StreamHandlers } from '@/services/chatService'
 import type { Agent, ChatMessage, ChatSession } from '@/services/types'
+import type { UserProfile } from '@/services/userService'
 
 const doubles = vi.hoisted(() => ({
   push: vi.fn(),
@@ -17,6 +18,7 @@ const doubles = vi.hoisted(() => ({
   fetchAgents: vi.fn(),
   listProviders: vi.fn(),
   agents: [] as Agent[],
+  userProfile: null as UserProfile | null,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -62,7 +64,7 @@ vi.mock('@/contexts/AgentContext', () => ({
 }))
 
 vi.mock('@/contexts/UserContext', () => ({
-  useUser: () => ({ profile: null, loading: false, error: null }),
+  useUser: () => ({ profile: doubles.userProfile, loading: false, error: null }),
 }))
 
 const activeAgent = (id: string, name: string, status: Agent['status'] = 'active'): Agent => ({
@@ -127,6 +129,7 @@ describe('recoverable chat history and streaming', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     doubles.agents = [activeAgent('agent-1', 'Agent One')]
+    doubles.userProfile = null
     doubles.fetchAgents.mockResolvedValue(undefined)
     doubles.listProviders.mockResolvedValue({ list: [{}], total: 1 })
     doubles.listSessions.mockResolvedValue({ list: [singleSession], total: 1 })
@@ -577,13 +580,13 @@ describe('recoverable chat history and streaming', () => {
     doubles.listSessions.mockResolvedValue({ list: [groupSession], total: 1 })
     doubles.getSession.mockResolvedValue(groupSession)
     doubles.streamChatMessage.mockImplementation(async (_sessionId: string, _content: string, handlers: StreamHandlers) => {
-      handlers.onSpeakerStart?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: '/alpha.png' })
-      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: '/alpha.png', content: 'alpha one' })
-      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: '/alpha.png', content: ' alpha two' })
-      handlers.onSpeakerDone?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: '/alpha.png', message_id: 'message-a' })
-      handlers.onSpeakerStart?.({ agent_id: 'agent-b', agent_name: 'Beta', agent_avatar: '/beta.png' })
-      handlers.onChunk({ agent_id: 'agent-b', agent_name: 'Beta', agent_avatar: '/beta.png', content: 'beta reply' })
-      handlers.onSpeakerDone?.({ agent_id: 'agent-b', agent_name: 'Beta', agent_avatar: '/beta.png', message_id: 'message-b' })
+      handlers.onSpeakerStart?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png' })
+      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png', content: 'alpha one' })
+      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png', content: ' alpha two' })
+      handlers.onSpeakerDone?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png', message_id: 'message-a' })
+      handlers.onSpeakerStart?.({ agent_id: 'agent-b', agent_name: 'Beta', agent_avatar: 'https://example.com/beta.png' })
+      handlers.onChunk({ agent_id: 'agent-b', agent_name: 'Beta', agent_avatar: 'https://example.com/beta.png', content: 'beta reply' })
+      handlers.onSpeakerDone?.({ agent_id: 'agent-b', agent_name: 'Beta', agent_avatar: 'https://example.com/beta.png', message_id: 'message-b' })
       handlers.onTurnDone?.({ spoke: 2 })
     })
     const user = userEvent.setup()
@@ -595,8 +598,112 @@ describe('recoverable chat history and streaming', () => {
 
     expect(await screen.findByText('alpha one alpha two')).toBeInTheDocument()
     expect(screen.getByText('beta reply')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Alpha' }).querySelector('img')).toHaveAttribute('src', '/alpha.png')
-    expect(screen.getByRole('button', { name: 'Beta' }).querySelector('img')).toHaveAttribute('src', '/beta.png')
+    expect(screen.getByRole('button', { name: 'Alpha' }).querySelector('img')).toHaveAttribute('src', 'https://example.com/alpha.png')
+    expect(screen.getByRole('button', { name: 'Beta' }).querySelector('img')).toHaveAttribute('src', 'https://example.com/beta.png')
+  })
+
+  it('prefers message.agent_avatar over agent profile and member avatars in group chat', async () => {
+    doubles.agents = [
+      { ...activeAgent('agent-a', 'Alpha'), avatar: 'https://example.com/profile-alpha.png' },
+      { ...activeAgent('agent-b', 'Beta'), avatar: 'https://example.com/profile-beta.png' },
+    ]
+    const groupWithAvatars: ChatSession = {
+      ...groupSession,
+      members: [
+        { agent_id: 'agent-a', name: 'Alpha', proactivity: 60, avatar: 'https://example.com/member-alpha.png' },
+        { agent_id: 'agent-b', name: 'Beta', proactivity: 70, avatar: 'https://example.com/member-beta.png' },
+      ],
+    }
+    doubles.listSessions.mockResolvedValue({ list: [groupWithAvatars], total: 1 })
+    doubles.getSession.mockResolvedValue(groupWithAvatars)
+    doubles.streamChatMessage.mockImplementation(async (_sessionId: string, _content: string, handlers: StreamHandlers) => {
+      handlers.onSpeakerStart?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/stream-alpha.png' })
+      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/stream-alpha.png', content: 'priority answer' })
+      handlers.onSpeakerDone?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/stream-alpha.png', message_id: 'message-a' })
+      handlers.onTurnDone?.({ spoke: 1 })
+    })
+    const user = userEvent.setup()
+    renderSession(groupWithAvatars.id)
+    const input = await screen.findByRole('textbox')
+
+    await user.type(input, 'priority question')
+    await user.click(screen.getByRole('button', { name: 'input.send' }))
+
+    expect(await screen.findByText('priority answer')).toBeInTheDocument()
+    const alphaBtn = screen.getByRole('button', { name: 'Alpha' })
+    expect(alphaBtn.querySelector('img')).toHaveAttribute('src', 'https://example.com/stream-alpha.png')
+  })
+
+  it('falls back to the agent initial when its avatar image errors', async () => {
+    doubles.agents = [activeAgent('agent-a', 'Alpha'), activeAgent('agent-b', 'Beta')]
+    doubles.listSessions.mockResolvedValue({ list: [groupSession], total: 1 })
+    doubles.getSession.mockResolvedValue(groupSession)
+    doubles.streamChatMessage.mockImplementation(async (_sessionId: string, _content: string, handlers: StreamHandlers) => {
+      handlers.onSpeakerStart?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png' })
+      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png', content: 'broken avatar reply' })
+      handlers.onSpeakerDone?.({ agent_id: 'agent-a', agent_name: 'Alpha', agent_avatar: 'https://example.com/alpha.png', message_id: 'message-a' })
+      handlers.onTurnDone?.({ spoke: 1 })
+    })
+    const user = userEvent.setup()
+    renderSession(groupSession.id)
+    const input = await screen.findByRole('textbox')
+
+    await user.type(input, 'question')
+    await user.click(screen.getByRole('button', { name: 'input.send' }))
+
+    const alphaBtn = await screen.findByRole('button', { name: 'Alpha' })
+    const img = alphaBtn.querySelector('img')
+    expect(img).toHaveAttribute('src', 'https://example.com/alpha.png')
+    fireEvent.error(img!)
+    expect(alphaBtn.querySelector('img')).toBeNull()
+    expect(within(alphaBtn).getByText('A')).toBeInTheDocument()
+  })
+
+  it('does not create an avatar img when the agent has no avatar', async () => {
+    doubles.agents = [activeAgent('agent-a', 'Alpha'), activeAgent('agent-b', 'Beta')]
+    doubles.listSessions.mockResolvedValue({ list: [groupSession], total: 1 })
+    doubles.getSession.mockResolvedValue(groupSession)
+    doubles.streamChatMessage.mockImplementation(async (_sessionId: string, _content: string, handlers: StreamHandlers) => {
+      handlers.onSpeakerStart?.({ agent_id: 'agent-a', agent_name: 'Alpha' })
+      handlers.onChunk({ agent_id: 'agent-a', agent_name: 'Alpha', content: 'no avatar reply' })
+      handlers.onSpeakerDone?.({ agent_id: 'agent-a', agent_name: 'Alpha', message_id: 'message-a' })
+      handlers.onTurnDone?.({ spoke: 1 })
+    })
+    const user = userEvent.setup()
+    renderSession(groupSession.id)
+    const input = await screen.findByRole('textbox')
+
+    await user.type(input, 'question')
+    await user.click(screen.getByRole('button', { name: 'input.send' }))
+
+    const alphaBtn = await screen.findByRole('button', { name: 'Alpha' })
+    expect(alphaBtn.querySelector('img')).toBeNull()
+    expect(within(alphaBtn).getByText('A')).toBeInTheDocument()
+  })
+
+  it('shows the user avatar from userProfile and falls back to the initial on error', async () => {
+    doubles.userProfile = {
+      display_name: '炼丹者',
+      bio: '',
+      avatar: 'https://example.com/user.png',
+      updated_at: '2026-08-20T00:00:00Z',
+    }
+    doubles.agents = [activeAgent('agent-1', 'Agent One')]
+    doubles.listSessions.mockResolvedValue({ list: [singleSession], total: 1 })
+    doubles.getSession.mockResolvedValue(singleSession)
+    const user = userEvent.setup()
+    renderSession(singleSession.id)
+    const input = await screen.findByRole('textbox')
+
+    await user.type(input, 'my question')
+    await user.click(screen.getByRole('button', { name: 'input.send' }))
+
+    const userBtn = await screen.findByRole('button', { name: 'userLabel' })
+    const img = userBtn.querySelector('img')
+    expect(img).toHaveAttribute('src', 'https://example.com/user.png')
+    fireEvent.error(img!)
+    expect(userBtn.querySelector('img')).toBeNull()
+    expect(within(userBtn).getByText('炼')).toBeInTheDocument()
   })
 
   it('does not mark a completed speaker incomplete when the next group speaker fails before a chunk', async () => {

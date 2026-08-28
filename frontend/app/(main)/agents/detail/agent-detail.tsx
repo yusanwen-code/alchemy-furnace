@@ -39,25 +39,13 @@ import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
 import { pillDetailHref } from '@/lib/entity-detail-route'
 import { AgentPillComposer } from '@/components/agent-pill-composer'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { ApiError } from '@/services/api'
 import * as agentService from '@/services/agentService'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
 import type { AgentStatus, TensionSeverity } from '@/services/types'
 import { formatDateTime } from '@/utils/format'
-
-/** 生成头像渐变颜色（根据名称确定性生成） */
-function getAvatarColor(name: string): string {
-  const colors = [
-    'from-primary to-primary/70',
-    'from-sage to-sage/70',
-    'from-gold to-gold/70',
-    'from-foreground/60 to-foreground/80',
-  ]
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return colors[Math.abs(hash) % colors.length]
-}
 
 /** 从 409 响应体提取会话历史数(兼容 data.data.session_count 与 data.session_count 两种嵌套) */
 function extractSessionCount(error: ApiError): number {
@@ -272,20 +260,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
         {/* 道人信息头部 */}
         <div className="dao-card mb-6 p-5 md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start">
-            {agent.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={agent.avatar}
-                alt={agent.name}
-                className="h-20 w-20 shrink-0 rounded-2xl object-cover shadow-lg md:h-24 md:w-24"
-              />
-            ) : (
-              <div
-                className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br font-serif text-3xl font-bold text-white shadow-lg md:h-24 md:w-24 md:text-4xl ${getAvatarColor(agent.name)}`}
-              >
-                {agent.name.charAt(0)}
-              </div>
-            )}
+            <EntityAvatar name={agent.name} src={agent.avatar} size="lg" shape="square" alt={agent.name} />
 
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex flex-wrap items-center gap-2">
