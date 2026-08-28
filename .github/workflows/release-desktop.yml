@@ -132,7 +132,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: backend/go/dist-runtime
-          key: desktop-runtime-v2-${{ matrix.platform }}-${{ hashFiles('scripts/build-python-runtime.sh', 'backend/python/requirements.txt', 'backend/python/app/**/*.py') }}
+          key: desktop-runtime-v3-${{ matrix.platform }}-${{ hashFiles('scripts/build-python-runtime.sh', 'scripts/lib/runtime-common.sh', 'backend/python/requirements-runtime.txt', 'backend/python/app/**/*.py') }}
 
       - name: Build target Python runtime
         if: steps.runtime-cache.outputs.cache-hit != 'true'

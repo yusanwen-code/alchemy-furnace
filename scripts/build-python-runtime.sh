@@ -16,12 +16,13 @@ RUNTIME_ROOT="${2:?用法: $0 <平台> <运行时根目录>}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-case "$RUNTIME_ROOT" in
-  ""|/|.|..|"$ROOT"|"$ROOT/backend"|"$ROOT/backend/go")
-    printf '拒绝使用过宽的运行时输出目录: %s\n' "$RUNTIME_ROOT" >&2
-    exit 1
-    ;;
-esac
+# 跨平台公共库:绝对路径规范化 + 固定 UTF-8 环境运行 Python
+# shellcheck source=lib/runtime-common.sh
+source "$ROOT/scripts/lib/runtime-common.sh"
+
+# 输出目录一律规范化为绝对路径(含宽目录拒绝:空值、/、.、..、仓库根等),
+# 必须在 mkdir/mktemp 之前完成,否则失败时已创建目录无法回滚。
+RUNTIME_ROOT="$(runtime_resolve_output_path "$RUNTIME_ROOT")"
 
 # ─── 版本钉死(升级时同步到 astral-sh/python-build-standalone releases)───
 PBS_TAG="20250712"
@@ -74,8 +75,8 @@ tar -xzf "$WORK/pbs.tar.gz" -C "$STAGED_RUNTIME" --strip-components=1
 PYBIN="$STAGED_RUNTIME/$PYBIN_BIN"
 [ -x "$PYBIN" ] || fail "未找到解释器: $PYBIN"
 
-say "安装业务依赖(backend/python/requirements.txt)"
-"$PYBIN" -m pip install --no-cache-dir -r "$ROOT/backend/python/requirements.txt" \
+say "安装生产依赖(backend/python/requirements-runtime.txt)"
+runtime_python "$PYBIN" -m pip install --no-cache-dir -r "$ROOT/backend/python/requirements-runtime.txt" \
   || fail "pip install 失败"
 
 say "瘦身: 清理 __pycache__"
@@ -85,10 +86,11 @@ say "拷贝引擎源码到 engine/"
 mkdir -p "$STAGED_RUNTIME/engine"
 cp -R "$ROOT/backend/python/app" "$STAGED_RUNTIME/engine/"
 
-say "自检: 引擎可 import"
-( cd "$STAGED_RUNTIME/engine" && env -u LOG_FORMAT -u LOG_LEVEL -u RUST_LOG \
-    PYTHONDONTWRITEBYTECODE=1 \
-    "$PYBIN" -c "import app.main; print('import ok')" ) \
+say "自检: 引擎可 import + UTF-8 模式生效"
+# STAGED_RUNTIME 由绝对 RUNTIME_ROOT 生成,PYBIN 为绝对路径;
+# 自检只输出解释器路径/UTF-8 模式/import 结果,不输出密钥或环境变量。
+( cd "$STAGED_RUNTIME/engine" && unset LOG_FORMAT LOG_LEVEL RUST_LOG &&
+    runtime_python "$PYBIN" -c "import sys, app.main; print('import ok'); print('sys.executable=' + sys.executable); print('utf8_mode=' + str(sys.flags.utf8_mode)); assert sys.flags.utf8_mode == 1, 'PYTHONUTF8 未生效'" ) \
   || fail "引擎 import 失败"
 
 # 自检和 pip 可能加载模块；发布运行时不携带可变 bytecode 缓存。

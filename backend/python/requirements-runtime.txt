@@ -1,0 +1,20 @@
+# 炼丹炉 · 语言引擎运行时依赖(打包进桌面 runtime)
+# ====================
+# 仅生产依赖;pytest 等开发依赖见 requirements.txt,不进入桌面包。
+# 保持 UTF-8 与中文注释,禁止删除中文规避 Windows 编码问题。
+
+# Web 框架
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# 配置管理
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# LLM
+openai==1.12.0
+httpx==0.26.0
+
+# 环境变量
+python-dotenv==1.0.1
