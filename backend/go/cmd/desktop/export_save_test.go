@@ -105,6 +105,10 @@ func TestRevealExportPath_RejectsOutsideExports(t *testing.T) {
 }
 
 func TestRevealExportPath_CommandForExistingFile(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		// desktop 仅支持 darwin/windows,linux 上 revealCommand 明确返回不支持错误
+		t.Skip("desktop 不支持 linux 定位")
+	}
 	setupExportTest(t)
 	saved, err := SaveExportBytes("alchemy-skill-my-skill-codex.zip", []byte("PK"))
 	if err != nil {
