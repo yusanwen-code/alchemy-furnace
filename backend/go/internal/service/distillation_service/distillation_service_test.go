@@ -1,15 +1,20 @@
 package distillation_service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/distillation"
 	appErrors "github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/service/credential"
+	"github.com/alchemy-furnace/server/model"
+	"github.com/google/uuid"
 )
 
 type fakeClient struct {
@@ -285,5 +290,62 @@ func TestSkillExport_MapsRemoteInvalidTo400WithPublicCode(t *testing.T) {
 	}
 	if appErr.GetCode() != "skill_export_invalid" {
 		t.Fatalf("code = %q, want skill_export_invalid", appErr.GetCode())
+	}
+}
+
+// fakePills 仅实现 TakePillByUUID 的最小 stub,其余 DAO 方法在本测试不触达
+type fakePills struct{ pill *model.ElixirPill }
+
+func (f *fakePills) TakePillByUUID(_ context.Context, _ uuid.UUID) (*model.ElixirPill, appErrors.Error) {
+	if f.pill == nil {
+		return nil, appErrors.ErrorRecordNotFound("fake.pill")
+	}
+	return f.pill, nil
+}
+func (f *fakePills) FindPillsByUUIDs(context.Context, []uuid.UUID) ([]*model.ElixirPill, appErrors.Error) { panic("unused") }
+func (f *fakePills) FindPills(context.Context, int, int, string, *bool) (int64, []*model.ElixirPill, appErrors.Error) { panic("unused") }
+func (f *fakePills) SavePill(context.Context, *model.ElixirPill) appErrors.Error { panic("unused") }
+func (f *fakePills) UpdatePill(context.Context, *model.ElixirPill, map[string]any) appErrors.Error { panic("unused") }
+func (f *fakePills) DeletePill(context.Context, *model.ElixirPill) appErrors.Error { panic("unused") }
+func (f *fakePills) FindAgentIDsByPillID(context.Context, uint) ([]uint, appErrors.Error) { panic("unused") }
+func (f *fakePills) InvalidateLanguagePatternsByAgentIDs(context.Context, []uint) appErrors.Error { panic("unused") }
+
+// pill_id 模式投影必须把空来源序列化为 [] 而非 null:
+// Go nil slice → JSON null → Python Pydantic sources: List 校验失败 422
+// (2026-08-28 桌面验收报错 list_type@body.sources 的回归防线)
+func TestSkillExport_PillIDModeNeverSendsNullSources(t *testing.T) {
+	client := &fakeClient{}
+	pill := &model.ElixirPill{
+		UUID:        uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
+		Name:        "结构化金丹",
+		Description: "一份结构化的语言风格技能包",
+		SkillSchema: map[string]interface{}{"identity_card": "我是金丹"},
+		Tags:        model.JSONList{"语言"},
+		UpdatedAt:   time.Date(2026, 8, 27, 10, 0, 0, 0, time.UTC),
+	}
+	service := New(client, fakeResolver{}, &fakePills{pill: pill})
+
+	_, appErr := service.SkillExport(context.Background(), &distillation.SkillExportInput{
+		PillID: "550e8400-e29b-41d4-a716-446655440000",
+		Format: "codex",
+	})
+	if appErr != nil {
+		t.Fatalf("unexpected error = %#v", appErr)
+	}
+	if client.exportSkill == nil {
+		t.Fatal("client was not called with a projected skill")
+	}
+	if client.exportSkill.Sources == nil {
+		t.Fatal("Sources 为 nil: JSON 序列化为 null 会被 Pydantic 拒绝")
+	}
+	raw, err := json.Marshal(client.exportSkill)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if bytes.Contains(raw, []byte(`"sources":null`)) {
+		t.Fatalf("投影包含 sources:null: %s", raw)
+	}
+	if !bytes.Contains(raw, []byte(`"sources":[]`)) {
+		t.Fatalf("投影应含 sources:[]: %s", raw)
 	}
 }

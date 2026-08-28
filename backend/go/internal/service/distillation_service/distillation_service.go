@@ -94,6 +94,7 @@ func (s *Service) SkillExport(ctx context.Context, input *distillation.SkillExpo
 			Description:   pill.Description,
 			SkillSchema:   pill.SkillSchema,
 			Tags:          jsonListToStrings(pill.Tags),
+			Sources:       make([]distillation.Source, 0), // 空来源必须发 [] 而非 null(Pydantic sources: List 拒绝 null)
 			GeneratedAt:   pill.UpdatedAt.UTC().Format(time.RFC3339),
 			EvidenceLevel: "limited",
 		}
