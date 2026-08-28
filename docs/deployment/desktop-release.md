@@ -54,6 +54,21 @@ scripts/verify-release-assets.sh <dist-directory> <version> [--binaries-only]
 `<version>` may be with or without a leading `v`; it is compared against the
 `version` field of `release-manifest.json` after normalization.
 
+## Platform acceptance (test matrix)
+
+Before a Release Candidate may be promoted to `stable`, every platform in
+`docs/deployment/desktop-platform-test-matrix.md` must be accepted (PASS) on a
+real machine or VM: ARM Mac (DMG install, launch, engine readiness, home page,
+Skill export, relaunch, ZIP update), Intel Mac (same flow, verified native
+x86_64 — not an ARM binary running under Rosetta), Windows 10 x64 (install,
+missing WebView2, launch, shortcuts, upgrade, uninstall) and Windows 11 x64
+(install, launch, upgrade, uninstall). The matrix records OS build, CPU, asset
+name, SHA256, result, screenshots and logs for every acceptance item.
+
+**A Release Candidate must not be promoted to `stable` until every platform in
+the matrix is accepted.** Missing or failing any platform keeps the Release a
+draft.
+
 ## Automatic release
 
 Create and push a semantic-version tag:
