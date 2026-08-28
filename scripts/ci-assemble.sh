@@ -104,11 +104,18 @@ case "$PLATFORM" in
     INSTALLER="$DIST_DIR/AlchemyFurnace-Setup.exe"
     rm -f "$INSTALLER"
     say "生成 $(basename "$INSTALLER")(包含 runtime/)"
+    # makensis 默认 chdir 到脚本所在目录(无 /NOCD),相对路径会基于
+    # build/windows/ 解析 → 必须传 Win32 绝对路径(cygpath -w 转换 MSYS 路径)
+    APP_SOURCE_WIN="$(cygpath -w "$PACKAGE_DIR" 2>/dev/null || true)"
+    OUTPUT_FILE_WIN="$(cygpath -w "$INSTALLER" 2>/dev/null || true)"
+    if [[ -z "$APP_SOURCE_WIN" || -z "$OUTPUT_FILE_WIN" ]]; then
+      fail "需要 cygpath 把输出路径转为 Windows 绝对路径(Git Bash 环境)"
+    fi
     (
       cd "$GO_DIR"
       makensis \
-        -DAPP_SOURCE="build/package/windows" \
-        -DOUTPUT_FILE="build/dist/AlchemyFurnace-Setup.exe" \
+        -DAPP_SOURCE="$APP_SOURCE_WIN" \
+        -DOUTPUT_FILE="$OUTPUT_FILE_WIN" \
         build/windows/installer.nsi
     )
     [ -s "$INSTALLER" ] || fail "NSIS 未生成安装器: $INSTALLER"
