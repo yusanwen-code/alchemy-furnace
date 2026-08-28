@@ -33,6 +33,16 @@ runtime_resolve_output_path() {
   local abs
   if [[ "$raw" == /* ]]; then
     abs="$raw"
+  elif [[ "$raw" =~ ^[A-Za-z]:[\\/](.*)$ ]]; then
+    # Windows 盘符绝对路径(Git Bash 下 $GITHUB_WORKSPACE 形态 D:\a\...)
+    # 转 MSYS 风格 /d/a/...——否则会被当相对路径拼上 $PWD 产生双前缀
+    local letter="${raw:0:1}" rest="${BASH_REMATCH[1]}"
+    if [[ -z "$rest" ]]; then
+      fail "拒绝盘符根目录作为输出路径: $raw"
+    fi
+    letter="$(printf '%s' "$letter" | tr 'A-Z' 'a-z')"
+    rest="$(printf '%s' "$rest" | tr '\\' '/')"
+    abs="/$letter/$rest"
   else
     abs="$PWD/$raw"
   fi

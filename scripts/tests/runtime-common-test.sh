@@ -95,6 +95,18 @@ expect_reject "拒绝 backend(相对形式)" "backend"
 expect_reject "拒绝 backend/go 目录" "$TEST_ROOT/backend/go"
 expect_reject "拒绝 backend/go(相对形式)" "backend/go"
 
+# ─── 3b. Windows 盘符绝对路径(Git Bash 下 GITHUB_WORKSPACE 形态)───
+# 根因: runtime_resolve_output_path 只认 / 开头为绝对路径,把 D:\a\... 当相对路径
+# 拼上 $PWD,产生双前缀(CI 实测 tar 报 Cannot open)。修复后应转 MSYS 风格 /d/a/...
+cd "$TEST_ROOT"
+check "Windows 盘符路径转 MSYS 绝对路径" \
+  "$(runtime_resolve_output_path 'D:\a\alchemy-furnace\alchemy-furnace/backend/go/dist-runtime')" \
+  "/d/a/alchemy-furnace/alchemy-furnace/backend/go/dist-runtime"
+check "Windows 正斜杠盘符路径" "$(runtime_resolve_output_path 'D:/a/b/c')" "/d/a/b/c"
+check "Windows 小写盘符路径" "$(runtime_resolve_output_path 'c:\Users\x')" "/c/Users/x"
+check "Windows 路径折叠 .." "$(runtime_resolve_output_path 'D:\a\b\..\c')" "/d/a/c"
+expect_reject "拒绝盘符根目录" 'D:\'
+
 # ─── 4. fake python:UTF-8 环境 + 含空格路径引用 + 参数透传 ───
 mkdir -p "$TMP/fake bin"
 FAKE_PY="$TMP/fake bin/fake python.sh"
