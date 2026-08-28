@@ -1,3 +1,14 @@
+; ═══════════════════════════════════════════════════════════
+; 炼丹炉 · Windows NSIS 安装器(设计 §5 Windows 契约)
+;
+; 契约点(勿回退, 回归测试见 scripts/tests/verify-windows-package.Tests.ps1
+; 与 docs/superpowers/specs/2026-08-28-cross-platform-desktop-release-design.md):
+;   1. per-user 安装: InstallDir 固定到 $LOCALAPPDATA, 不写 Program Files
+;   2. 不需要管理员权限: RequestExecutionLevel user
+;   3. 覆盖升级复用注册表 InstallDir: InstallDirRegKey HKCU(安装时读取旧值)
+;   4. 卸载不删除应用数据: 数据目录在 %APPDATA%\AlchemyFurnace
+;      (internal/paths os.UserConfigDir), 卸载只删 $INSTDIR 程序文件
+; ═══════════════════════════════════════════════════════════
 Unicode true
 
 !include "MUI2.nsh"
@@ -16,7 +27,9 @@ Unicode true
 
 Name "${PRODUCT_DISPLAY_NAME}"
 OutFile "${OUTPUT_FILE}"
+; 契约: per-user 安装到 LocalAppData, 不要求管理员权限
 InstallDir "$LOCALAPPDATA\Programs\${PRODUCT_NAME}"
+; 契约: 覆盖升级时复用上次安装目录(升级安装器无需重选路径)
 InstallDirRegKey HKCU "Software\${PRODUCT_NAME}" "InstallDir"
 RequestExecutionLevel user
 ManifestDPIAware true
@@ -49,6 +62,8 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  ; 契约: 只删除程序文件/快捷方式/注册表;应用数据(%APPDATA%\AlchemyFurnace)
+  ; 位于 $INSTDIR 之外, 卸载不触碰, 保证用户数据保留
   Delete "$DESKTOP\${PRODUCT_DISPLAY_NAME}.lnk"
   RMDir /r "$SMPROGRAMS\${PRODUCT_NAME}"
   RMDir /r "$INSTDIR"
