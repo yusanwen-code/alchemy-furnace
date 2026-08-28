@@ -26,8 +26,11 @@ jobs:
 
       - name: Validate packaging scripts and config
         run: |
-          bash -n scripts/build-python-runtime.sh scripts/ci-assemble.sh scripts/package-desktop.sh
+          bash -n scripts/build-python-runtime.sh scripts/ci-assemble.sh scripts/package-desktop.sh scripts/lib/*.sh scripts/tests/*.sh
           python3 -m json.tool backend/go/wails.json >/dev/null
+
+      - name: Run runtime contract tests
+        run: bash scripts/tests/runtime-common-test.sh
 
       - name: Validate desktop release workflow
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/release-desktop.yml

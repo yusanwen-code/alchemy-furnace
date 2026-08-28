@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════
+# 炼丹炉 · 跨平台脚本公共库
+#
+# 只导出函数,被 scripts/*.sh source 使用,不执行任何副作用。
+# 统一解决两类跨平台根因:
+#   1. 输出目录一律规范化为绝对路径,避免 cd 后相对路径失效;
+#   2. 运行 embedded Python 时固定 UTF-8 环境,避免 Windows 编码问题。
+# ═══════════════════════════════════════════════════════════
+
+# 打印错误到 stderr 并以 1 退出(调用方可在 source 后自行覆盖)
+fail() {
+  printf '❌ %s\n' "$*" >&2
+  exit 1
+}
+
+# runtime_resolve_output_path <path>
+# 把(可能相对的)输出路径规范化为绝对路径:
+#   - 基于调用时的 cwd 解析相对路径,切换子目录后依然有效;
+#   - 折叠 . 与 ..,不要求目录已存在(输出目录可能尚未创建);
+#   - 拒绝宽目录:空值、/、.、..、仓库根、仓库根/backend、仓库根/backend/go。
+# 成功时把绝对路径打印到 stdout。
+runtime_resolve_output_path() {
+  local raw="${1:-}"
+  if [[ -z "$raw" ]]; then
+    fail "拒绝空输出路径"
+  fi
+  # 宽路径字面值直接拒绝
+  if [[ "$raw" == "/" || "$raw" == "." || "$raw" == ".." ]]; then
+    fail "拒绝过宽的输出路径: $raw"
+  fi
+
+  local abs
+  if [[ "$raw" == /* ]]; then
+    abs="$raw"
+  else
+    abs="$PWD/$raw"
+  fi
+
+  # 折叠 . 与 ..(不用 cd/realpath,因为目录可能尚未存在)
+  local -a segs=() out=()
+  local seg
+  IFS='/' read -r -a segs <<< "$abs"
+  for seg in "${segs[@]}"; do
+    if [[ -z "$seg" || "$seg" == "." ]]; then
+      continue
+    elif [[ "$seg" == ".." ]]; then
+      if [[ ${#out[@]} -gt 0 ]]; then
+        out=("${out[@]:0:${#out[@]}-1}")
+      fi
+    else
+      out+=("$seg")
+    fi
+  done
+
+  local canonical="/"
+  local s
+  for s in "${out[@]}"; do
+    canonical="${canonical}${s}/"
+  done
+  if [[ "$canonical" != "/" ]]; then
+    canonical="${canonical%/}"
+  fi
+  if [[ "$canonical" == "/" ]]; then
+    fail "拒绝根目录作为输出路径: $raw"
+  fi
+
+  # 仓库根/backend/backend/go 属于"过宽"输出目录(打包脚本会往里写整棵 runtime)
+  local ROOT
+  ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  case "$canonical" in
+    "$ROOT"|"$ROOT/backend"|"$ROOT/backend/go")
+      fail "拒绝过宽的输出路径: $raw"
+      ;;
+  esac
+
+  printf '%s\n' "$canonical"
+}
+
+# runtime_python <python-executable> <arguments...>
+# 以固定 UTF-8 环境运行 python,透传其余参数:
+#   PYTHONUTF8=1、PYTHONIOENCODING=utf-8、
+#   PIP_DISABLE_PIP_VERSION_CHECK=1、PYTHONDONTWRITEBYTECODE=1
+# 环境只在函数内部生效,不污染调用方;退出码透传。
+runtime_python() {
+  local py="${1:?用法: runtime_python <python-executable> [参数...]}"
+  shift
+  (
+    export PYTHONUTF8=1
+    export PYTHONIOENCODING=utf-8
+    export PIP_DISABLE_PIP_VERSION_CHECK=1
+    export PYTHONDONTWRITEBYTECODE=1
+    "$py" "$@"
+  )
+}
