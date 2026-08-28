@@ -197,29 +197,83 @@ jobs:
     name: Publish GitHub Release
     needs: [prepare, package]
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
       - uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
           merge-multiple: true
           path: dist
 
-      - name: Verify release asset contract
-        run: |
-          for asset in \
-            AlchemyFurnace-mac-arm64.dmg \
-            AlchemyFurnace-mac-arm64.zip \
-            AlchemyFurnace-mac-x64.dmg \
-            AlchemyFurnace-mac-x64.zip \
-            AlchemyFurnace-Setup.exe; do
-            test -s "dist/$asset" || { echo "::error::Missing $asset"; exit 1; }
-          done
-          (cd dist && sha256sum AlchemyFurnace-* > checksums.txt)
+      - name: Verify release assets (binaries only)
+        run: bash scripts/verify-release-assets.sh dist "${{ needs.prepare.outputs.version }}" --binaries-only
 
-      - uses: softprops/action-gh-release@v2
+      - name: Generate checksums and release manifest
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          cd dist
+          sha256sum AlchemyFurnace-* > checksums.txt
+          python3 - "$VERSION" "$TAG" "$REPOSITORY" "$RUN_ID" "$RUN_NUMBER" "$SHA" <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import sys
+
+          version, tag, repository, run_id, run_number, sha = sys.argv[1:7]
+          asset_names = [
+              "AlchemyFurnace-mac-arm64.dmg",
+              "AlchemyFurnace-mac-arm64.zip",
+              "AlchemyFurnace-mac-x64.dmg",
+              "AlchemyFurnace-mac-x64.zip",
+              "AlchemyFurnace-Setup.exe",
+          ]
+          assets = {}
+          for name in asset_names:
+              data = open(name, "rb").read()
+              assets[name] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+          manifest = {
+              "version": version,
+              "tag": tag,
+              "created_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "build": {
+                  "repository": repository,
+                  "run_id": run_id,
+                  "run_number": run_number,
+                  "sha": sha,
+              },
+              "assets": assets,
+          }
+          with open("release-manifest.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=2)
+          PY
+
+      - name: Re-verify release assets (full contract)
+        run: bash scripts/verify-release-assets.sh dist "${{ needs.prepare.outputs.version }}"
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          files: dist/*
+          draft: true
+          files: |
+            dist/AlchemyFurnace-mac-arm64.dmg
+            dist/AlchemyFurnace-mac-arm64.zip
+            dist/AlchemyFurnace-mac-x64.dmg
+            dist/AlchemyFurnace-mac-x64.zip
+            dist/AlchemyFurnace-Setup.exe
+            dist/checksums.txt
+            dist/release-manifest.json
           generate_release_notes: true
           fail_on_unmatched_files: true
           prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
@@ -231,3 +285,19 @@ jobs:
             - Windows x64：下载 `AlchemyFurnace-Setup.exe`
 
             当前默认构建未经过 Apple 公证或商业代码签名。macOS 首次启动请右键应用并选择“打开”；Windows SmartScreen 提示时请选择“更多信息”后继续运行。
+
+      - name: Verify draft assets remotely
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          rm -rf remote-verify && mkdir -p remote-verify
+          gh release download "$TAG" --dir remote-verify
+          bash scripts/verify-release-assets.sh remote-verify "$VERSION"
+
+      - name: Publish release
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # 远端复验通过才公开;任一步失败时 draft 保留排查,不公开、不标 Latest
+        run: gh release edit "$TAG" --draft=false --latest

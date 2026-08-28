@@ -9,8 +9,50 @@ Desktop releases use one packaging chain locally and in GitHub Actions:
    metadata injected through Go linker flags.
 4. `ci-assemble.sh` installs the runtime, signs and packages the macOS bundle,
    or builds the Windows NSIS installer.
-5. The release job checks the complete asset contract, writes SHA256 sums, and
-   uploads everything to the tag's GitHub Release.
+5. The release job gates every asset through `scripts/verify-release-assets.sh`
+   (5 platform binaries, `checksums.txt`, `release-manifest.json`), creates a
+   draft Release, re-verifies the assets downloaded from the draft, and only
+   then publishes.
+
+## Release integrity gate (draft flow)
+
+The `Release desktop` workflow never publishes a Release directly. The release
+aggregate job runs this gate:
+
+1. `scripts/verify-release-assets.sh dist <version> --binaries-only` — checks
+   that exactly the 5 platform assets exist, are non-empty, and contain no
+   duplicate architecture.
+2. Generates `checksums.txt` (SHA256 of the 5 binaries) and
+   `release-manifest.json` (`version`, `tag`, build metadata, and per-asset
+   `size`/`sha256`) inside the dist directory.
+3. Re-runs `scripts/verify-release-assets.sh dist <version>` in full mode —
+   missing/empty files, duplicate architectures, checksums mismatches, unknown
+   files, or a manifest `version` that differs from the tag all fail the job.
+4. Creates a **draft** Release (never `latest`) with only the whitelisted
+   assets: the 5 binaries, `checksums.txt`, and `release-manifest.json`.
+5. Downloads the draft assets to an empty directory
+   (`gh release download`) and runs the same verifier against them, so the
+   published bytes are proven identical to the verified bytes.
+6. Only after the remote re-verification passes does
+   `gh release edit "$TAG" --draft=false --latest` publish the Release.
+
+Any failure at any step keeps the Release a draft for inspection — it is never
+published and never marked `latest`. A failing package job skips the release
+job entirely (`needs` on the matrix job).
+
+**Do not manually publish partial assets.** Uploading a subset of platform
+binaries by hand bypasses the gate and breaks the updater for the missing
+architectures; emergency releases must still go through the draft integrity
+gate with all 5 assets verified.
+
+Local usage of the verifier:
+
+```bash
+scripts/verify-release-assets.sh <dist-directory> <version> [--binaries-only]
+```
+
+`<version>` may be with or without a leading `v`; it is compared against the
+`version` field of `release-manifest.json` after normalization.
 
 ## Automatic release
 
