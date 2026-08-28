@@ -5,7 +5,9 @@
  * 只对已保存金丹(详情页只读态)开放;生成 Codex/Claude 可用的 Skill 包下载:
  * - 选择目标平台,展示文件名(展示用 slug 近似,实际下载名以服务端 Content-Disposition 为准)
  * - 展示包含内容清单、来源说明与「不会包含 API Key 与网页全文」确认文案
- * - 成功触发浏览器下载(Blob + a[download]);失败保留弹窗并提供重试
+ * - 浏览器: 成功触发下载(Blob + a[download]);桌面 webview: WKWebView 不执行 Blob 下载,
+ *   改为经桌面桥接端点落盘到数据目录 exports/ 并展示保存路径与「打开文件夹」按钮
+ * - 失败保留弹窗并提供重试
  * 导出走只读接口 POST /api/v1/distillation/skill-export(pill_id 模式),不删除、不修改金丹。
  */
 import { useState } from 'react'
@@ -14,11 +16,17 @@ import {
   AlertCircle,
   Download,
   FileArchive,
+  FolderOpen,
   Loader2,
   ShieldCheck,
   X,
 } from 'lucide-react'
-import { exportSkill } from '@/services/distillationService'
+import { isDesktop } from '@/services/api'
+import {
+  exportSkill,
+  revealSkillExport,
+  saveSkillExportDesktop,
+} from '@/services/distillationService'
 import type { ExportFormat, Pill } from '@/services/types'
 
 interface SkillExportDialogProps {
@@ -63,17 +71,34 @@ export function SkillExportDialog({ pill, onClose }: SkillExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('codex')
   const [status, setStatus] = useState<ExportStatus>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // 桌面端: 导出落盘后的绝对路径(浏览器环境保持 null,走 Blob 下载)
+  const [savedPath, setSavedPath] = useState<string | null>(null)
 
   const handleExport = async () => {
     setStatus('submitting')
     setErrorMessage(null)
+    setSavedPath(null)
     try {
       const result = await exportSkill({ pill_id: pill.id, format })
-      triggerDownload(result.blob, result.filename)
+      if (isDesktop()) {
+        // 桌面 webview 不执行 Blob 下载: 桥接落盘到数据目录 exports/ 并展示路径
+        setSavedPath(await saveSkillExportDesktop(result.blob, result.filename))
+      } else {
+        triggerDownload(result.blob, result.filename)
+      }
       setStatus('success')
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : t('error'))
       setStatus('error')
+    }
+  }
+
+  const handleReveal = async () => {
+    if (!savedPath) return
+    try {
+      await revealSkillExport(savedPath)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : t('error'))
     }
   }
 
@@ -167,11 +192,35 @@ export function SkillExportDialog({ pill, onClose }: SkillExportDialogProps) {
           </div>
         )}
 
-        {/* 成功:留在弹窗内,可关闭 */}
+        {/* 成功:留在弹窗内,可关闭;桌面端另显示保存路径与「打开文件夹」 */}
         {status === 'success' && (
-          <p role="status" className="mb-4 text-xs font-medium text-sage">
-            {t('success')}
-          </p>
+          <div role="status" className="mb-4 space-y-2">
+            <p className="text-xs font-medium text-sage">{t('success')}</p>
+            {savedPath && (
+              <div className="flex items-center gap-2">
+                <p
+                  className="min-w-0 flex-1 truncate rounded-lg border border-border/70 bg-muted px-3 py-2 text-xs text-foreground"
+                  title={savedPath}
+                >
+                  {t('savedTo', { path: savedPath })}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleReveal}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border/70 px-3 py-2 text-xs font-medium transition-colors hover:border-gold/40 hover:text-gold"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  {t('openFolder')}
+                </button>
+              </div>
+            )}
+            {/* 打开文件夹失败:保留成功态,仅提示错误 */}
+            {errorMessage && (
+              <p role="alert" className="text-xs text-primary">
+                {errorMessage}
+              </p>
+            )}
+          </div>
         )}
 
         <div className="flex flex-wrap items-center gap-3">

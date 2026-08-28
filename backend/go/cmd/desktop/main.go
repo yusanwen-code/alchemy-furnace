@@ -103,6 +103,9 @@ func main() {
 		bounceDock()
 		c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": nil})
 	})
+	// 桌面 Skill 导出落盘: save-export 写数据目录 exports/,reveal-export 文件管理器定位
+	// (WKWebView 不执行 Blob a[download],导出必须经此桥接落盘,见 export_save.go)
+	RegisterExportSaveEndpoints(engine)
 	srv := &http.Server{Handler: engine}
 	go func() {
 		log.Printf("[炼丹炉] 桌面服务已就绪: http://%s", addr)

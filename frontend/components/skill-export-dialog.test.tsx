@@ -7,9 +7,13 @@ import { ApiError } from '@/services/api'
 import type { Pill, SkillExportResult } from '@/services/types'
 
 const exportSkill = vi.hoisted(() => vi.fn())
+const saveSkillExportDesktop = vi.hoisted(() => vi.fn())
+const revealSkillExport = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/distillationService', () => ({
   exportSkill,
+  saveSkillExportDesktop,
+  revealSkillExport,
 }))
 
 // 键透传：断言只关心键/角色与行为，不依赖具体语言
@@ -53,6 +57,7 @@ describe('SkillExportDialog', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    document.documentElement.classList.remove('is-desktop')
   })
 
   it('默认 Codex：点击导出调用 exportSkill(pill_id, codex) 并触发浏览器下载', async () => {
@@ -132,5 +137,66 @@ describe('SkillExportDialog', () => {
     expect(exportSkill).toHaveBeenLastCalledWith({ pill_id: pill.id, format: 'codex' })
     await vi.waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(1))
     expect(screen.getByText('success')).toBeInTheDocument()
+  })
+
+  // ---- 桌面 webview 场景 ----
+  const savedPath = '/Users/tester/Library/Application Support/AlchemyFurnace/exports/alchemy-skill-skill-codex.zip'
+
+  it('桌面端：导出保存到数据目录并展示路径，不触发浏览器下载', async () => {
+    document.documentElement.classList.add('is-desktop')
+    const { createObjectURL } = stubDownload()
+    exportSkill.mockResolvedValue(zipResult('alchemy-skill-skill-codex.zip'))
+    saveSkillExportDesktop.mockResolvedValue(savedPath)
+    const user = userEvent.setup()
+    render(<SkillExportDialog pill={pill} onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'exportCta' }))
+
+    expect(exportSkill).toHaveBeenCalledWith({ pill_id: pill.id, format: 'codex' })
+    await vi.waitFor(() => expect(saveSkillExportDesktop).toHaveBeenCalledTimes(1))
+    // 落盘文件名与服务端 Content-Disposition 一致
+    expect(saveSkillExportDesktop).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'alchemy-skill-skill-codex.zip'
+    )
+    // 桌面端绝不走 Blob 下载
+    expect(createObjectURL).not.toHaveBeenCalled()
+    expect(screen.getByText('savedTo')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'openFolder' })).toBeInTheDocument()
+  })
+
+  it('桌面端：点「打开文件夹」定位已保存文件', async () => {
+    document.documentElement.classList.add('is-desktop')
+    exportSkill.mockResolvedValue(zipResult('alchemy-skill-skill-codex.zip'))
+    saveSkillExportDesktop.mockResolvedValue(savedPath)
+    revealSkillExport.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(<SkillExportDialog pill={pill} onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'exportCta' }))
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'openFolder' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'openFolder' }))
+
+    expect(revealSkillExport).toHaveBeenCalledWith(savedPath)
+  })
+
+  it('桌面端：保存失败保留弹窗展示错误并可重试', async () => {
+    document.documentElement.classList.add('is-desktop')
+    exportSkill.mockResolvedValue(zipResult('alchemy-skill-skill-codex.zip'))
+    saveSkillExportDesktop.mockRejectedValueOnce(new ApiError('保存失败', 500))
+    saveSkillExportDesktop.mockResolvedValueOnce(savedPath)
+    const { createObjectURL } = stubDownload()
+    const user = userEvent.setup()
+    render(<SkillExportDialog pill={pill} onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'exportCta' }))
+    expect(await screen.findByText('保存失败')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(createObjectURL).not.toHaveBeenCalled()
+
+    // 重试成功：落盘并展示路径
+    await user.click(screen.getByRole('button', { name: 'retry' }))
+    await vi.waitFor(() => expect(saveSkillExportDesktop).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('savedTo')).toBeInTheDocument()
   })
 })

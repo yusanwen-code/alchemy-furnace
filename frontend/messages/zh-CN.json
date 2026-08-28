@@ -777,6 +777,8 @@
     "exportCta": "导出下载",
     "exporting": "正在生成…",
     "success": "导出完成，已开始下载",
+    "savedTo": "已保存到 {path}",
+    "openFolder": "打开文件夹",
     "error": "导出失败，请重试",
     "retry": "重试",
     "done": "完成",

@@ -778,6 +778,8 @@
     "exportCta": "Export and download",
     "exporting": "Generating…",
     "success": "Export complete — download started",
+    "savedTo": "Saved to {path}",
+    "openFolder": "Open folder",
     "error": "Export failed. Try again.",
     "retry": "Retry",
     "done": "Done",
