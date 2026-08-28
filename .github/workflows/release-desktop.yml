@@ -143,8 +143,8 @@ jobs:
 
       - name: Build target Python runtime
         if: steps.runtime-cache.outputs.cache-hit != 'true'
-        # 绝对路径:切子目录后相对路径会失效(计划 Task 1 的路径教训)
-        run: ./scripts/build-python-runtime.sh ${{ matrix.platform }} $GITHUB_WORKSPACE/backend/go/dist-runtime
+        # 绝对路径:切子目录后相对路径会失效(计划 Task 1 的路径教训);双引号防 SC2086 分词
+        run: ./scripts/build-python-runtime.sh ${{ matrix.platform }} "$GITHUB_WORKSPACE/backend/go/dist-runtime"
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
