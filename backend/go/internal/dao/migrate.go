@@ -42,6 +42,19 @@ var nullableAlterations = []struct {
 	{"chat_messages", "agent_id"},
 }
 
+// columnTypeAlterations 新老 schema 漂移:列类型变更(VARCHAR → TEXT 等)
+// GORM AutoMigrate 在「表已存在」时对列类型加宽各驱动行为不一,且启动路径
+// MaybeAutoMigrate 对已有 schema 直接跳过;这里对 PostgreSQL 显式 ALTER,
+// 运行前查 information_schema 已是目标类型则跳过(幂等);SQLite/MySQL 由 AutoMigrate 负责
+var columnTypeAlterations = []struct {
+	Table   string
+	Column  string
+	NewType string
+}{
+	// 头像契约:允许 data:image 数据 URI(≤1.5M 字符),VARCHAR(255) 不够存
+	{"dao_agents", "avatar", "text"},
+}
+
 // MigrateUp 同步全部业务表到当前模型定义(幂等,跨驱动)
 // 历史 raw-SQL 迁移文件已不再依赖;若是从旧部署首次切换,可重复运行直至无差异
 func MigrateUp() error {
@@ -54,6 +67,12 @@ func MigrateUp() error {
 	// 手动 ALTER 列约束:GORM 无法回溯调整已建列的可空性
 	for _, alt := range nullableAlterations {
 		if err := alterColumnToNullable(DB, alt.Table, alt.Column); err != nil {
+			return fmt.Errorf("ALTER %s.%s 失败: %w", alt.Table, alt.Column, err)
+		}
+	}
+	// 手动 ALTER 列类型:老库 VARCHAR → TEXT 等加宽(幂等)
+	for _, alt := range columnTypeAlterations {
+		if err := alterColumnType(DB, alt.Table, alt.Column, alt.NewType); err != nil {
 			return fmt.Errorf("ALTER %s.%s 失败: %w", alt.Table, alt.Column, err)
 		}
 	}
@@ -81,6 +100,30 @@ func alterColumnToNullable(db *gorm.DB, table, column string) error {
 		return nil
 	}
 	stmt := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", table, column)
+	return db.Exec(stmt).Error
+}
+
+// alterColumnType 将指定列改为目标类型(已是目标类型则跳过);驱动差异:
+//   - PostgreSQL:走 information_schema + ALTER COLUMN TYPE
+//   - SQLite/MySQL:AutoMigrate 已能处理列类型变更,这里 no-op
+func alterColumnType(db *gorm.DB, table, column, newType string) error {
+	if db.Dialector.Name() != "postgres" {
+		return nil
+	}
+	var dataType string
+	row := db.Raw(`
+		SELECT data_type
+		FROM information_schema.columns
+		WHERE table_schema = CURRENT_SCHEMA()
+		  AND table_name = ? AND column_name = ?
+	`, table, column).Row()
+	if err := row.Scan(&dataType); err != nil {
+		return fmt.Errorf("查询列类型失败: %w", err)
+	}
+	if strings.EqualFold(strings.TrimSpace(dataType), newType) {
+		return nil
+	}
+	stmt := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", table, column, newType)
 	return db.Exec(stmt).Error
 }
 

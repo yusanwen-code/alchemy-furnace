@@ -24,6 +24,11 @@ func (cls *Agent) Create(c *gin.Context) (response.Code, any, error) {
 		return response.InvalidParams, nil, err
 	}
 
+	// 头像契约校验:空值合法 / http(s) URL / data:image 数据 URI,其余 400
+	if err := validateAvatar(body.Avatar); err != nil {
+		return response.InvalidParams, nil, err
+	}
+
 	// 错误路径返回码传 0:Wrapper 按错误类型映射(400 模型未启用/500 内部错误)
 	agent, err := cls.agent.CreateAgent(contextutil.NewContextWithGin(c),
 		body.Name, body.Avatar, body.Personality, body.ModelName, body.Proactivity)

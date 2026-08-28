@@ -30,6 +30,13 @@ func (cls *Agent) Update(c *gin.Context) (response.Code, any, error) {
 		return response.InvalidParams, nil, berr
 	}
 
+	// 头像契约校验(显式传入时):空值合法(清空)/ http(s) URL / data:image 数据 URI,其余 400
+	if body.Avatar != nil {
+		if err := validateAvatar(*body.Avatar); err != nil {
+			return response.InvalidParams, nil, err
+		}
+	}
+
 	agent, serr := cls.agent.UpdateAgent(contextutil.NewContextWithGin(c), uid,
 		body.Name, body.Avatar, body.Personality, body.ModelName, body.Status, body.Proactivity)
 	if serr != nil {

@@ -49,7 +49,7 @@ type DaoAgent struct {
 	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:道人唯一标识"`
 	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	Name        string    `json:"name" gorm:"size:100;not null;comment:道人名称"`
-	Avatar      string    `json:"avatar" gorm:"size:255;comment:头像URL"`
+	Avatar      string    `json:"avatar" gorm:"type:text;comment:头像 URL 或 data:image 数据 URI(≤1.5M 字符)"`
 	Personality string    `json:"personality" gorm:"type:text;comment:基础性格描述/系统提示词"`
 	ModelName   string    `json:"model_name" gorm:"size:50;default:gpt-4o;comment:使用的LLM模型名称"`
 	Status      string    `json:"status" gorm:"size:20;default:active;comment:状态: active(活跃)/inactive(停用)"`
