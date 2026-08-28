@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
 import { usePill } from '@/contexts/PillContext'
-import { useAgentEditorFlow } from '@/hooks/use-agent-editor-flow'
+import { avatarInputMaxLength, useAgentEditorFlow } from '@/hooks/use-agent-editor-flow'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
 import { pillDetailHref } from '@/lib/entity-detail-route'
@@ -603,8 +603,19 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
               value={draft.avatar}
               onChange={e => flow.updateDraft({ avatar: e.target.value })}
               placeholder={t('editor.avatarPlaceholder')}
+              maxLength={avatarInputMaxLength(draft.avatar)}
               className="dao-input py-1.5 text-sm"
             />
+            <p className="text-[10px] text-sage mt-1">
+              {t('editor.avatarHint')}
+            </p>
+            {flow.fieldErrors.avatar && (
+              <p className="mt-1 text-xs text-primary">
+                {flow.fieldErrors.avatar === 'tooLong'
+                  ? t('editor.avatarTooLong')
+                  : t('editor.avatarInvalid')}
+              </p>
+            )}
           </div>
 
           <div>

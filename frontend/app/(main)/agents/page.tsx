@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
 import { AgentCard } from '@/components/agent-card'
+import { avatarInputMaxLength, validateAvatarField } from '@/hooks/use-agent-editor-flow'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
 import type { AgentListParams, AgentStatus } from '@/services/types'
@@ -40,6 +41,8 @@ export default function AgentsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState('')
   const [personality, setPersonality] = useState('')
+  const [avatar, setAvatar] = useState('')
+  const [avatarError, setAvatarError] = useState<'invalid' | 'tooLong' | null>(null)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [modelName, setModelName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -72,16 +75,26 @@ export default function AgentsPage() {
   /** 创建道人 */
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
+    // 头像校验独立于道号必填:非法值即使名字为空也转为字段错误,不静默吞掉
+    const trimmedAvatar = avatar.trim()
+    const avatarErr = trimmedAvatar ? validateAvatarField(trimmedAvatar) : undefined
+    if (avatarErr) {
+      setAvatarError(avatarErr)
+      return
+    }
+    setAvatarError(null)
     if (!name.trim()) return
     const agent = await addAgent({
       name: name.trim(),
       model_name: modelName || undefined,
       personality: personality.trim() || undefined,
+      avatar: trimmedAvatar || undefined,
     })
     if (agent) {
       setShowCreate(false)
       setName('')
       setPersonality('')
+      setAvatar('')
       const def = modelOptions.find(o => o.is_default) || modelOptions[0]
       setModelName(def?.name || '')
     }
@@ -191,6 +204,34 @@ export default function AgentsPage() {
                 <p className="text-[10px] text-sage mt-1">
                   {t('modal.personaHint')}
                 </p>
+              </div>
+
+              <div>
+                <label htmlFor="create-avatar" className="dao-label">
+                  {t('modal.avatarLabel')}
+                </label>
+                <input
+                  id="create-avatar"
+                  type="text"
+                  value={avatar}
+                  onChange={e => {
+                    setAvatar(e.target.value)
+                    setAvatarError(null)
+                  }}
+                  placeholder={t('modal.avatarPlaceholder')}
+                  maxLength={avatarInputMaxLength(avatar)}
+                  className="dao-input"
+                />
+                <p className="text-[10px] text-sage mt-1">
+                  {t('modal.avatarHint')}
+                </p>
+                {avatarError && (
+                  <p className="mt-1 text-xs text-primary">
+                    {avatarError === 'tooLong'
+                      ? t('modal.avatarTooLong')
+                      : t('modal.avatarInvalid')}
+                  </p>
+                )}
               </div>
 
               <div>

@@ -300,4 +300,121 @@ describe('useAgentEditorFlow', () => {
       { key: 'pill-b', pill_id: 'pill-b', weight: 1 },
     ])
   })
+
+  describe('avatar 字段契约校验(与后端 validateAvatar 对齐)', () => {
+    beforeEach(() => {
+      vi.resetAllMocks()
+      listAgents.mockResolvedValue({ list: [], total: 0, page: 1, page_size: 100 })
+    })
+
+    it('非法协议(javascript:)头像拒绝保存并写入 fieldErrors.avatar,零 API', async () => {
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: 'javascript:alert(1)' }))
+
+      let ok = true
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(false)
+      expect(result.current.fieldErrors.avatar).toBeTruthy()
+      expect(result.current.mode).toBe('editing')
+      expect(updateAgent).not.toHaveBeenCalled()
+      expect(replacePills).not.toHaveBeenCalled()
+      expect(getAgent).not.toHaveBeenCalled()
+    })
+
+    it('相对路径头像拒绝保存并写入 fieldErrors.avatar', async () => {
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: '/avatar.png' }))
+
+      let ok = true
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(false)
+      expect(result.current.fieldErrors.avatar).toBe('invalid')
+      expect(updateAgent).not.toHaveBeenCalled()
+      expect(replacePills).not.toHaveBeenCalled()
+    })
+
+    it('空白头像视为清空:通过校验并提交空字符串', async () => {
+      updateAgent.mockResolvedValue({ ...baseAgent })
+      replacePills.mockResolvedValue({ ...baseAgent })
+      getAgent.mockResolvedValue({ ...baseAgent })
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: '   ' }))
+
+      let ok = false
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(true)
+      expect(updateAgent).toHaveBeenCalledWith('agent-1', expect.objectContaining({ avatar: '' }))
+      expect(result.current.mode).toBe('readonly')
+    })
+
+    it('合法 data URI 头像通过校验并原样提交', async () => {
+      updateAgent.mockResolvedValue({ ...baseAgent })
+      replacePills.mockResolvedValue({ ...baseAgent })
+      getAgent.mockResolvedValue({ ...baseAgent })
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: 'data:image/png;base64,AAAA' }))
+
+      let ok = false
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(true)
+      expect(updateAgent).toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({ avatar: 'data:image/png;base64,AAAA' }),
+      )
+    })
+
+    it('非白名单 MIME 的 data URI 拒绝保存', async () => {
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: 'data:image/svg+xml;base64,PHN2Zz4=' }))
+
+      let ok = true
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(false)
+      expect(result.current.fieldErrors.avatar).toBeTruthy()
+      expect(updateAgent).not.toHaveBeenCalled()
+    })
+
+    it('超长 URL 头像拒绝保存(>2048)', async () => {
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: `https://example.com/${'a'.repeat(2050)}` }))
+
+      let ok = true
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(false)
+      expect(result.current.fieldErrors.avatar).toBe('tooLong')
+      expect(updateAgent).not.toHaveBeenCalled()
+    })
+
+    it('超长 data URI 头像拒绝保存(>1500000)', async () => {
+      const { result } = renderHook(() => useAgentEditorFlow(baseAgent), { wrapper })
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ avatar: `data:image/png;base64,${'A'.repeat(1_500_000)}` }))
+
+      let ok = true
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(false)
+      expect(result.current.fieldErrors.avatar).toBe('tooLong')
+      expect(updateAgent).not.toHaveBeenCalled()
+    })
+  })
 })

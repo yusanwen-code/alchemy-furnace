@@ -530,6 +530,86 @@ describe('AgentDetailPage', () => {
       expect(screen.queryByText('nuwa-apply')).toBeNull()
       expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
     })
+
+    it('头像为相对路径时拒绝保存:字段错误展示且零 API', async () => {
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      // 输入框下方常驻提示:只支持完整 URL 或 data:image 数据 URI(相对路径不可用)
+      expect(screen.getByText('只支持完整 URL 或 data:image 数据 URI（相对路径不可用）')).toBeInTheDocument()
+
+      const avatar = screen.getByLabelText('头像 URL')
+      await user.clear(avatar)
+      await user.type(avatar, '/avatar.png')
+      await user.click(screen.getByRole('button', { name: '保存' }))
+
+      expect(
+        await screen.findByText('头像仅支持完整 http/https URL 或 data:image 数据 URI'),
+      ).toBeInTheDocument()
+      expect(td.updateAgent).not.toHaveBeenCalled()
+      expect(td.replacePills).not.toHaveBeenCalled()
+    })
+
+    it('头像为非法协议时拒绝保存:零 API', async () => {
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      const avatar = screen.getByLabelText('头像 URL')
+      await user.clear(avatar)
+      await user.type(avatar, 'javascript:alert(1)')
+      await user.click(screen.getByRole('button', { name: '保存' }))
+
+      expect(
+        await screen.findByText('头像仅支持完整 http/https URL 或 data:image 数据 URI'),
+      ).toBeInTheDocument()
+      expect(td.updateAgent).not.toHaveBeenCalled()
+      expect(td.replacePills).not.toHaveBeenCalled()
+    })
+
+    it('头像为合法 data URI 时保存通过并随 updateAgent 提交', async () => {
+      setDetailState({ agent: baseAgent })
+      const fresh: AgentDetail = { ...baseAgent, avatar: 'data:image/png;base64,AAAA' }
+      td.updateAgent.mockResolvedValue(fresh)
+      td.replacePills.mockResolvedValue(fresh)
+      td.getAgent.mockResolvedValue(fresh)
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      const avatar = screen.getByLabelText('头像 URL')
+      await user.clear(avatar)
+      await user.type(avatar, 'data:image/png;base64,AAAA')
+      await user.click(screen.getByRole('button', { name: '保存' }))
+
+      await waitFor(() => expect(td.getAgent).toHaveBeenCalledWith(AGENT_ID))
+      expect(td.updateAgent).toHaveBeenCalledWith(
+        AGENT_ID,
+        expect.objectContaining({ avatar: 'data:image/png;base64,AAAA' }),
+      )
+      await screen.findByRole('heading', { name: '太上老君' })
+    })
+
+    it('头像超长时拒绝保存:字段错误展示且零 API', async () => {
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      const avatar = screen.getByLabelText('头像 URL')
+      // fireEvent 直改 value 绕过 maxLength,验证提交前校验兜底
+      fireEvent.change(avatar, { target: { value: `https://example.com/${'a'.repeat(2050)}` } })
+      await user.click(screen.getByRole('button', { name: '保存' }))
+
+      expect(
+        await screen.findByText('头像过长（URL 上限 2048 字符，data URI 上限 1500000 字符）'),
+      ).toBeInTheDocument()
+      expect(td.updateAgent).not.toHaveBeenCalled()
+      expect(td.replacePills).not.toHaveBeenCalled()
+    })
   })
 
   describe('删除与停用', () => {

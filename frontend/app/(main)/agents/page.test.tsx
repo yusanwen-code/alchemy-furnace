@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -208,5 +208,88 @@ describe('AgentsPage', () => {
       expect(td.createAgent).toHaveBeenCalledWith(expect.objectContaining({ name: '新道人' })),
     )
     await waitFor(() => expect(screen.queryByText('招募道人', { selector: 'h2' })).toBeNull())
+  })
+
+  it('创建弹窗:非法协议头像被拒并显示错误,零 API', async () => {
+    td.listAgents.mockResolvedValue({ list: [activeAgent], total: 1, page: 1, page_size: 100 })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('太上老君·active')
+    await user.click(screen.getByRole('button', { name: '招募道人' }))
+
+    // 名称必填走原生 required 校验,先填名称再触发提交,验证头像校验兜底
+    const nameInput = screen.getByPlaceholderText('如：太虚真人')
+    await user.type(nameInput, '新道人')
+    const avatar = screen.getByLabelText('头像 URL')
+    await user.type(avatar, 'javascript:alert(1)')
+    await user.click(screen.getByRole('button', { name: '招募' }))
+
+    expect(
+      await screen.findByText('头像仅支持完整 http/https URL 或 data:image 数据 URI'),
+    ).toBeInTheDocument()
+    expect(td.createAgent).not.toHaveBeenCalled()
+  })
+
+  it('创建弹窗:相对路径头像被拒并显示提示,零 API', async () => {
+    td.listAgents.mockResolvedValue({ list: [activeAgent], total: 1, page: 1, page_size: 100 })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('太上老君·active')
+    await user.click(screen.getByRole('button', { name: '招募道人' }))
+
+    // 输入框下方常驻提示:只支持完整 URL 或 data:image 数据 URI(相对路径不可用)
+    expect(screen.getByText('只支持完整 URL 或 data:image 数据 URI（相对路径不可用）')).toBeInTheDocument()
+
+    // 名称必填走原生 required 校验,先填名称再触发提交,验证头像校验兜底
+    const nameInput = screen.getByPlaceholderText('如：太虚真人')
+    await user.type(nameInput, '新道人')
+    const avatar = screen.getByLabelText('头像 URL')
+    await user.type(avatar, '/avatar.png')
+    await user.click(screen.getByRole('button', { name: '招募' }))
+
+    expect(
+      await screen.findByText('头像仅支持完整 http/https URL 或 data:image 数据 URI'),
+    ).toBeInTheDocument()
+    expect(td.createAgent).not.toHaveBeenCalled()
+  })
+
+  it('创建弹窗:合法 data URI 头像随创建请求提交', async () => {
+    td.listAgents.mockResolvedValue({ list: [activeAgent], total: 1, page: 1, page_size: 100 })
+    td.createAgent.mockResolvedValue({ ...activeAgent, id: 'agent-9', name: '新道人' })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('太上老君·active')
+    await user.click(screen.getByRole('button', { name: '招募道人' }))
+
+    const nameInput = screen.getByPlaceholderText('如：太虚真人')
+    await user.type(nameInput, '新道人')
+    await user.type(screen.getByLabelText('头像 URL'), 'data:image/png;base64,AAAA')
+    await user.click(screen.getByRole('button', { name: '招募' }))
+
+    await waitFor(() =>
+      expect(td.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '新道人', avatar: 'data:image/png;base64,AAAA' }),
+      ),
+    )
+  })
+
+  it('创建弹窗:超长 URL 头像被拒,零 API', async () => {
+    td.listAgents.mockResolvedValue({ list: [activeAgent], total: 1, page: 1, page_size: 100 })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('太上老君·active')
+    await user.click(screen.getByRole('button', { name: '招募道人' }))
+
+    const nameInput = screen.getByPlaceholderText('如：太虚真人')
+    await user.type(nameInput, '新道人')
+    const avatar = screen.getByLabelText('头像 URL')
+    // fireEvent 直改 value 绕过 maxLength,验证提交前校验兜底
+    fireEvent.change(avatar, { target: { value: `https://example.com/${'a'.repeat(2050)}` } })
+    await user.click(screen.getByRole('button', { name: '招募' }))
+
+    expect(
+      await screen.findByText('头像过长（URL 上限 2048 字符，data URI 上限 1500000 字符）'),
+    ).toBeInTheDocument()
+    expect(td.createAgent).not.toHaveBeenCalled()
   })
 })
