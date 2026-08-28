@@ -97,4 +97,23 @@ describe('PillCard', () => {
     render(<PillCard pill={{ ...customPill, description: undefined }} />)
     expect(screen.getByText('noDescription')).toBeInTheDocument()
   })
+
+  it('金丹卡片渲染丹瓶类型图标而非头像(产品边界锁定: Pill 无 avatar 数据契约)', () => {
+    const { container } = render(<PillCard pill={customPill} />)
+
+    // 产品决策(2026-08-28): FlaskConical 是金丹「类型图标」,不是头像;
+    // Pill 当前没有 avatar 字段,卡片不得尝试读取不存在的字段。
+    expect(container.querySelector('svg.lucide-flask-conical')).not.toBeNull()
+    // 不创建任何 <img>(没有头像可显示,也不应有破图占位)
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it('即使服务端多返回 avatar 键,金丹卡片也保持丹瓶图标,不渲染头像', () => {
+    const { container } = render(
+      <PillCard pill={{ ...customPill, avatar: 'https://example.com/pill-cover.png' } as unknown as Pill} />,
+    )
+
+    expect(container.querySelector('svg.lucide-flask-conical')).not.toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
+  })
 })

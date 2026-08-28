@@ -166,7 +166,11 @@ export interface FusionLineage {
 
 // ========== 金丹 ==========
 
-/** 金丹（语言模式/人格特质技能包） */
+/**
+ * 金丹（语言模式/人格特质技能包）
+ * Pill 当前无 avatar 数据契约（2026-08-28 产品边界，见计划）；金丹封面需另行迁移。
+ * 金丹卡片保持 FlaskConical 丹瓶类型图标，前端不得读取不存在的字段。
+ */
 export interface Pill {
   id: string
   name: string
