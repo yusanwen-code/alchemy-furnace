@@ -38,7 +38,6 @@ import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
 import { pillDetailHref } from '@/lib/entity-detail-route'
 import { AgentPillComposer } from '@/components/agent-pill-composer'
-import { NuwaDistillPanel } from '@/components/nuwa-distill-panel'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { ApiError } from '@/services/api'
 import * as agentService from '@/services/agentService'
@@ -604,8 +603,6 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
 
       {/* 基础资料编辑 */}
       <div className="dao-card mb-6 p-5 md:p-6">
-        <NuwaDistillPanel onApply={flow.applyNuwaDraft} />
-
         <div className="mt-4 space-y-3">
           <div>
             <label htmlFor="agent-name" className="dao-label">

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentDetailPage from '@/app/(main)/agents/detail/agent-detail'
 import { ApiError } from '@/services/api'
-import type { AgentDetail, DistillationDraft, Pill } from '@/services/types'
+import type { AgentDetail, Pill } from '@/services/types'
 
 // ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
 const td = vi.hoisted(() => {
@@ -141,32 +141,6 @@ vi.mock('@/hooks/use-chat-launch-flow', () => ({
     retry: td.launchRetry,
     reset: vi.fn(),
   }),
-}))
-
-const nuwaDraft: DistillationDraft = {
-  name: '女娲造人',
-  description: '蒸馏候选',
-  persona_summary: '悲天悯人的造物主',
-  tags: ['神话'],
-  skill_schema: { identity_card: '造物主' },
-  sources: [{ title: '淮南子', url: 'https://example.com/huainanzi', dimension: 'persona' }],
-  model: 'gpt-5',
-  research: {
-    evidence_level: 'standard',
-    document_count: 1,
-    domain_count: 1,
-    total_characters: 2500,
-    warnings: [],
-  },
-}
-
-// 隔离真实蒸馏面板(走网络),替换为显式 apply 触发器
-vi.mock('@/components/nuwa-distill-panel', () => ({
-  NuwaDistillPanel: ({ onApply }: { onApply: (draft: DistillationDraft) => void }) => (
-    <button type="button" onClick={() => onApply(nuwaDraft)}>
-      nuwa-apply
-    </button>
-  ),
 }))
 
 // ---- fixtures ----
@@ -527,32 +501,17 @@ describe('AgentDetailPage', () => {
       expect(select).toHaveValue('gpt-4o')
     })
 
-    it('女娲蒸馏草稿显式应用后才落入表单,且不触碰服丹编排', async () => {
+    it('道人编辑页不渲染女娲蒸馏入口:只读态与编辑态均无面板', async () => {
       setDetailState({ agent: baseAgent })
-      td.updateAgent.mockImplementation(async (_id, data) => ({ ...baseAgent, ...data }))
-      td.replacePills.mockResolvedValue(baseAgent)
-      td.getAgent.mockResolvedValue({ ...baseAgent, name: '女娲造人', personality: '悲天悯人的造物主' })
       const user = userEvent.setup()
       renderPage()
       // 只读态不出现蒸馏入口
       expect(screen.queryByText('nuwa-apply')).toBeNull()
 
       await enterEditing(user)
-      await user.click(screen.getByText('nuwa-apply'))
-      expect(screen.getByDisplayValue('女娲造人')).toBeInTheDocument()
-      expect(screen.getByDisplayValue('悲天悯人的造物主')).toBeInTheDocument()
-
-      await user.click(screen.getByRole('button', { name: '保存' }))
-      await waitFor(() => expect(td.updateAgent).toHaveBeenCalled())
-      expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, expect.objectContaining({
-        name: '女娲造人',
-        personality: '悲天悯人的造物主',
-      }))
-      // 编排原样提交,蒸馏不触碰
-      expect(td.replacePills).toHaveBeenCalledWith(AGENT_ID, [
-        { pill_id: PILL_A_ID, weight: 2 },
-        { pill_id: PILL_B_ID, weight: 1 },
-      ])
+      // 编辑态同样不允许出现女娲入口:道人能力应先炼制金丹,再在编辑页绑定
+      expect(screen.queryByText('nuwa-apply')).toBeNull()
+      expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
     })
   })
 
