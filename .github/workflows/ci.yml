@@ -26,18 +26,42 @@ jobs:
 
       - name: Validate packaging scripts and config
         run: |
-          bash -n scripts/build-python-runtime.sh scripts/ci-assemble.sh scripts/package-desktop.sh scripts/lib/*.sh scripts/tests/*.sh
+          bash -n scripts/lib/*.sh scripts/*.sh scripts/tests/*.sh
           python3 -m json.tool backend/go/wails.json >/dev/null
 
       - name: Run runtime contract tests
         run: bash scripts/tests/runtime-common-test.sh
 
-      - name: Validate desktop release workflow
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/release-desktop.yml
+      - name: Validate desktop release workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/release-desktop.yml .github/workflows/ci.yml
 
       - name: Verify updater asset contract
         working-directory: backend/go
         run: go test ./internal/updater ./internal/engineproc
+
+  # ───────────────────── Windows 契约(PowerShell verifier)─────────────────────
+  windows-contract:
+    name: Windows release contract
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      # verify-windows-package.ps1 的 Pester 测试只能在 Windows runner 跑(PE 头解析);
+      # windows-2022 镜像缺 Pester 5 时就地安装;真实包契约由 release workflow 的
+      # ci-assemble 调用覆盖,本 job 负责回归单测
+      - name: Run PowerShell verifier tests (Pester)
+        shell: pwsh
+        run: |
+          $pester = Get-Module -ListAvailable -Name Pester |
+            Where-Object { $_.Version -ge [version]'5.0.0' } | Select-Object -First 1
+          if (-not $pester) {
+            Write-Host "未发现 Pester 5,就地安装"
+            Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MinimumVersion 5.0.0
+          }
+          $result = Invoke-Pester -Path scripts/tests/verify-windows-package.Tests.ps1 -PassThru -Output Detailed
+          if ($result.FailedCount -gt 0) {
+            throw "Pester 失败: $($result.FailedCount) 个用例未通过"
+          }
 
   # ───────────────────── 1. Go lint + test ─────────────────────
   go:

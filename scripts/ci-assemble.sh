@@ -57,6 +57,15 @@ case "$PLATFORM" in
     codesign --force --deep --sign "$SIGN_IDENTITY" "$APP"
     codesign --verify --deep --strict --verbose=2 "$APP"
 
+    # 平台 verifier(设计 §5 macOS):架构由平台参数推导,失败即退出
+    # 注意:case 嵌套在 $(...) 里会被 bash 解析器误读,用 if 映射
+    VERIFY_ARCH="arm64"
+    if [[ "$PLATFORM" == darwin-amd64 ]]; then
+      VERIFY_ARCH="x86_64"
+    fi
+    say "验证 macOS 包(架构 $VERIFY_ARCH,版本 $BUNDLE_VERSION)"
+    "$ROOT/scripts/verify-macos-package.sh" "$APP" "$VERIFY_ARCH" "$BUNDLE_VERSION"
+
     DMG="$DIST_DIR/AlchemyFurnace-mac-${ASSET_ARCH}.dmg"
     ZIP="$DIST_DIR/AlchemyFurnace-mac-${ASSET_ARCH}.zip"
     STAGE="$(mktemp -d)"
@@ -71,6 +80,13 @@ case "$PLATFORM" in
     say "生成 $(basename "$ZIP")"
     rm -f "$ZIP"
     ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+
+    # ZIP 根目录只能有一个 AlchemyFurnace.app(更新器按根目录解包)
+    ZIP_APPS="$(unzip -l "$ZIP" | awk '{print $4}' | sed -n 's#^\(AlchemyFurnace\.app\)/.*#\1#p' | sort -u)"
+    if [[ "$ZIP_APPS" != "AlchemyFurnace.app" ]]; then
+      fail "ZIP 根目录应只有一个 AlchemyFurnace.app,实际: [$ZIP_APPS]"
+    fi
+    say "ZIP 根目录只有一个 AlchemyFurnace.app"
     ;;
 
   windows-amd64)
@@ -96,6 +112,20 @@ case "$PLATFORM" in
         build/windows/installer.nsi
     )
     [ -s "$INSTALLER" ] || fail "NSIS 未生成安装器: $INSTALLER"
+
+    # 平台 verifier(设计 §5 Windows):pwsh 优先,回退 Windows PowerShell;失败即退出
+    if command -v pwsh >/dev/null 2>&1; then
+      PS_RUNNER="pwsh"
+    elif command -v powershell >/dev/null 2>&1; then
+      PS_RUNNER="powershell"
+    else
+      fail "未找到 pwsh 或 powershell,无法验证 Windows 包"
+    fi
+    say "验证 Windows x64 包(版本 $VERSION)"
+    "$PS_RUNNER" -NoProfile -ExecutionPolicy Bypass -File "$ROOT/scripts/verify-windows-package.ps1" \
+      -PackageDir "$PACKAGE_DIR" \
+      -Installer "$INSTALLER" \
+      -ExpectedVersion "$VERSION"
     ;;
 
   *) fail "未知平台: $PLATFORM" ;;

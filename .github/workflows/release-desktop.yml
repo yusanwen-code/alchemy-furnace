@@ -102,13 +102,20 @@ jobs:
           - os: macos-15
             platform: darwin-arm64
             wails_platform: darwin/arm64
+            arch: arm64
           - os: macos-15-intel
             platform: darwin-amd64
             wails_platform: darwin/amd64
+            arch: x64
           - os: windows-2022
             platform: windows-amd64
             wails_platform: windows/amd64
+            arch: amd64
     runs-on: ${{ matrix.os }}
+    env:
+      # macOS 12+ 契约:构建链(go/cgo/Python)统一按 12.0 编译(设计 §5 macOS)
+      # 注意:job env 可用上下文不含 runner,用 matrix.os 判断
+      MACOSX_DEPLOYMENT_TARGET: ${{ startsWith(matrix.os, 'macos') && '12.0' || '' }}
     defaults:
       run:
         shell: bash
@@ -136,7 +143,8 @@ jobs:
 
       - name: Build target Python runtime
         if: steps.runtime-cache.outputs.cache-hit != 'true'
-        run: ./scripts/build-python-runtime.sh ${{ matrix.platform }} backend/go/dist-runtime
+        # 绝对路径:切子目录后相对路径会失效(计划 Task 1 的路径教训)
+        run: ./scripts/build-python-runtime.sh ${{ matrix.platform }} $GITHUB_WORKSPACE/backend/go/dist-runtime
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
@@ -156,46 +164,49 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_SHA: ${{ github.sha }}
+        # Bash 数组组装参数,避免三平台一行式差异;Windows 追加 -webview2 embed
+        # (内嵌 bootstrapper,缺 WebView2 时走内嵌安装流程,设计 §5 Windows)
         run: |
-          wails build -clean -platform "${{ matrix.wails_platform }}" \
-            -ldflags "-X github.com/alchemy-furnace/server/internal/buildinfo.Version=${RELEASE_TAG} -X github.com/alchemy-furnace/server/internal/buildinfo.Commit=${RELEASE_SHA} -X github.com/alchemy-furnace/server/internal/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/alchemy-furnace/server/internal/buildinfo.UpdateRepo=${RELEASE_REPOSITORY}" \
-            -skipbindings
+          wails_args=(build -clean -platform "${{ matrix.wails_platform }}")
+          wails_args+=(-ldflags "-X github.com/alchemy-furnace/server/internal/buildinfo.Version=${RELEASE_TAG} -X github.com/alchemy-furnace/server/internal/buildinfo.Commit=${RELEASE_SHA} -X github.com/alchemy-furnace/server/internal/buildinfo.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X github.com/alchemy-furnace/server/internal/buildinfo.UpdateRepo=${RELEASE_REPOSITORY}")
+          wails_args+=(-skipbindings)
+          if [[ "${{ matrix.platform }}" == windows-amd64 ]]; then
+            wails_args+=(-webview2 embed)
+          fi
+          wails build "${wails_args[@]}"
 
       - name: Assemble release package
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY || '-' }}
+        # ci-assemble.sh 内部调用平台 verifier(verify-macos-package.sh /
+        # verify-windows-package.ps1),失败即退出;不再在 YAML 内联复制检查
         run: ./scripts/ci-assemble.sh ${{ matrix.platform }} "${{ needs.prepare.outputs.tag }}"
 
-      - name: Verify macOS package layout
+      - name: Upload macOS artifacts
         if: runner.os == 'macOS'
-        run: |
-          app=backend/go/build/bin/AlchemyFurnace.app
-          test -x "$app/Contents/MacOS/AlchemyFurnace"
-          test -x "$app/Contents/Resources/python-runtime/bin/python3"
-          test -f "$app/Contents/Resources/python-runtime/engine/app/main.py"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$app/Contents/Info.plist")" = "iconfile"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$app/Contents/Info.plist")" = "炼丹炉"
-          test -s "$app/Contents/Resources/iconfile.icns"
-          codesign --verify --deep --strict --verbose=2 "$app"
-
-      - name: Verify Windows package layout
-        if: runner.os == 'Windows'
-        run: |
-          test -f backend/go/build/package/windows/AlchemyFurnace.exe
-          test -f backend/go/build/package/windows/runtime/python.exe
-          test -f backend/go/build/package/windows/runtime/engine/app/main.py
-          test -s backend/go/build/dist/AlchemyFurnace-Setup.exe
-
-      - uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform }}
-          path: backend/go/build/dist/AlchemyFurnace-*
+          path: |
+            backend/go/build/dist/AlchemyFurnace-mac-${{ matrix.arch }}.dmg
+            backend/go/build/dist/AlchemyFurnace-mac-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: backend/go/build/dist/AlchemyFurnace-Setup.exe
           if-no-files-found: error
           retention-days: 7
 
   release:
     name: Publish GitHub Release
     needs: [prepare, package]
+    # needs 默认语义:任一 matrix package job 失败/skipped 时本 job 自动 skipped,
+    # 绝不公开只有部分平台的资产(设计 §6)
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ github.token }}
