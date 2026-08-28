@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ChevronRight, Cpu, Loader2, MessageSquare, Sparkles } from 'lucide-react'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { agentDetailHref } from '@/lib/entity-detail-route'
 import type { Agent } from '@/services/types'
@@ -21,21 +22,6 @@ interface AgentCardProps {
   agent: Agent
   /** 紧凑模式 */
   compact?: boolean
-}
-
-/** 生成头像渐变颜色（根据名称确定性生成） */
-function getAvatarColor(name: string): string {
-  const colors = [
-    'from-primary to-primary/70',
-    'from-sage to-sage/70',
-    'from-gold to-gold/70',
-    'from-blue-500 to-blue-700',
-    'from-purple-500 to-purple-700',
-    'from-teal-500 to-teal-700',
-  ]
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return colors[Math.abs(hash) % colors.length]
 }
 
 export function AgentCard({ agent, compact = false }: AgentCardProps) {
@@ -54,7 +40,6 @@ export function AgentCard({ agent, compact = false }: AgentCardProps) {
   const statusClass = (statusInfo[agent.status] || statusInfo.inactive).className
   const statusLabel = agent.status === 'active' ? tStatus('active') : tStatus('inactive')
 
-  const avatarGradient = getAvatarColor(agent.name)
   const href = agentDetailHref(agent.id)
 
   if (compact) {
@@ -65,13 +50,7 @@ export function AgentCard({ agent, compact = false }: AgentCardProps) {
         className="dao-card group flex min-w-0 items-center gap-3 p-4 sm:gap-4"
       >
         {/* 头像 */}
-        <div className={`
-          flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${avatarGradient}
-          font-serif text-lg font-bold text-primary-foreground
-          shadow-lg
-        `}>
-          {agent.name.charAt(0)}
-        </div>
+        <EntityAvatar name={agent.name} src={agent.avatar} size="md" shape="square" />
 
         {/* 信息 */}
         <div className="min-w-0 flex-1">
@@ -123,13 +102,7 @@ export function AgentCard({ agent, compact = false }: AgentCardProps) {
     >
       {/* 顶部：头像 + 状态 */}
       <div className="mb-4 flex items-start justify-between gap-2">
-        <div className={`
-          flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${avatarGradient}
-          font-serif text-2xl font-bold text-primary-foreground
-          shadow-lg transition-transform duration-300 group-hover:scale-105
-        `}>
-          {agent.name.charAt(0)}
-        </div>
+        <EntityAvatar name={agent.name} src={agent.avatar} size="lg" shape="square" />
         <div className="flex min-w-0 items-center gap-2">
           {agent.status === 'active' && (
             <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-gold" />

@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { X, Users, Loader2, Gift, AlertCircle } from 'lucide-react'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import * as agentService from '@/services/agentService'
 import type { Agent, Pill } from '@/services/types'
 
@@ -108,9 +109,7 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
                   }
                 `}
               >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-primary-foreground font-serif font-bold shrink-0">
-                  {agent.name.charAt(0)}
-                </div>
+                <EntityAvatar name={agent.name} src={agent.avatar} size="sm" shape="square" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{agent.name}</p>
                   <p className="text-[10px] text-muted-foreground truncate">{agent.model_name}</p>

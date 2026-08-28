@@ -64,6 +64,7 @@ const AGENT_2_ID = '22222222-2222-4222-8222-222222222222'
 const activeAgent: Agent = {
   id: AGENT_1_ID,
   name: '太上老君',
+  avatar: 'https://example.com/laojun.png',
   personality: '沉稳如山',
   model_name: 'gpt-4o',
   status: 'active',
@@ -72,7 +73,14 @@ const activeAgent: Agent = {
   updated_at: '2026-08-20T00:00:00Z',
 }
 
-const inactiveAgent: Agent = { ...activeAgent, id: AGENT_2_ID, name: '沉睡道人', status: 'inactive' }
+// 无头像 fixture:继续断言首字 fallback
+const inactiveAgent: Agent = {
+  ...activeAgent,
+  id: AGENT_2_ID,
+  name: '沉睡道人',
+  status: 'inactive',
+  avatar: undefined,
+}
 
 describe('AgentCard', () => {
   beforeEach(() => {
@@ -157,5 +165,25 @@ describe('AgentCard', () => {
       'href',
       `/agents/detail?id=${AGENT_1_ID}`,
     )
+  })
+
+  it('默认模式渲染有 avatar 道人的图片头像', () => {
+    render(<AgentCard agent={activeAgent} />)
+    const img = screen.getByRole('img', { name: '太上老君' })
+    expect(img).toHaveAttribute('src', 'https://example.com/laojun.png')
+  })
+
+  it('紧凑模式同样渲染道人图片头像', () => {
+    render(<AgentCard agent={activeAgent} compact />)
+    expect(screen.getByRole('img', { name: '太上老君' })).toHaveAttribute(
+      'src',
+      'https://example.com/laojun.png',
+    )
+  })
+
+  it('无 avatar 的道人渲染首字 fallback,不创建 img', () => {
+    render(<AgentCard agent={inactiveAgent} />)
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(screen.getByText('沉')).toBeInTheDocument()
   })
 })
