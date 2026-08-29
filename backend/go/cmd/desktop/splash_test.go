@@ -51,3 +51,55 @@ func TestSplashStates(t *testing.T) {
 		t.Fatalf("err 态应含重试按钮:\n%s", body)
 	}
 }
+
+// TestResolveSplashStatus — 启动状态模型表格测试
+// pending: readiness false,不调用 target
+// ready:   readiness true,返回 target() 结果
+// error:   readiness 返回 err,Message 透传 err.Error()
+// nil readiness: 直接视为 ready(调用方不提供探针)
+// ready 但 target nil: 拒绝 nil panic,返回可读错误
+func TestResolveSplashStatus(t *testing.T) {
+	cases := []struct {
+		name      string
+		target    func() string
+		readiness func() (bool, error)
+		want      splashStatus
+	}{
+		{
+			name:      "pending",
+			target:    func() string { return "http://127.0.0.1:1234/?token=x" },
+			readiness: func() (bool, error) { return false, nil },
+			want:      splashStatus{State: splashPending},
+		},
+		{
+			name:      "ready",
+			target:    func() string { return "http://127.0.0.1:1234/?token=x" },
+			readiness: func() (bool, error) { return true, nil },
+			want:      splashStatus{State: splashReady, Target: "http://127.0.0.1:1234/?token=x"},
+		},
+		{
+			name:      "readiness error",
+			readiness: func() (bool, error) { return false, errors.New("引擎启动失败") },
+			want:      splashStatus{State: splashError, Message: "引擎启动失败"},
+		},
+		{
+			name:      "nil readiness",
+			target:    func() string { return "http://127.0.0.1:1234/" },
+			readiness: nil,
+			want:      splashStatus{State: splashReady, Target: "http://127.0.0.1:1234/"},
+		},
+		{
+			name:      "ready but nil target",
+			readiness: func() (bool, error) { return true, nil },
+			want:      splashStatus{State: splashError, Message: "启动地址不可用"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveSplashStatus(tc.target, tc.readiness)
+			if got != tc.want {
+				t.Fatalf("resolveSplashStatus() = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}

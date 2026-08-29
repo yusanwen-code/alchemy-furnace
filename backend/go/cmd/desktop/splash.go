@@ -10,6 +10,44 @@ import (
 	"net/http"
 )
 
+// splashState — 启动屏三态
+type splashState string
+
+const (
+	splashPending splashState = "pending"
+	splashReady   splashState = "ready"
+	splashError   splashState = "error"
+)
+
+// splashStatus — 状态探针 JSON 契约(Task 2 起由 /__alchemy_boot_status 提供)
+type splashStatus struct {
+	State   splashState `json:"state"`
+	Target  string      `json:"target,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+// resolveSplashStatus — 启动状态模型
+// - readiness nil 保持原语义:直接视为 ready
+// - readiness 返回 err:error 态,Message 透传(供 JSON 编码,不进 HTML)
+// - ready 但 target nil:返回可读错误,避免 nil panic
+func resolveSplashStatus(target func() string, readiness func() (bool, error)) splashStatus {
+	ready := readiness == nil
+	if readiness != nil {
+		var err error
+		ready, err = readiness()
+		if err != nil {
+			return splashStatus{State: splashError, Message: err.Error()}
+		}
+	}
+	if !ready {
+		return splashStatus{State: splashPending}
+	}
+	if target == nil {
+		return splashStatus{State: splashError, Message: "启动地址不可用"}
+	}
+	return splashStatus{State: splashReady, Target: target()}
+}
+
 const splashCSS = `body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#09090b;color:#d4d4d8;font-family:ui-sans-serif,system-ui}
 .flame{font-size:56px;animation:f 1.2s ease-in-out infinite}
 @keyframes f{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.12);opacity:1}}
