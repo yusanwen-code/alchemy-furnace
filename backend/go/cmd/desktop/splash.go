@@ -6,6 +6,7 @@
 package desktop
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -56,29 +57,46 @@ const splashCSS = `body{margin:0;height:100vh;display:flex;flex-direction:column
 .retry{margin-top:16px;padding:8px 22px;border:1px solid #52525b;border-radius:8px;color:#d4d4d8;cursor:pointer;background:transparent}
 .retry:hover{background:#27272a}`
 
+// splashStatusPath — 同源状态探针(页面 JS 轮询,代替整页 meta refresh)
+const splashStatusPath = "/__alchemy_boot_status"
+
+// writeSplashStatus — JSON 探针响应
+func writeSplashStatus(w http.ResponseWriter, status splashStatus) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_ = json.NewEncoder(w).Encode(status)
+}
+
+// writeSplashDocument — 启动文档(Task 2:三态渲染,去掉整页 refresh;Task 3 起为固定骨架)
+func writeSplashDocument(w http.ResponseWriter, target func() string, readiness func() (bool, error)) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	status := resolveSplashStatus(target, readiness)
+	switch status.State {
+	case splashError:
+		fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>炼丹炉</title><style>%s</style>
+<body><div class=flame>🔥</div><p class=msg>丹炉点火失败 · Failed to ignite</p>
+<p class=err>%s</p><button class=retry onclick="location.reload()">重试 · Retry</button>`, splashCSS, status.Message)
+	case splashReady:
+		// JS replace 而非 302: WKWebView 跨 scheme 302 (wails:// → http://) 经常不跟随 → 白屏
+		fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>炼丹炉</title><body><script>window.location.replace(%q);</script></body>`, status.Target)
+	default:
+		fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>炼丹炉</title><style>%s</style>
+<body><div class=flame>🔥</div><p class=msg>正在点燃丹炉 · Lighting the furnace…</p>`, splashCSS)
+	}
+}
+
 // newSplashHandler 返回三态 http.Handler
 // - readiness 由调用方提供(查询 engineproc.Start + DB 是否就绪,可能为 nil 表示直接走 ready 路径)
 // - target 提供 ready 时的跳转 URL
+// 路由:GET /__alchemy_boot_status -> JSON 探针;其他路径 -> 启动文档(只加载一次,页面 JS 轮询)
 func newSplashHandler(target func() string, readiness func() (bool, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		var ready bool
-		var err error
-		if readiness != nil {
-			ready, err = readiness()
+		if r.URL.Path == splashStatusPath {
+			writeSplashStatus(w, resolveSplashStatus(target, readiness))
+			return
 		}
-		switch {
-		case err != nil:
-			fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>炼丹炉</title><style>%s</style>
-<body><div class=flame>🔥</div><p class=msg>丹炉点火失败 · Failed to ignite</p>
-<p class=err>%s</p><button class=retry onclick="location.reload()">重试 · Retry</button>`, splashCSS, err.Error())
-		case ready:
-			// JS replace 而非 302: WKWebView 跨 scheme 302 (wails:// → http://) 经常不跟随 → 白屏
-			fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>炼丹炉</title><body><script>window.location.replace(%q);</script></body>`, target())
-		default:
-			// 1 秒自刷新,持续轮询 readiness
-			fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><meta http-equiv=refresh content=1><title>炼丹炉</title><style>%s</style>
-<body><div class=flame>🔥</div><p class=msg>正在点燃丹炉 · Lighting the furnace…</p>`, splashCSS)
-		}
+		writeSplashDocument(w, target, readiness)
 	})
 }
