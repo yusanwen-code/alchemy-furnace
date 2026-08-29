@@ -1,8 +1,9 @@
-// splash.go — L3 启动屏三态 handler
-// pending: 火焰动画 + 1s 自刷新(等 engineproc + DB 就绪)
+// splash.go — 桌面端"器物点火"启动屏(三态)
+// 文档固定加载一次,页面 JS 轮询 /__alchemy_boot_status 拿状态:
+// pending: 炉火动画等待 engineproc + DB 就绪
 // ready:   JS window.location.replace 跳到真 origin(沿用 newRedirectHandler 的坑注释: WKWebView 跨 scheme 302 不跟随)
-// err:     错误页含 reload 重试按钮
-// 自包含内联 CSS,无外部资源(防 wails asset server 还没起就 404)
+// error:   停火 + 折叠故障详情 + 复制按钮(不提供 reload 重试——刷新不能重启已失败的引擎)
+// 完全自包含内联 CSS/SVG/JS,无外部资源(防 wails asset server 还没起就 404)
 package desktop
 
 import (
