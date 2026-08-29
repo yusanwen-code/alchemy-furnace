@@ -47,6 +47,40 @@ func TestSplashDocumentVisualContract(t *testing.T) {
 	}
 }
 
+// TestSplashDocumentPollingContract — 启动脚本契约
+// 单请求轮询(setTimeout 自调度,禁 setInterval);错误只写 textContent(禁 innerHTML);
+// 跳转仍走 window.location.replace;失败只退避不 reload
+func TestSplashDocumentPollingContract(t *testing.T) {
+	rec := httptest.NewRecorder()
+	h := newSplashHandler(
+		func() string { return "http://x/?token=t&platform=darwin" },
+		func() (bool, error) { return false, nil },
+	)
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	body := rec.Body.String()
+
+	required := []string{
+		`fetch(SPLASH_STATUS_PATH`,
+		`cache: "no-store"`,
+		`window.location.replace(status.target)`,
+		`detail.textContent = lastError`,
+		`navigator.clipboard.writeText`,
+		`setTimeout(pollStatus`,
+	}
+	for _, s := range required {
+		if !strings.Contains(body, s) {
+			t.Errorf("脚本契约缺失 %q", s)
+		}
+	}
+
+	forbidden := []string{`.innerHTML =`, `setInterval(`, `location.reload()`}
+	for _, s := range forbidden {
+		if strings.Contains(body, s) {
+			t.Errorf("脚本契约禁用内容出现 %q", s)
+		}
+	}
+}
+
 // TestResolveSplashStatus — 启动状态模型表格测试// pending: readiness false,不调用 target
 // ready:   readiness true,返回 target() 结果
 // error:   readiness 返回 err,Message 透传 err.Error()

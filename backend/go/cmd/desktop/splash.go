@@ -247,6 +247,70 @@ body[data-state="error"] .heat-line span { opacity: .12; animation: none; }
     </figure>
   </main>
   <footer>本地运行 · 数据留在此设备</footer>
+<script>
+// 单请求轮询:页面只加载一次,状态走同源 JSON 探针;
+// 请求失败只退避(最大 1800ms),不把瞬时故障误判为永久错误。
+const SPLASH_STATUS_PATH = "./__alchemy_boot_status";
+const body = document.body;
+const title = document.querySelector("#boot-title");
+const statusRegion = document.querySelector(".status");
+const primary = document.querySelector(".status-primary");
+const secondary = document.querySelector(".status-secondary");
+const detail = document.querySelector(".error-detail");
+const actions = document.querySelector(".error-actions");
+const copyButton = document.querySelector(".copy-error");
+const fallback = document.querySelector(".error-fallback");
+let pollDelay = 450;
+let lastError = "";
+
+function showError(message) {
+  lastError = message || "未知启动错误";
+  body.dataset.state = "error";
+  statusRegion.setAttribute("role", "alert");
+  statusRegion.setAttribute("aria-live", "assertive");
+  title.textContent = "炉火未成";
+  primary.textContent = "丹炉未能正常启动";
+  secondary.textContent = "请关闭应用后重新打开；如仍失败，请复制故障信息";
+  detail.textContent = lastError;
+  actions.hidden = false;
+}
+
+async function pollStatus() {
+  try {
+    const response = await fetch(SPLASH_STATUS_PATH, { cache: "no-store" });
+    if (!response.ok) throw new Error("启动状态读取失败");
+    const status = await response.json();
+    if (status.state === "ready" && status.target) {
+      window.location.replace(status.target);
+      return;
+    }
+    if (status.state === "error") {
+      showError(status.message);
+      return;
+    }
+    pollDelay = 650;
+  } catch (_error) {
+    pollDelay = Math.min(Math.round(pollDelay * 1.5), 1800);
+  }
+  window.setTimeout(pollStatus, pollDelay);
+}
+
+copyButton.addEventListener("click", async () => {
+  const text = "炼丹炉启动失败\n" + lastError;
+  try {
+    await navigator.clipboard.writeText(text);
+    copyButton.textContent = "已复制";
+  } catch (_error) {
+    fallback.hidden = false;
+    fallback.value = text;
+    fallback.focus();
+    fallback.select();
+    copyButton.textContent = "请按 Ctrl/Cmd+C 复制";
+  }
+});
+
+pollStatus();
+</script>
 </body>
 </html>`
 
