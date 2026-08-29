@@ -10,8 +10,9 @@ import (
 	"testing"
 )
 
-func TestSplashStates(t *testing.T) {
-	// pending → 启动页(火焰动画,不再整页刷新)
+// TestSplashDocumentVisualContract — 固定启动文档的视觉契约
+// 三态不再由服务端渲染 HTML:文档固定,状态经 JSON 探针 + 页面 JS 驱动
+func TestSplashDocumentVisualContract(t *testing.T) {
 	h := newSplashHandler(
 		func() string { return "http://x/?token=t&platform=darwin" },
 		func() (bool, error) { return false, nil },
@@ -19,34 +20,30 @@ func TestSplashStates(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	body := rec.Body.String()
-	if !strings.Contains(body, "点燃") {
-		t.Fatalf("pending 态应含'点燃'文案:\n%s", body)
+
+	required := []string{
+		`data-state="pending"`,
+		`class="boot-copy"`,
+		`class="furnace"`,
+		`class="hearth hearth-left"`,
+		`class="hearth hearth-center"`,
+		`class="hearth hearth-right"`,
+		`正在温炉，请稍候`,
+		`本地运行 · 数据留在此设备`,
+		`prefers-reduced-motion: reduce`,
+		`aria-live="polite"`,
+	}
+	for _, s := range required {
+		if !strings.Contains(body, s) {
+			t.Errorf("视觉契约缺失 %q", s)
+		}
 	}
 
-	// ready → 跳转页(JS location.replace,避免 WKWebView 跨 scheme 302)
-	h = newSplashHandler(
-		func() string { return "http://x/?token=t&platform=darwin" },
-		func() (bool, error) { return true, nil },
-	)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
-	if !strings.Contains(rec.Body.String(), "window.location.replace") {
-		t.Fatalf("ready 态应返回跳转页:\n%s", rec.Body.String())
-	}
-
-	// err → 错误页(包含错误原因 + reload 重试按钮)
-	h = newSplashHandler(
-		nil,
-		func() (bool, error) { return false, errors.New("引擎挂了") },
-	)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
-	body = rec.Body.String()
-	if !strings.Contains(body, "引擎挂了") {
-		t.Fatalf("err 态应含错误原因:\n%s", body)
-	}
-	if !strings.Contains(body, "location.reload") {
-		t.Fatalf("err 态应含重试按钮:\n%s", body)
+	forbidden := []string{"🔥", "Lighting the furnace", "http-equiv=refresh", "backdrop-filter"}
+	for _, s := range forbidden {
+		if strings.Contains(body, s) {
+			t.Errorf("视觉契约禁用内容出现 %q", s)
+		}
 	}
 }
 
