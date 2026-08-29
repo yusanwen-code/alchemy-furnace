@@ -118,3 +118,22 @@ assert_version_embedded() {
     fail "二进制未包含版本字节(期望 ${tag#v}): $binary"
   fi
 }
+
+# retry <attempts> <delay-seconds> <command...>
+# 命令失败时重试,最多 attempts 次,每次间隔 delay 秒(支持小数)。
+# 环境性偶发失败的防御(rc.4 darwin 打包 hdiutil create Resource busy 实测),
+# 真·失败(配置/权限/资源耗尽)在尝试上限后原样返回失败,不掩盖。
+retry() {
+  local attempts="${1:?用法: retry <attempts> <delay-seconds> <command...>}"
+  local delay="${2:?用法: retry <attempts> <delay-seconds> <command...>}"
+  shift 2
+  local n=0
+  until "$@"; do
+    n=$((n + 1))
+    if [[ "$n" -ge "$attempts" ]]; then
+      return 1
+    fi
+    sleep "$delay"
+  done
+  return 0
+}

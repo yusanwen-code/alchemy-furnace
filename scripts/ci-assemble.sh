@@ -83,8 +83,11 @@ case "$PLATFORM" in
     ln -s /Applications "$STAGE/Applications"
     say "生成 $(basename "$DMG")"
     rm -f "$DMG"
-    hdiutil create -volname "AlchemyFurnace" -srcfolder "$STAGE" \
-      -ov -format UDZO "$DMG" >/dev/null
+    # hdiutil create 偶发 "Resource busy"(rc.4 darwin 打包实测,磁盘映像服务
+    # 瞬时占用),环境性失败——重试 3 次(间隔 5s)再放弃;真·失败原样报错。
+    retry 3 5 hdiutil create -volname "AlchemyFurnace" -srcfolder "$STAGE" \
+      -ov -format UDZO "$DMG" >/dev/null \
+      || fail "hdiutil create 连续 3 次失败: $DMG"
 
     say "生成 $(basename "$ZIP")"
     rm -f "$ZIP"

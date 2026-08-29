@@ -185,6 +185,47 @@ else
   printf 'FAIL - 断言:二进制缺失被拒绝\n'
 fi
 
+# ─── 8. retry 重试(环境性偶发失败防御,rc.4 hdiutil Resource busy 教训)───
+mkdir -p "$TMP/retrybin"
+cat > "$TMP/retrybin/flaky.sh" <<'EOF'
+#!/usr/bin/env bash
+# flaky.sh <count-file> <needed> — 记录调用次数,达到 needed 才成功
+f="$1"; needed="$2"
+c=0
+if [[ -f "$f" ]]; then c="$(cat "$f")"; fi
+c=$((c + 1))
+printf '%s' "$c" > "$f"
+[[ "$c" -ge "$needed" ]]
+EOF
+chmod +x "$TMP/retrybin/flaky.sh"
+
+if retry 3 0 "$TMP/retrybin/flaky.sh" "$TMP/retry-c1" 1; then
+  PASS=$((PASS + 1))
+  printf 'ok   - retry:首次即成功\n'
+else
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - retry:首次即成功\n'
+fi
+
+if retry 3 0 "$TMP/retrybin/flaky.sh" "$TMP/retry-c2" 3; then
+  PASS=$((PASS + 1))
+  printf 'ok   - retry:失败 2 次后第 3 次成功\n'
+else
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - retry:失败 2 次后第 3 次成功\n'
+fi
+
+if retry 2 0 "$TMP/retrybin/flaky.sh" "$TMP/retry-c3" 99; then
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - retry:应达到次数上限后失败\n'
+else
+  PASS=$((PASS + 1))
+  printf 'ok   - retry:达到次数上限后失败\n'
+fi
+
+C3_COUNT="$(cat "$TMP/retry-c3" 2>/dev/null || echo 0)"
+check "retry:失败场景只尝试了上限次数" "$C3_COUNT" "2"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAILED"
 if [[ "$FAILED" -gt 0 ]]; then
   exit 1
