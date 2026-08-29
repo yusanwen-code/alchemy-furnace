@@ -316,5 +316,7 @@ jobs:
         env:
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
-        # 远端复验通过才公开;任一步失败时 draft 保留排查,不公开、不标 Latest
-        run: gh release edit "$TAG" --draft=false --latest
+        # 远端复验通过才公开;任一步失败时 draft 保留排查,不公开、不标 Latest。
+        # prerelease(rc/alpha)不能被标 Latest——GitHub API 422(rc.5 教训),
+        # --latest 仅正式版(vX.Y.Z)使用。
+        run: gh release edit "$TAG" --draft=false ${{ contains(needs.prepare.outputs.tag, '-') && '' || '--latest' }}
