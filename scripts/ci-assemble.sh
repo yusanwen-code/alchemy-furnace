@@ -7,6 +7,8 @@ set -euo pipefail
 PLATFORM="${1:?用法: $0 <darwin-arm64|darwin-amd64|windows-amd64> [version]}"
 VERSION="${2:-${VERSION:-dev}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/runtime-common.sh
+source "$ROOT/scripts/lib/runtime-common.sh"
 # Override is intended for isolated packaging tests and downstream reuse.
 GO_DIR="${ALCHEMY_GO_DIR:-$ROOT/backend/go}"
 BIN_DIR="$GO_DIR/build/bin"
@@ -51,6 +53,13 @@ case "$PLATFORM" in
     fi
     /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$PLIST"
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" "$PLIST"
+
+    # 版本字节断言(ldflags -X 注入):macOS verifier 只看 Info.plist,
+    # 查不出二进制丢版本字节——rc.3 三平台版本缺失的教训,release 构建在此拦截。
+    # 仅语义版本生效,本地 dev 构建(无注入)跳过。
+    if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+      assert_version_embedded "$APP/Contents/MacOS/AlchemyFurnace" "$VERSION"
+    fi
 
     SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:--}"
     say "签名应用(identity: $SIGN_IDENTITY)"
@@ -100,6 +109,12 @@ case "$PLATFORM" in
     mkdir -p "$PACKAGE_DIR/runtime"
     cp "$EXE" "$PACKAGE_DIR/AlchemyFurnace.exe"
     cp -R "$RUNTIME_SRC/." "$PACKAGE_DIR/runtime/"
+
+    # 版本字节断言:Windows verifier 虽查,但尽早失败省一次 NSIS 打包;
+    # 与 darwin 段同一道防线(ldflags 注入防回归)。
+    if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+      assert_version_embedded "$EXE" "$VERSION"
+    fi
 
     INSTALLER="$DIST_DIR/AlchemyFurnace-Setup.exe"
     rm -f "$INSTALLER"

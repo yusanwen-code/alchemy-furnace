@@ -103,3 +103,18 @@ runtime_python() {
     "$py" "$@"
   )
 }
+
+# assert_version_embedded <binary> <version-tag>
+# 断言二进制内包含版本字节(ldflags -X 注入的产物)。
+# tag 形如 v0.1.1-rc.3,带 v 与不带 v 两种形态都算数
+# (GetVersion 注入完整 tag;User-Agent 用 AlchemyFurnace-Desktop/<version>)。
+# 用于 CI 打包前对三平台二进制统一把关——macOS verifier 只看 Info.plist,
+# 查不出二进制丢失版本字节(rc.3 教训),此断言补上该缺口。
+assert_version_embedded() {
+  local binary="${1:?用法: assert_version_embedded <binary> <version-tag>}"
+  local tag="${2:?用法: assert_version_embedded <binary> <version-tag>}"
+  [ -f "$binary" ] || fail "二进制不存在: $binary"
+  if ! grep -aqF "$tag" "$binary" && ! grep -aqF "${tag#v}" "$binary"; then
+    fail "二进制未包含版本字节(期望 ${tag#v}): $binary"
+  fi
+}

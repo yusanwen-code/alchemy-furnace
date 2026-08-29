@@ -173,7 +173,11 @@ jobs:
           if [[ "${{ matrix.platform }}" == windows-amd64 ]]; then
             wails_args+=(-webview2 embed)
           fi
-          wails build "${wails_args[@]}"
+          # wails_args 已含 build 子命令(数组首元素)。这里若再写
+          # `wails build "${wails_args[@]}"` 会变成 `wails build build -clean ...`,
+          # CLI 把第二个 build 当位置参数,其后 flags(-ldflags/-skipbindings/-webview2)
+          # 全部失效——rc.3 三平台版本字节缺失的根因,直接执行数组即可。
+          wails "${wails_args[@]}"
 
       - name: Assemble release package
         env:

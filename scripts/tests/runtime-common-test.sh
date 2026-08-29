@@ -145,6 +145,46 @@ else
   printf 'FAIL - runtime_python 污染了调用方环境\n'
 fi
 
+# ─── 7. 版本字节断言(ldflags -X 注入防回归)───
+# 根因: CI 上 wails 双 build 导致 -ldflags 失效,产物丢失版本字节,
+# Windows verifier 拦截,但 macOS verifier 只看 Info.plist 查不出——
+# 此断言在 ci-assemble 里对三平台二进制统一把关。
+printf 'PK\x03\x04 fake v0.1.1-rc.3 build' > "$TMP/bin-with-version"
+printf 'PK\x03\x04 fake build' > "$TMP/bin-no-version"
+printf 'UA AlchemyFurnace-Desktop/0.1.1-rc.3' > "$TMP/bin-bare-version"
+
+if assert_version_embedded "$TMP/bin-with-version" "v0.1.1-rc.3" 2>/dev/null; then
+  PASS=$((PASS + 1))
+  printf 'ok   - 断言:含版本字节的二进制通过\n'
+else
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - 断言:含版本字节的二进制通过\n'
+fi
+
+if ! ( assert_version_embedded "$TMP/bin-no-version" "v0.1.1-rc.3" >/dev/null 2>&1 ); then
+  PASS=$((PASS + 1))
+  printf 'ok   - 断言:缺版本字节的二进制被拒绝\n'
+else
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - 断言:缺版本字节的二进制被拒绝\n'
+fi
+
+if assert_version_embedded "$TMP/bin-bare-version" "v0.1.1-rc.3" 2>/dev/null; then
+  PASS=$((PASS + 1))
+  printf 'ok   - 断言:裸版本字节(不带 v,UA 形态)通过\n'
+else
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - 断言:裸版本字节(不带 v,UA 形态)通过\n'
+fi
+
+if ! ( assert_version_embedded "$TMP/missing.bin" "v0.1.1-rc.3" >/dev/null 2>&1 ); then
+  PASS=$((PASS + 1))
+  printf 'ok   - 断言:二进制缺失被拒绝\n'
+else
+  FAILED=$((FAILED + 1))
+  printf 'FAIL - 断言:二进制缺失被拒绝\n'
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAILED"
 if [[ "$FAILED" -gt 0 ]]; then
   exit 1
