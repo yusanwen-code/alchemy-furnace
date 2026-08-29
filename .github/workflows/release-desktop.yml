@@ -221,7 +221,9 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: desktop-*
+          # 只取三平台打包产物;desktop-webui(前端静态页)artifact 也匹配
+          # desktop-*,会被 merge 进 dist 导致白名单校验失败(rc.4 教训)
+          pattern: desktop-{darwin-amd64,darwin-arm64,windows-amd64}
           merge-multiple: true
           path: dist
 
