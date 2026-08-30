@@ -10,13 +10,21 @@ import (
 )
 
 // App 桌面绑定对象(Wails 自动扫描导出方法,经 JS 桥调用)
-type App struct{ ctx context.Context }
+type App struct {
+	ctx       context.Context
+	lifecycle *desktopLifecycle
+}
 
 // NewApp 构造应用对象
 func NewApp() *App { return &App{} }
 
-// startup 窗口启动回调(Wails 注入 ctx,此处仅记录,无 Web 端调用)
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+// startup 窗口启动回调(Wails 注入 ctx,并启动关闭到托盘生命周期)
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	if a.lifecycle != nil {
+		a.lifecycle.Start(ctx)
+	}
+}
 
 // GetVersion 版本信息(经 HTTP /api/v1/version 也可取,任务 11 落 HTTP)
 func (a *App) GetVersion() map[string]string {
