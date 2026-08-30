@@ -10,6 +10,10 @@ type MemorySnippet struct {
 type TurnPlan struct {
 	Stop           bool
 	MustAnswer     bool
+	LatestQuestion string // 用户最新问题原文(供动态分区渲染,§8.1)
+	Concise        bool
+	Detailed       bool
+	Frustration    FrustrationLevel
 	MaxSentences   int
 	MaxTokens      int
 	MaxTurnTokens  int
@@ -39,6 +43,10 @@ func BuildTurnPlan(constraints UserTurnConstraints, policy ResponsePolicy, membe
 	}
 	plan := &TurnPlan{
 		MustAnswer:     memberCount == 1, // 单聊始终必答(§7.1)
+		LatestQuestion: constraints.LatestQuestion,
+		Concise:        constraints.Concise,
+		Detailed:       constraints.Detailed,
+		Frustration:    constraints.Frustration,
 		MaxSentences:   policy.MaxSentences,
 		MaxTokens:      policy.MaxTokens,
 		MaxSpeakers:    2,
