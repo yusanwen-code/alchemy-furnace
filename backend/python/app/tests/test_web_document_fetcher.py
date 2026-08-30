@@ -52,3 +52,18 @@ def test_rejects_tiny_or_navigation_only_page(fake_http, public_dns):
     )
     result = WebDocumentFetcher(client=fake_http, resolver=public_dns).fetch("https://example.com/a")
     assert result.reason == "text_too_short"
+
+
+def test_tiny_html_keeps_bounded_raw_html_for_provider_specific_parsing(fake_http, public_dns):
+    html = "<html><script>window.PAGE_DATA={}</script></html>"
+    fake_http.add(
+        "https://example.com/a",
+        status=200,
+        headers={"content-type": "text/html"},
+        text=html,
+    )
+    result = WebDocumentFetcher(client=fake_http, resolver=public_dns).fetch(
+        "https://example.com/a"
+    )
+    assert result.reason == "text_too_short"
+    assert result.raw_html == html

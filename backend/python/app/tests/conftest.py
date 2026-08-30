@@ -297,8 +297,8 @@ class FakeFetcher:
     def add(self, url, excerpt):
         self.by_url[url] = FetchResult(url, excerpt, "ok", "")
 
-    def add_result(self, status, reason):
-        self.fallback = FetchResult("", "", status, reason)
+    def add_result(self, status, reason, raw_html=""):
+        self.fallback = FetchResult("", "", status, reason, raw_html)
 
     def fetch(self, url):
         if url in self.by_url:

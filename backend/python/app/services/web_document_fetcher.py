@@ -34,6 +34,7 @@ class FetchResult:
     excerpt: str
     status: str  # ok | rejected | failed
     reason: str  # 稳定原因码：http_403、text_too_short、private_redirect 等
+    raw_html: str = ""  # 受限原始 HTML（120KB 上限内），仅供特定适配器做页面元数据解析
 
 
 class DnsResolver:
@@ -145,11 +146,14 @@ class WebDocumentFetcher:
         if "text/html" not in content_type and "text/plain" not in content_type:
             return FetchResult(final_url, "", "failed", "unsupported_content_type")
         raw = response.content[:MAX_BYTES].decode(response.encoding or "utf-8", errors="ignore")
+        # 受限原始 HTML 只随 HTML 响应携带，供适配器解析页面元数据（如百度多义词
+        # 义项）；即使正文过短也保留。text/plain 与错误/拒绝路径保持空字符串。
+        raw_html = raw if "text/html" in content_type else ""
         if "text/html" in content_type:
             parser = _TextExtractor()
             parser.feed(raw)
             raw = " ".join(parser.parts)
         text = re.sub(r"\s+", " ", html.unescape(raw)).strip()
         if len(text) < MIN_TEXT_CHARACTERS:
-            return FetchResult(final_url, "", "failed", "text_too_short")
-        return FetchResult(final_url, text[:MAX_EXCERPT_CHARACTERS], "ok", "")
+            return FetchResult(final_url, "", "failed", "text_too_short", raw_html)
+        return FetchResult(final_url, text[:MAX_EXCERPT_CHARACTERS], "ok", "", raw_html)
