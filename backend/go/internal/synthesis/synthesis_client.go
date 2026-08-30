@@ -58,9 +58,11 @@ type CombineResponse struct {
 	InnerTensions  []InnerTension `json:"inner_tensions"`
 	Fingerprint    string         `json:"fingerprint"`
 	Model          string         `json:"model"`
-	// Degraded 为 true 表示 Python 走了结构化合并兜底(LLM 不可用/失败),
-	// 调用方不应落库,避免兜底提示词污染语言模式缓存
+	// Degraded 为 true 表示涌现层不可用(LLM 失败/无凭证),
+	// 调用方不应落库,避免无涌现层结果污染语言模式缓存
 	Degraded bool `json:"degraded"`
+	// DegradedReason 降级原因错误码(no_credentials / llm_error;合成调用失败由 Go 侧填 combine_error)
+	DegradedReason string `json:"degraded_reason,omitempty"`
 }
 
 // SynthesisClient Client 接口实现

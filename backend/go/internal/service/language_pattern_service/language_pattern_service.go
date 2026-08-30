@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alchemy-furnace/server/internal/behavior"
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/dao"
 	"github.com/alchemy-furnace/server/internal/service/credential"
@@ -36,8 +37,9 @@ func New(agent dao.Agent, synthesis synthesis.Client, creds credential.Resolver)
 	return &LanguagePatternService{agent: agent, synthesis: synthesis, creds: creds}
 }
 
-// GetOrBuildPattern 获取道人语言模式: 缓存命中(is_valid 且指纹一致)直接返回;
-// 否则调用合成引擎重建并写回缓存。合成失败时若有旧缓存则降级返回
+// GetOrBuildPattern 获取道人语言模式: 缓存命中(is_valid + 指纹一致 + 新档案结构)直接返回;
+// 否则走三段式重建: 确定性编译(Go) -> 涌现合成(Python) -> 确定性渲染(Go)。
+// 合成失败/降级时返回无损确定性渲染(is_valid=false 临时对象,不落库),聊天不阻断。
 func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID uint) (*model.LanguagePattern, errors.Error) {
 	agent, err := s.agent.TakeAgentDetailByID(ctx, agentID)
 	if err != nil {
@@ -49,8 +51,11 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 		return nil, errors.ErrorServerInternalError("service.language_pattern.fingerprint")
 	}
 
-	// 缓存命中判断
-	if agent.LanguagePattern != nil && agent.LanguagePattern.IsValid && agent.LanguagePattern.SourceFingerprint == fingerprint {
+	// 缓存命中判断: 旧缓存(无 behavior_profile)或版本不一致视为失效,按 spec §15 首次使用时自动重建
+	if agent.LanguagePattern != nil && agent.LanguagePattern.IsValid &&
+		agent.LanguagePattern.SourceFingerprint == fingerprint &&
+		agent.LanguagePattern.BehaviorProfile != nil &&
+		agent.LanguagePattern.ProfileVersion == behavior.ProfileVersion {
 		return agent.LanguagePattern, nil
 	}
 
@@ -75,42 +80,40 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 
 	resp, combineErr := s.synthesis.Combine(ctx, agent.Personality, pills, creds)
 	if combineErr != nil {
-		// 合成失败: 若存在旧缓存则降级返回(标记失效但可用)
-		if agent.LanguagePattern != nil {
-			zap.L().Warn("[炼丹炉] 语言模式合成失败，降级使用旧缓存",
-				zap.Uint("agent_id", agentID), zap.Error(combineErr))
-			return agent.LanguagePattern, nil
-		}
-		return nil, errors.New(errors.ErrorTypeServerInternalError, "service.language_pattern.combine", combineErr.Error())
+		// 合成调用失败: 内存中无损编译+渲染(无涌现层),返回 is_valid=false 临时对象不落库。
+		// 旧逻辑「失败时降级用旧缓存」删除: 旧缓存缺 behavior_profile 已被缓存判定排除
+		zap.L().Warn("[炼丹炉] 语言模式合成失败，返回无损确定性渲染(不落库)",
+			zap.Uint("agent_id", agentID), zap.Error(combineErr))
+		return s.losslessTempPattern(agentID, agent.Name, agent.Personality, fingerprint, "combine_error", pills), nil
 	}
 
-	// 写回缓存(upsert): 已有记录则更新(ID 非 0),否则创建
+	// 降级结果(涌现层不可用)不落库: is_valid=false 临时对象,下次请求重试合成
+	if resp.Degraded {
+		zap.L().Warn("[炼丹炉] 语言模式合成降级,本次不落库",
+			zap.Uint("agent_id", agentID), zap.String("reason", resp.DegradedReason))
+		return s.losslessTempPattern(agentID, agent.Name, agent.Personality, fingerprint, resp.DegradedReason, pills), nil
+	}
+
+	// 合成成功: 确定性编译 + 合并涌现层 + 渲染 + 写回缓存
+	profile := behavior.CompileProfile(agent.Personality, pills)
+	profile.WithEmergence(resp.EmergenceRules, resp.InnerTensions, false, "")
+	bp, bpErr := behavior.ProfileToJSONMap(profile)
+	if bpErr != nil {
+		return nil, errors.ErrorServerInternalError("service.language_pattern.profile_marshal")
+	}
+
 	innerTensions := toInnerTensions(resp.InnerTensions)
 	emergenceRules := resp.EmergenceRules
 	if emergenceRules == nil {
 		emergenceRules = model.JSONList{}
 	}
 
-	// 降级结果(结构化合并兜底 prompt)不落库: 以 is_valid=false 的临时对象返回,
-	// 本次论道可用;因指纹比对要求 is_valid=true,下次请求会重新合成,
-	// 避免「指纹不变 → 兜底 prompt 被长期当有效缓存」的污染(本次 500 的深层原因)
-	if resp.Degraded {
-		zap.L().Warn("[炼丹炉] 语言模式合成为降级结果,本次不落库",
-			zap.Uint("agent_id", agentID))
-		return &model.LanguagePattern{
-			AgentID:           agentID,
-			SystemPrompt:      resp.SystemPrompt,
-			EmergenceRules:    emergenceRules,
-			InnerTensions:     innerTensions,
-			SourceFingerprint: fingerprint,
-			IsValid:           false,
-		}, nil
-	}
-
 	if agent.LanguagePattern != nil {
-		agent.LanguagePattern.SystemPrompt = resp.SystemPrompt
+		agent.LanguagePattern.SystemPrompt = behavior.RenderSystemPrompt(profile, agent.Name)
 		agent.LanguagePattern.EmergenceRules = emergenceRules
 		agent.LanguagePattern.InnerTensions = innerTensions
+		agent.LanguagePattern.BehaviorProfile = bp
+		agent.LanguagePattern.ProfileVersion = behavior.ProfileVersion
 		agent.LanguagePattern.SourceFingerprint = fingerprint
 		agent.LanguagePattern.IsValid = true
 		if err := s.agent.SaveLanguagePattern(ctx, agent.LanguagePattern); err != nil {
@@ -123,9 +126,11 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 
 	pattern := &model.LanguagePattern{
 		AgentID:           agentID,
-		SystemPrompt:      resp.SystemPrompt,
+		SystemPrompt:      behavior.RenderSystemPrompt(profile, agent.Name),
 		EmergenceRules:    emergenceRules,
 		InnerTensions:     innerTensions,
+		BehaviorProfile:   bp,
+		ProfileVersion:    behavior.ProfileVersion,
 		SourceFingerprint: fingerprint,
 		IsValid:           true,
 	}
@@ -135,6 +140,28 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 	zap.L().Info("[炼丹炉] 语言模式合成完成(新建缓存)",
 		zap.Uint("agent_id", agentID), zap.Int("pill_count", len(pills)))
 	return pattern, nil
+}
+
+// losslessTempPattern 合成失败/降级时返回的无损确定性渲染(不落库):
+// 在内存中完成编译+渲染,全部金丹字段保留(§12 无损降级);
+// is_valid=false 保证下次请求重新合成,避免无涌现层结果被长期缓存。
+func (s *LanguagePatternService) losslessTempPattern(agentID uint, agentName, personality, fingerprint, reason string, pills []synthesis.PillInput) *model.LanguagePattern {
+	profile := behavior.CompileProfile(personality, pills)
+	profile.WithEmergence(nil, nil, true, reason)
+	bp, err := behavior.ProfileToJSONMap(profile)
+	if err != nil {
+		bp = nil
+	}
+	return &model.LanguagePattern{
+		AgentID:           agentID,
+		SystemPrompt:      behavior.RenderSystemPrompt(profile, agentName),
+		EmergenceRules:    model.JSONList{},
+		InnerTensions:     model.JSONList{},
+		BehaviorProfile:   bp,
+		ProfileVersion:    behavior.ProfileVersion,
+		SourceFingerprint: fingerprint,
+		IsValid:           false,
+	}
 }
 
 // toInnerTensions 将合成响应的内在冲突列表转为 JSONList 缓存格式
