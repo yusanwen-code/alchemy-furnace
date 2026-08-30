@@ -85,6 +85,13 @@ check_arch "python-runtime/bin/python3" "$PYBIN"
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST" 2>/dev/null || true)"
 [ -n "$BUNDLE_ID" ] || fail_check "Info.plist 缺少 CFBundleIdentifier"
 
+# 双层命名契约: 用户可见显示名=炼丹炉, 内部可执行文件=AlchemyFurnace(ASCII)
+CF_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$PLIST" 2>/dev/null || true)"
+CF_DISPLAY="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$PLIST" 2>/dev/null || true)"
+[ "$CF_NAME" = "炼丹炉" ] || fail_check "CFBundleName=$CF_NAME"
+[ "$CF_DISPLAY" = "炼丹炉" ] || fail_check "CFBundleDisplayName=$CF_DISPLAY"
+[ "$BIN_NAME" = "AlchemyFurnace" ] || fail_check "CFBundleExecutable=$BIN_NAME"
+
 SHORT_VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST" 2>/dev/null || true)"
 if [[ "$SHORT_VER" == "$VERSION" ]]; then
   ok "CFBundleShortVersionString=$SHORT_VER"

@@ -58,6 +58,23 @@ open "$APP_PATH"
 `, appPath, newApp, pid)
 }
 
+// findExtractedApp 在解压目录中定位受支持的 app bundle
+// 新发布 DMG 使用 炼丹炉.app,更新 ZIP 根目录保持 AlchemyFurnace.app(旧版
+// 更新器硬依赖);新版防御性接受两者,但解压目录中必须恰好存在一个
+func findExtractedApp(root string) (string, error) {
+	var found []string
+	for _, name := range []string{"炼丹炉.app", "AlchemyFurnace.app"} {
+		candidate := filepath.Join(root, name)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			found = append(found, candidate)
+		}
+	}
+	if len(found) != 1 {
+		return "", fmt.Errorf("updater: 解压目录中应有且仅有一个受支持的 app bundle,实际 %d 个", len(found))
+	}
+	return found[0], nil
+}
+
 // ApplyAndRestart macOS 实现:
 // 1. 定位当前 .app 路径
 // 2. 解压新 zip 到临时目录
@@ -78,15 +95,15 @@ func ApplyAndRestart(ctx context.Context, zipPath string) error {
 	if err != nil {
 		return fmt.Errorf("updater: 创建临时目录失败: %w", err)
 	}
-	newApp := filepath.Join(tmpDir, "AlchemyFurnace.app")
 	if err := unzipToDir(ctx, zipPath, tmpDir); err != nil {
 		os.RemoveAll(tmpDir)
 		return fmt.Errorf("updater: 解压失败: %w", err)
 	}
-	// 解压产物必须是 <tmp>/AlchemyFurnace.app
-	if _, err := os.Stat(newApp); err != nil {
+	// 解压产物必须是 炼丹炉.app 或旧版 AlchemyFurnace.app(且只能有一个)
+	newApp, err := findExtractedApp(tmpDir)
+	if err != nil {
 		os.RemoveAll(tmpDir)
-		return fmt.Errorf("updater: zip 中未找到 AlchemyFurnace.app")
+		return err
 	}
 
 	// 生成 + 启动 swap 脚本

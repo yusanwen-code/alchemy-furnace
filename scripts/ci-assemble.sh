@@ -23,8 +23,13 @@ mkdir -p "$DIST_DIR"
 
 case "$PLATFORM" in
   darwin-arm64|darwin-amd64)
-    APP="$BIN_DIR/AlchemyFurnace.app"
-    [ -x "$APP/Contents/MacOS/AlchemyFurnace" ] || fail "未找到 Wails 应用: $APP"
+    # 双层命名: DMG 中用户看到 炼丹炉.app,更新 ZIP 根目录保持 AlchemyFurnace.app
+    # (旧版更新器硬依赖英文根目录, 见 2026-08-30-desktop-identity-tray-no-console-design.md)
+    APP_DISPLAY_NAME="炼丹炉"
+    APP_TECH_NAME="AlchemyFurnace"
+    APP="$BIN_DIR/${APP_DISPLAY_NAME}.app"
+    MAIN_BIN="$APP/Contents/MacOS/$APP_TECH_NAME"
+    [ -x "$MAIN_BIN" ] || fail "未找到 Wails 应用: $APP"
     [ -x "$RUNTIME_SRC/bin/python3" ] || fail "运行时缺少 bin/python3: $RUNTIME_SRC"
 
     case "$PLATFORM" in
@@ -58,7 +63,7 @@ case "$PLATFORM" in
     # 查不出二进制丢版本字节——rc.3 三平台版本缺失的教训,release 构建在此拦截。
     # 仅语义版本生效,本地 dev 构建(无注入)跳过。
     if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-      assert_version_embedded "$APP/Contents/MacOS/AlchemyFurnace" "$VERSION"
+      assert_version_embedded "$MAIN_BIN" "$VERSION"
     fi
 
     SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:--}"
@@ -78,20 +83,26 @@ case "$PLATFORM" in
     DMG="$DIST_DIR/AlchemyFurnace-mac-${ASSET_ARCH}.dmg"
     ZIP="$DIST_DIR/AlchemyFurnace-mac-${ASSET_ARCH}.zip"
     STAGE="$(mktemp -d)"
-    trap 'rm -rf "$STAGE"' EXIT
+    UPDATE_STAGE="$(mktemp -d)"
+    trap 'rm -rf "$STAGE" "$UPDATE_STAGE"' EXIT
     cp -R "$APP" "$STAGE/"
     ln -s /Applications "$STAGE/Applications"
     say "生成 $(basename "$DMG")"
     rm -f "$DMG"
     # hdiutil create 偶发 "Resource busy"(rc.4 darwin 打包实测,磁盘映像服务
     # 瞬时占用),环境性失败——重试 3 次(间隔 5s)再放弃;真·失败原样报错。
-    retry 3 5 hdiutil create -volname "AlchemyFurnace" -srcfolder "$STAGE" \
+    retry 3 5 hdiutil create -volname "$APP_DISPLAY_NAME" -srcfolder "$STAGE" \
       -ov -format UDZO "$DMG" >/dev/null \
       || fail "hdiutil create 连续 3 次失败: $DMG"
 
     say "生成 $(basename "$ZIP")"
     rm -f "$ZIP"
-    ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+    # 更新 ZIP 从独立 staging 生成: 根目录必须保持 AlchemyFurnace.app
+    # (已发布旧版更新器硬依赖), 不把中文 Bundle 名发布到更新通道
+    UPDATE_APP="$UPDATE_STAGE/AlchemyFurnace.app"
+    cp -R "$APP" "$UPDATE_APP"
+    codesign --verify --deep --strict --verbose=2 "$UPDATE_APP"
+    ditto -c -k --sequesterRsrc --keepParent "$UPDATE_APP" "$ZIP"
 
     # ZIP 根目录只能有一个 AlchemyFurnace.app(更新器按根目录解包)
     ZIP_APPS="$(unzip -l "$ZIP" | awk '{print $4}' | sed -n 's#^\(AlchemyFurnace\.app\)/.*#\1#p' | sort -u)"
