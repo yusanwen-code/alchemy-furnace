@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <path fill="#000" fill-rule="evenodd" d="
+    M27 6h10a3 3 0 0 1 0 6H27a3 3 0 0 1 0-6Z
+    M20 13h24l5 6H15l5-6Z
+    M8 20h8v7H8a3.5 3.5 0 0 1 0-7Z
+    M48 20h8a3.5 3.5 0 0 1 0 7h-8v-7Z
+    M14 22h36v15c0 8-6 14-14 15v6h-7v-6c-8-1-15-7-15-15V22Z
+    M25 33a7 7 0 0 0 14 0H25Z
+    M16 47h8l-4 11h-7l3-11Z
+    M40 47h8l3 11h-7l-4-11Z"/>
+</svg>
