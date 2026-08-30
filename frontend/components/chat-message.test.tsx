@@ -203,7 +203,8 @@ describe('recoverable chat history and streaming', () => {
       await pendingList.promise
     })
 
-    expect(screen.getByRole('button', { name: /Deferred deep group/ })).toBeInTheDocument()
+    // 深链群会话主题在新目录里出现(目录群聊行 + 页头), 断言权威元数据至少呈现一处
+    expect(screen.getAllByText('Deferred deep group').length).toBeGreaterThan(0)
     await user.type(input, 'deep group question')
     await user.click(screen.getByRole('button', { name: 'input.send' }))
 
@@ -293,7 +294,9 @@ describe('recoverable chat history and streaming', () => {
     expect(screen.queryByText('stale old answer')).not.toBeInTheDocument()
     expect(screen.queryByText('stale old failure')).not.toBeInTheDocument()
     expect(screen.queryByText('stale injected title')).not.toBeInTheDocument()
-    expect(screen.getByText('Old discourse')).toBeInTheDocument()
+    // 目录契约(Task 7): 仅自动展开当前会话所属分组, 旧会话 'Old discourse' 折叠后不可见
+    // (其分组头仍在, 标题随折叠隐藏), 不污染当前会话视图
+    expect(screen.queryByText('Old discourse')).not.toBeInTheDocument()
     expect(screen.getByText('current session history')).toBeInTheDocument()
     // 旧 done 不得终止 B 的进行中途合(停止按钮仍在)
     expect(screen.getByRole('button', { name: 'input.stop' })).toBeInTheDocument()
@@ -723,7 +726,8 @@ describe('recoverable chat history and streaming', () => {
     renderSession(sessionWithIdentity.id)
 
     expect(await screen.findByText('past wisdom')).toBeInTheDocument()
-    expect(screen.getByText('真实道号')).toBeInTheDocument()
+    // 服务端权威道号同时呈现于目录分组与页头/消息区, 至少一处可见即断言成立
+    expect(screen.getAllByText('真实道号').length).toBeGreaterThan(0)
     expect(screen.queryByText('assistantLabel')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '真实道号' }).querySelector('img'))
       .toHaveAttribute('src', 'https://example.com/session-daoist.png')

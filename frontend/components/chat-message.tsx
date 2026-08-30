@@ -106,7 +106,7 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
       }
     }
     return null
-  }, [isUser, message.agent_id, message.agent_name, message.created_at, agentState.agents, chatState.currentSession?.agent_id, chatState.currentSession?.agent_name, chatState.currentSession?.agent_avatar, chatState.currentSession?.agent_status, members])
+  }, [isUser, message.agent_id, message.agent_name, message.created_at, agentState.agents, chatState.currentSession, members])
 
   const memberAvatar = members?.find(member => member.agent_id === message.agent_id)?.avatar
   const avatarSrc = isUser ? userProfile?.avatar : (message.agent_avatar || agentProfile?.avatar || memberAvatar || sessionAgentAvatar)
