@@ -39,6 +39,8 @@ import {
 import { useChat } from '@/contexts/ChatContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { ChatMessage } from '@/components/chat-message'
+import { ConversationDirectory } from '@/components/chat/conversation-directory'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { GroupMembersPanel } from '@/components/group-members-panel'
 import { TopTabs } from '@/components/interaction/top-tabs'
 import { MentionSuggest } from '@/components/mention-suggest'
@@ -251,13 +253,6 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
     setShowAgentSelect(false)
   }
 
-  const getAgentName = (agentId: string) => {
-    return agents.find(a => a.id === agentId)?.name || t('mode.selectAgent')
-  }
-  const getAgentInitial = (agentId: string) => {
-    return agents.find(a => a.id === agentId)?.name.charAt(0) || '?'
-  }
-
   // 滚动监听
   const handleMessagesScroll = () => {
     const el = messagesScrollRef.current
@@ -391,7 +386,11 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">{session.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{getAgentName(session.agent_id)}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {session.type === 'group'
+                          ? t('directory.groupMeta', { count: session.members?.length ?? 0 })
+                          : session.agent_name || t('directory.unknownAgent')}
+                      </p>
                     </div>
                   </button>
                 ))}
@@ -443,31 +442,13 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
             </button>
           </div>
 
-          {/* 会话列表 */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sessions.map(session => (
-              <button
-                key={session.id}
-                onClick={() => handleSelectSession(session.id)}
-                className={`
-                  w-full flex items-center gap-2 p-2.5 rounded-lg text-left transition-all
-                  ${currentSession?.id === session.id
-                    ? 'bg-gold/10 border border-gold/20'
-                    : 'hover:bg-secondary/70 border border-transparent'
-                  }
-                `}
-              >
-                <div className="w-7 h-7 rounded-full bg-sage/15 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-3.5 h-3.5 text-sage" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs truncate ${currentSession?.id === session.id ? 'text-gold' : 'text-foreground'}`}>
-                    {session.title}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">{getAgentName(session.agent_id)}</p>
-                </div>
-              </button>
-            ))}
+          {/* 会话目录(对谈/围炉论道 双 Tab) */}
+          <div className="flex-1 overflow-y-auto p-2">
+            <ConversationDirectory
+              sessions={sessions}
+              currentSessionId={currentSession?.id}
+              onSelect={handleSelectSession}
+            />
           </div>
         </div>
       </div>
@@ -498,30 +479,15 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
                 </button>
               </div>
             </div>
-            <div className="overflow-y-auto p-2 space-y-1 max-h-[50vh]">
-              {sessions.map(session => (
-                <button
-                  key={session.id}
-                  onClick={() => handleSelectSession(session.id)}
-                  className={`
-                    w-full flex items-center gap-2 p-2.5 rounded-lg text-left transition-all
-                    ${currentSession?.id === session.id
-                      ? 'bg-gold/10 border border-gold/20'
-                      : 'hover:bg-secondary/70 border border-transparent'
-                    }
-                  `}
-                >
-                  <div className="w-7 h-7 rounded-full bg-sage/15 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-3.5 h-3.5 text-sage" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs truncate ${currentSession?.id === session.id ? 'text-gold' : 'text-foreground'}`}>
-                      {session.title}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">{getAgentName(session.agent_id)}</p>
-                  </div>
-                </button>
-              ))}
+            <div className="overflow-y-auto p-2 max-h-[50vh]">
+              <ConversationDirectory
+                sessions={sessions}
+                currentSessionId={currentSession?.id}
+                onSelect={(sessionId) => {
+                  setSidebarOpen(false)
+                  handleSelectSession(sessionId)
+                }}
+              />
             </div>
           </div>
         </div>
@@ -568,14 +534,19 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
             </>
           ) : (
             <>
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-white font-serif font-bold text-sm flex-shrink-0">
-                {getAgentInitial(currentSession.agent_id)}
-              </div>
+              <EntityAvatar
+                name={currentSession.agent_name || t('directory.unknownAgent')}
+                src={currentSession.agent_avatar}
+                size="sm"
+                shape="circle"
+              />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">
-                  {currentSession.title}
+                  {currentSession.agent_name || t('directory.unknownAgent')}
                 </p>
-                <p className="text-[10px] text-muted-foreground">{getAgentName(currentSession.agent_id)}</p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {currentSession.title || t('directory.untitledSingle')}
+                </p>
               </div>
             </>
           )}

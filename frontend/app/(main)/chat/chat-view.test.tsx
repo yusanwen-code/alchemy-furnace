@@ -7,6 +7,9 @@ import { ChatView } from '@/app/(main)/chat/chat-view'
 import { ApiError } from '@/services/api'
 import type { Agent, ChatSession } from '@/services/types'
 
+// jsdom 未实现 scrollIntoView：ChatView 消息区滚底效果依赖它（chat-view-context.test.tsx 同款桩）
+Element.prototype.scrollIntoView = vi.fn()
+
 const defaultAgents: Agent[] = [
   {
     id: 'agent-1',
@@ -472,5 +475,88 @@ describe('chat launch surfaces', () => {
     expect(screen.getByRole('button', { name: 'launch.retry' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'launch.modelSettings' })).toHaveAttribute('href', '/settings')
     expect(testDoubles.push).not.toHaveBeenCalled()
+  })
+
+  it('shows the authoritative single-session identity even when the agent list is empty', () => {
+    testDoubles.agentState.agents = []
+    testDoubles.chatState.sessions = [{
+      ...singleSession,
+      title: '与太上老君论道',
+      agent_name: 'Agent One',
+      agent_avatar: 'https://example.com/one.png',
+    }]
+    testDoubles.chatState.currentSession = testDoubles.chatState.sessions[0]
+    render(<ChatView />)
+
+    // 桌面目录父级展示服务端返回的道人名(不依赖道人列表)
+    expect(screen.getAllByRole('button', { name: /Agent One/ }).length).toBeGreaterThan(0)
+    // 单聊页头展示服务端名称与头像
+    expect(screen.getAllByText('Agent One').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('img', { name: 'Agent One' }).length).toBeGreaterThan(0)
+    // 页头与目录绝不渲染会话 UUID
+    expect(screen.queryByText(/11111111/)).not.toBeInTheDocument()
+  })
+
+  it('selects the group tab by default when the current session is a group', () => {
+    testDoubles.chatState.sessions = [
+      { ...singleSession, title: '单聊会话甲', agent_name: 'Agent One' },
+      { ...groupSession, title: '群聊会话乙', members: [
+        { agent_id: 'agent-1', name: 'Agent One', proactivity: 50 },
+        { agent_id: 'agent-2', name: 'Agent Two', proactivity: 50 },
+      ] },
+    ]
+    testDoubles.chatState.currentSession = testDoubles.chatState.sessions[1]
+    render(<ChatView />)
+
+    expect(screen.getByRole('tab', { name: 'tabs.group' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('单聊会话甲')).not.toBeInTheDocument()
+    expect(screen.getAllByText('群聊会话乙').length).toBeGreaterThan(0)
+  })
+
+  it('filters the directory between the single and group tabs', async () => {
+    const user = userEvent.setup()
+    testDoubles.chatState.sessions = [
+      { ...singleSession, agent_name: 'Agent One' },
+      { ...groupSession, title: '群聊会话乙', members: [
+        { agent_id: 'agent-1', name: 'Agent One', proactivity: 50 },
+        { agent_id: 'agent-2', name: 'Agent Two', proactivity: 50 },
+      ] },
+    ]
+    testDoubles.chatState.currentSession = testDoubles.chatState.sessions[0]
+    render(<ChatView />)
+
+    // 默认对谈:单聊子项可见,群聊被过滤
+    expect(screen.getByText('untitledSingle')).toBeInTheDocument()
+    expect(screen.queryByText('群聊会话乙')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'tabs.group' }))
+
+    // 切换到围炉论道:只见群聊,单聊分组与道人父级消失
+    expect(screen.getByText('群聊会话乙')).toBeInTheDocument()
+    expect(screen.queryByText('untitledSingle')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Agent One/ })).not.toBeInTheDocument()
+  })
+
+  it('shows the same directory in the mobile sheet and closes it on selection', async () => {
+    const user = userEvent.setup()
+    testDoubles.chatState.sessions = [{
+      ...singleSession,
+      title: '移动端会话',
+      agent_name: 'Agent One',
+    }]
+    testDoubles.chatState.currentSession = testDoubles.chatState.sessions[0]
+    render(<ChatView />)
+
+    // 打开移动端 Sheet(论道/旧录 切换)
+    await user.click(screen.getByRole('tab', { name: '旧录' }))
+    // 桌面侧栏与 Sheet 各渲染一份相同目录结构(道人父级分组按钮)
+    expect(screen.getAllByRole('button', { name: /Agent One/ })).toHaveLength(2)
+
+    // DOM 顺序: 桌面侧栏目录 → Sheet 目录 → 聊天主区;[1] 即 Sheet 内的目录子项
+    await user.click(screen.getAllByText('移动端会话')[1])
+
+    expect(testDoubles.push).toHaveBeenCalledWith('/chat?session=11111111-1111-4111-8111-111111111111')
+    // 选择后 Sheet 关闭,只剩桌面目录
+    expect(screen.getAllByRole('button', { name: /Agent One/ })).toHaveLength(1)
   })
 })

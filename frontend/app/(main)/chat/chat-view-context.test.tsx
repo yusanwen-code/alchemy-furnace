@@ -157,6 +157,8 @@ describe('packaged session navigation contract', () => {
       id: SESSION_ID,
       type: 'single',
       agent_id: 'agent-1',
+      agent_name: 'Agent One',
+      agent_avatar: 'https://example.com/agent-one.png',
       title: '新对话',
       created_at: '2026-08-20T00:00:00Z',
       updated_at: '2026-08-20T00:00:00Z',
@@ -165,6 +167,8 @@ describe('packaged session navigation contract', () => {
       id: SESSION_ID,
       type: 'single',
       agent_id: 'agent-1',
+      agent_name: 'Agent One',
+      agent_avatar: 'https://example.com/agent-one.png',
       title: '新对话',
       created_at: '2026-08-20T00:00:00Z',
       updated_at: '2026-08-20T00:00:00Z',
@@ -195,6 +199,11 @@ describe('packaged session navigation contract', () => {
     expect(boundaries.getMessages).toHaveBeenCalledWith(SESSION_ID)
     // 大厅引导文案不应再出现
     expect(screen.queryByText('选择一位道人，开始你的论道之旅。')).not.toBeInTheDocument()
+    // 页头与目录父级都显示服务端身份:名字来自 getSession 的 agent_name,
+    // 头像只可能来自会话字段(agents 列表无 avatar),UUID 绝不渲染为可见文本
+    expect((await screen.findAllByText('Agent One')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByRole('img', { name: 'Agent One' })).length).toBeGreaterThan(0)
+    expect(screen.queryByText(SESSION_ID)).not.toBeInTheDocument()
   })
 
   it('loads a newly created group chat by its real UUID after canonical navigation', async () => {
