@@ -116,6 +116,13 @@ macOS arm64 and amd64 both run the same sequence, plus: toggle the menu bar
 between light and dark — the furnace template icon must invert automatically
 with no white box background; after sleep/wake the tray menu still opens.
 
+Dock icon recovery (guarded by the `internal/dockreopen` fix — wails v2
+lacks `applicationShouldHandleReopen:hasVisibleWindows:`, so this is not
+native behavior): after Close window hides to the tray, clicking the Dock
+icon must bring the main window back — not only the tray menu's
+打开炼丹炉. Also verify ⌘M minimize → Dock click restores, and a visible
+window → Dock click just activates (no-op).
+
 Tray failure fallback: build a local package with `ALCHEMY_TRAY_DISABLE=1`
 and close the window — the app must quit completely and leave no Python
 process (release builds never set this variable; it only exercises the
