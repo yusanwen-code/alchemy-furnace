@@ -177,6 +177,10 @@ jobs:
           # `wails build "${wails_args[@]}"` 会变成 `wails build build -clean ...`,
           # CLI 把第二个 build 当位置参数,其后 flags(-ldflags/-skipbindings/-webview2)
           # 全部失效——rc.3 三平台版本字节缺失的根因,直接执行数组即可。
+          #
+          # 无控制台契约: Wails 生产模式默认注入 -H windowsgui,主 exe 的 PE
+          # Subsystem 必须是 2(verify-windows-package.ps1 强制校验)。不得为了
+          # 查看 Python 日志加控制台启动旗标(会弹出黑框),诊断信息应写日志文件。
           wails "${wails_args[@]}"
 
       - name: Assemble release package

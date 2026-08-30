@@ -92,6 +92,25 @@ name, SHA256, result, screenshots and logs for every acceptance item.
 the matrix is accepted.** Missing or failing any platform keeps the Release a
 draft.
 
+### Console-free Windows acceptance
+
+Windows builds must never show a console window (black flash). The PE
+Subsystem of the main executable must be `2` (Windows GUI), which
+`scripts/verify-windows-package.ps1` enforces automatically, and the launch
+paths below are accepted by hand on Windows 10/11:
+
+| Launch entry | Main window appears | No console flash | Engine (Python) healthy |
+|--------------|---------------------|------------------|--------------------------|
+| Installer completion page (`Launch AlchemyFurnace` / 立即运行) | | | |
+| Desktop shortcut `炼丹炉.lnk` | | | |
+| Start menu shortcut `开始菜单\炼丹炉\炼丹炉.lnk` | | | |
+| In-app update → auto-restart | | | |
+
+Every cell must be PASS (or the entry itself 未执行 with reason) before the
+RC is promoted. Diagnostics go to log files, never to a console: adding
+`-windowsconsole` to the Wails build is forbidden (asserted in
+`scripts/tests/desktop-name-contract-test.sh`).
+
 ## Automatic release
 
 Create and push a semantic-version tag:
