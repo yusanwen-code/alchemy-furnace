@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
 )
 
@@ -29,6 +30,7 @@ func TestStreamChatPrematureEOFReturnsSafeTypedInterruption(t *testing.T) {
 		context.Background(),
 		[]map[string]string{{"role": "user", "content": "question"}},
 		&credential.ModelCredentials{Model: "test-model", APIKey: "secret"},
+		service.GenerationOptions{MaxTokens: 384},
 		func(chunk string) { chunks = append(chunks, chunk) },
 	)
 

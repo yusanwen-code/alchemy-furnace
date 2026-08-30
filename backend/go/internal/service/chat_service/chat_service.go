@@ -314,8 +314,8 @@ func (s *Chat) UpdateSessionTitle(ctx context.Context, sessionUID uuid.UUID, tit
 //   - 引擎错误经 engine.MapEngineError 映射为可读中文描述;SSE error 事件直接透传其消息
 //
 // onChunk 每个内容片段回调一次(通常为转发到客户端 SSE)
-func (s *Chat) StreamChat(ctx context.Context, messages []map[string]string, creds *credential.ModelCredentials, onChunk func(string)) (fullContent string, canceled bool, err error) {
-	stream, callErr := s.callChatStream(ctx, messages, creds)
+func (s *Chat) StreamChat(ctx context.Context, messages []map[string]string, creds *credential.ModelCredentials, options service.GenerationOptions, onChunk func(string)) (fullContent string, canceled bool, err error) {
+	stream, callErr := s.callChatStream(ctx, messages, creds, options)
 	if callErr != nil {
 		if ctx.Err() != nil {
 			return "", true, nil
@@ -422,7 +422,7 @@ func (s *Chat) callChatCompletion(ctx context.Context, messages []map[string]str
 // callChatStream 调用 Python 语言引擎的流式对话接口(SSE),返回响应流
 // messages 应已包含合成后的 system 消息;ctx 取消时上游 HTTP 请求随之中断(停止指令贯穿取消链)
 // creds 为按请求传递的模型凭证;base_url/api_key 为空时 Python 回退自身环境变量(向后兼容)
-func (s *Chat) callChatStream(ctx context.Context, messages []map[string]string, creds *credential.ModelCredentials) (io.ReadCloser, error) {
+func (s *Chat) callChatStream(ctx context.Context, messages []map[string]string, creds *credential.ModelCredentials, options service.GenerationOptions) (io.ReadCloser, error) {
 	url := fmt.Sprintf("%s/api/v1/chat/completions/stream", s.engineBaseURL())
 
 	modelName := configuration.Configuration.LLM.DefaultModel
@@ -433,6 +433,10 @@ func (s *Chat) callChatStream(ctx context.Context, messages []map[string]string,
 	reqBody := map[string]interface{}{
 		"messages": messages,
 		"model":    modelName,
+	}
+	// max_tokens:显式预算直达引擎(spec §7.2);0 表示不限制,回退 Python 默认 4096
+	if options.MaxTokens > 0 {
+		reqBody["max_tokens"] = options.MaxTokens
 	}
 	if creds != nil {
 		if creds.BaseURL != "" {

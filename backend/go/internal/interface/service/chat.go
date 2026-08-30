@@ -24,6 +24,11 @@ type ChatReadiness struct {
 	ReadyAgentIDs    []uuid.UUID
 }
 
+// GenerationOptions 流式对话的显式生成选项(spec §7.2;禁止可变参数/隐藏默认值)
+type GenerationOptions struct {
+	MaxTokens int
+}
+
 // Chat 对话域业务逻辑接口(会话/消息/SSE 流式对话)
 // 对外以 UUID 标识会话;内部联结仍用自增 ID。SSE 入口按 session UUID 解析
 type Chat interface {
@@ -58,7 +63,7 @@ type Chat interface {
 
 	// StreamChat 调用语言引擎流式对话并逐块回调,返回完整内容与取消标记
 	// ctx 取消时返回已累积的部分内容与 canceled=true,err 为 nil;引擎错误映射为可读中文描述
-	StreamChat(ctx context.Context, messages []map[string]string, creds *credential.ModelCredentials, onChunk func(string)) (fullContent string, canceled bool, err error)
+	StreamChat(ctx context.Context, messages []map[string]string, creds *credential.ModelCredentials, options GenerationOptions, onChunk func(string)) (fullContent string, canceled bool, err error)
 
 	// SaveMessage 写入消息并刷新所属会话 updated_at(sources 字段已废弃,不再写入)
 	SaveMessage(ctx context.Context, sessionID uint, role string, content string) (*model.ChatMessage, errors.Error)

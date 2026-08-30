@@ -9,6 +9,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/context/contextutil"
 	ierr "github.com/alchemy-furnace/server/internal/errors"
+	"github.com/alchemy-furnace/server/internal/interface/service"
 	chatservice "github.com/alchemy-furnace/server/internal/service/chat_service"
 	"github.com/alchemy-furnace/server/server/http/request"
 	"github.com/alchemy-furnace/server/server/http/response"
@@ -149,7 +150,7 @@ func (cls *Chat) SSEChat(c *gin.Context) {
 	chunkCh := make(chan string)
 	resultCh := make(chan streamResult, 1)
 	go func() {
-		full, canceled, streamErr := cls.chat.StreamChat(ctx, messages, creds, func(chunk string) {
+		full, canceled, streamErr := cls.chat.StreamChat(ctx, messages, creds, service.GenerationOptions{MaxTokens: 0}, func(chunk string) {
 			select {
 			case chunkCh <- chunk:
 			case <-ctx.Done():

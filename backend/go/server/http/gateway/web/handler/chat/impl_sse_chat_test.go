@@ -89,7 +89,7 @@ func (s *sseChatStub) ResolveCredentials(context.Context, string) (*credential.M
 	return &credential.ModelCredentials{Model: "test-model", APIKey: "must-not-leak"}, nil
 }
 
-func (s *sseChatStub) StreamChat(_ context.Context, _ []map[string]string, _ *credential.ModelCredentials, onChunk func(string)) (string, bool, error) {
+func (s *sseChatStub) StreamChat(_ context.Context, _ []map[string]string, _ *credential.ModelCredentials, _ service.GenerationOptions, onChunk func(string)) (string, bool, error) {
 	s.engineCalls++
 	for _, chunk := range s.streamChunks {
 		onChunk(chunk)

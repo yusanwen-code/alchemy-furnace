@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/google/uuid"
@@ -275,7 +276,7 @@ func (s *Chat) letAgentSpeak(ctx context.Context, session *model.ChatSession, m 
 			chunkForward(rest)
 		}
 	}
-	fullContent, canceled, streamErr := s.StreamChat(ctx, messages, creds, func(chunk string) {
+	fullContent, canceled, streamErr := s.StreamChat(ctx, messages, creds, service.GenerationOptions{MaxTokens: 0}, func(chunk string) {
 		if passed {
 			return // 已判沉默,后续内容全部丢弃
 		}
