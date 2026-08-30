@@ -185,6 +185,44 @@ describe('NuwaDistillPanel', () => {
     expect(onApply).not.toHaveBeenCalled()
   })
 
+  it('模型输出截断时给出具体调整提示和重试按钮', async () => {
+    distillNuwa.mockRejectedValue(
+      new ApiError('模型输出达到长度上限', 503, {
+        error_code: 'model_output_truncated',
+        data: { stage: 'distill', retryable: true },
+      })
+    )
+    const onApply = vi.fn()
+    const user = userEvent.setup()
+    render(<NuwaDistillPanel onApply={onApply} />)
+
+    await runDistill(user)
+
+    expect(await screen.findByText('模型输出达到长度上限')).toBeInTheDocument()
+    expect(screen.getByText('outputTruncatedHint')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
+  it('模型空正文错误复用输出问题提示并提供重试', async () => {
+    distillNuwa.mockRejectedValue(
+      new ApiError('模型未返回结构化正文', 503, {
+        error_code: 'model_empty_output',
+        data: { stage: 'distill', retryable: true },
+      })
+    )
+    const onApply = vi.fn()
+    const user = userEvent.setup()
+    render(<NuwaDistillPanel onApply={onApply} />)
+
+    await runDistill(user)
+
+    expect(await screen.findByText('模型未返回结构化正文')).toBeInTheDocument()
+    expect(screen.getByText('invalidOutputHint')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'retry' })).toBeInTheDocument()
+    expect(onApply).not.toHaveBeenCalled()
+  })
+
   it('模型超时错误展示阶段·错误码并提供重试', async () => {
     distillNuwa.mockRejectedValue(
       new ApiError('模型响应超时，请重试', 503, {

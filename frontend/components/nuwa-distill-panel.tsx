@@ -87,6 +87,14 @@ export function NuwaDistillPanel({
   const searchBlocked =
     failure?.code === 'research_search_blocked' || failure?.code === 'research_provider_unavailable'
 
+  // 模型输出问题统一分类：截断/空正文/非法 JSON 都是"模型没给可用正文"，
+  // 可重试且不应写入半成品；截断单独给更具体的调整提示。
+  const invalidModelOutput =
+    failure?.code === 'model_invalid_output' ||
+    failure?.code === 'distill_invalid_output' ||
+    failure?.code === 'model_output_truncated' ||
+    failure?.code === 'model_empty_output'
+
   return (
     <section className="rounded-2xl border border-gold/35 bg-gold/5 p-4">
       <div className="mb-3 flex items-start gap-2">
@@ -141,9 +149,11 @@ export function NuwaDistillPanel({
           {failure.code === 'research_fetch_failed' && (
             <p className="text-muted-foreground">{t('fetchFailedHint')}</p>
           )}
-          {(failure.code === 'model_invalid_output' || failure.code === 'distill_invalid_output') && (
+          {failure.code === 'model_output_truncated' ? (
+            <p className="text-muted-foreground">{t('outputTruncatedHint')}</p>
+          ) : invalidModelOutput ? (
             <p className="text-muted-foreground">{t('invalidOutputHint')}</p>
-          )}
+          ) : null}
           {/* 阶段·错误码:后端结构化错误原样透传,便于定位失败阶段 */}
           {failure.code && (
             <p className="break-all text-[10px] text-muted-foreground/70">
