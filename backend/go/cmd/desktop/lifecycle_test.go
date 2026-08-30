@@ -53,6 +53,20 @@ func TestLifecycleBeforeCloseHidesWhenTrayReady(t *testing.T) {
 	require.Equal(t, 1, win.hides)
 }
 
+// Start 必须注册 Dock 重开回调(wails 缺失的 applicationShouldHandleReopen 修复),
+// 且触发该回调应恢复主窗口
+func TestLifecycleStartInstallsDockReopen(t *testing.T) {
+	l, win, _ := newLifecycleFixture(nil)
+	var installed func()
+	l.dockReopen = func(fn func()) { installed = fn }
+
+	require.NoError(t, l.Start(context.Background()))
+	require.NotNil(t, installed, "Start 应注册 Dock 重开回调")
+
+	installed() // 模拟点击 Dock 图标
+	require.Equal(t, 1, win.shows, "触发 Dock 重开应恢复主窗口")
+}
+
 // 托盘失败: 关闭 → 不隐藏, 返回 false(真正退出)
 func TestLifecycleBeforeCloseQuitsWhenTrayNotReady(t *testing.T) {
 	l, win, _ := newLifecycleFixture(errors.New("tray boom"))

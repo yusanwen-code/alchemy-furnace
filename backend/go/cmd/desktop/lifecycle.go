@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/alchemy-furnace/server/internal/desktoptray"
+	"github.com/alchemy-furnace/server/internal/dockreopen"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -49,6 +50,10 @@ type desktopLifecycle struct {
 	// 它需要 Wails frontend ctx, 测试环境没有会 log.Fatalf)
 	saveState func(context.Context) error
 
+	// dockReopen 注册"点击 Dock 图标"回调(可注入: 测试用 fake 记录,
+	// 真实实现=dockreopen.Install 向 wails AppDelegate 添加缺失的 reopen 方法)
+	dockReopen func(func())
+
 	trayReady   atomic.Bool
 	quitting    atomic.Bool
 	pendingShow atomic.Bool // 第二实例唤回早于 startup(context 未注入)时记录
@@ -57,7 +62,12 @@ type desktopLifecycle struct {
 }
 
 func newDesktopLifecycle(window windowRuntime, tray *desktoptray.Controller) *desktopLifecycle {
-	return &desktopLifecycle{window: window, tray: tray, saveState: saveWindowState}
+	return &desktopLifecycle{
+		window:     window,
+		tray:       tray,
+		saveState:  saveWindowState,
+		dockReopen: dockreopen.Install,
+	}
 }
 
 // Start 注入 Wails context 并启动托盘(幂等); 托盘失败仅记录错误, 不弹阻塞对话框。
@@ -66,6 +76,9 @@ func (l *desktopLifecycle) Start(ctx context.Context) error {
 	l.mu.Lock()
 	l.ctx = ctx
 	l.mu.Unlock()
+	// wails 未实现 applicationShouldHandleReopen(Dock 点击恢复窗口),
+	// 由 dockreopen 向 AppDelegate 动态注册, 转发到 ShowMainWindow
+	l.dockReopen(l.ShowMainWindow)
 	err := l.tray.Start(desktoptray.Callbacks{
 		Open: l.ShowMainWindow,
 		Quit: l.RequestQuit,
