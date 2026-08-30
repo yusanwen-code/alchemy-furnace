@@ -103,6 +103,11 @@ type LanguagePattern struct {
 	SystemPrompt      string    `json:"system_prompt" gorm:"type:text;not null;comment:合成后的系统提示词"`
 	EmergenceRules    JSONList  `json:"emergence_rules" gorm:"serializer:json;comment:涌现规则列表"`
 	InnerTensions     JSONList  `json:"inner_tensions" gorm:"serializer:json;comment:检测到的内在冲突"`
+	// BehaviorProfile 完整结构化行为档案(P1 起每次合成必写;老库为 NULL 视为失效缓存自动重建。
+	// 刻意偏离 spec §6.3 的 NOT NULL:SQLite ADD COLUMN NOT NULL(无默认值)在非空表上会失败)
+	BehaviorProfile   JSONMap   `json:"behavior_profile,omitempty" gorm:"serializer:json;comment:完整结构化行为档案"`
+	// ProfileVersion 行为档案版本(behavior.ProfileVersion);不一致视为失效重建
+	ProfileVersion    int       `json:"profile_version" gorm:"not null;default:1;comment:行为档案版本"`
 	SourceFingerprint string    `json:"source_fingerprint" gorm:"size:80;not null;comment:来源指纹(sha256: 前缀 + 64 位 hex = 71 字符)"`
 	IsValid           bool      `json:"is_valid" gorm:"default:true;comment:是否有效"`
 	CreatedAt         time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`

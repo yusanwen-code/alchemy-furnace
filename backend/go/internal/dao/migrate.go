@@ -44,7 +44,7 @@ var nullableAlterations = []struct {
 
 // columnTypeAlterations 新老 schema 漂移:列类型变更(VARCHAR → TEXT 等)
 // GORM AutoMigrate 在「表已存在」时对列类型加宽各驱动行为不一,且启动路径
-// MaybeAutoMigrate 对已有 schema 直接跳过;这里对 PostgreSQL 显式 ALTER,
+// 只在桌面/自部署启动时跑一次(幂等);这里对 PostgreSQL 显式 ALTER,
 // 运行前查 information_schema 已是目标类型则跳过(幂等);SQLite/MySQL 由 AutoMigrate 负责
 var columnTypeAlterations = []struct {
 	Table   string
@@ -150,23 +150,16 @@ func HasSchema() (bool, error) {
 	return DB.Migrator().HasTable(&model.ElixirPill{}), nil
 }
 
-// MaybeAutoMigrate 启动期调用: SKIP_AUTO_MIGRATE=1 关闭,否则在空库上跑 AutoMigrate
-// 配合 HasSchema 实现「零配置首次启动」体验
-//   - 空库: 自动建表(SQLite/新环境零门槛)
-//   - 已有 schema: 跳过(避免每次启动刷一堆 AutoMigrate 日志)
-//   - 显式关闭: 生产受控环境(运维走自己的迁移流水线)
+// MaybeAutoMigrate 启动期调用: SKIP_AUTO_MIGRATE=1 关闭,否则总是执行 MigrateUp(幂等)。
+// 变更背景:旧逻辑在 schema 已存在时短路(配合 HasSchema 避免启动日志噪声),但桌面启动
+// 没有 CLI migrate 入口,新列(如 behavior_profile)永远不会落到既有库;
+// AutoMigrate 幂等且只补齐新增列/索引,代价仅是启动时一次 schema diff,收益是
+// 老库自动升级(spec §15)。
 func MaybeAutoMigrate() error {
 	if DB == nil {
 		return fmt.Errorf("数据库未初始化")
 	}
 	if isAutoMigrateDisabled() {
-		return nil
-	}
-	has, err := HasSchema()
-	if err != nil {
-		return err
-	}
-	if has {
 		return nil
 	}
 	return MigrateUp()

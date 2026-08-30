@@ -63,6 +63,21 @@ func TestAutoMigrateSQLite(t *testing.T) {
 		t.Errorf("user_profile.avatar 数据库类型 = %q, want text", avatarType)
 	}
 
+	// 关键约束:行为档案列(language_patterns)
+	lpCols, err := db.Migrator().ColumnTypes(&model.LanguagePattern{})
+	if err != nil {
+		t.Fatalf("读取 language_patterns 列失败: %v", err)
+	}
+	lpGot := map[string]bool{}
+	for _, col := range lpCols {
+		lpGot[col.Name()] = true
+	}
+	for _, want := range []string{"behavior_profile", "profile_version"} {
+		if !lpGot[want] {
+			t.Errorf("AutoMigrate 未创建列 %s;实际: %v", want, lpGot)
+		}
+	}
+
 	// 关键约束:部分唯一索引(is_default 全表至多一个 true)
 	if !db.Migrator().HasIndex(&model.LLMModel{}, "idx_llm_models_default") {
 		t.Error("缺失部分唯一索引 idx_llm_models_default")
@@ -223,5 +238,84 @@ func TestInitDatabaseSQLite(t *testing.T) {
 	// 验证父目录被自动创建
 	if _, err := os.Stat(filepath.Dir(cfg.SQLitePath)); err != nil {
 		t.Errorf("父目录未自动创建: %v", err)
+	}
+}
+
+// TestMaybeAutoMigrateUpgradesExistingSchema 老库升级路径:已存在旧 schema 时
+// MaybeAutoMigrate 必须仍执行 MigrateUp(桌面启动无 CLI migrate 入口,
+// 新列只有靠这里落到老库;HasSchema 短路会让新列永远不到库,spec §15)
+func TestMaybeAutoMigrateUpgradesExistingSchema(t *testing.T) {
+	t.Setenv("SKIP_AUTO_MIGRATE", "0")
+	t.Setenv("AF_SKIP_AUTO_MIGRATE", "0")
+
+	tmp := t.TempDir()
+	db := newSQLiteTestDB(t, filepath.Join(tmp, "upgrade.db"))
+	prev := DB
+	DB = db
+	defer func() { DB = prev }()
+
+	// 1) 手工建「旧版」language_patterns(无 behavior_profile / profile_version 列)
+	oldDDL := `CREATE TABLE language_patterns (
+		id integer PRIMARY KEY AUTOINCREMENT,
+		agent_id integer NOT NULL,
+		system_prompt text NOT NULL,
+		emergence_rules json,
+		inner_tensions json,
+		source_fingerprint varchar(80) NOT NULL,
+		is_valid bool DEFAULT true,
+		created_at datetime,
+		updated_at datetime,
+		CONSTRAINT uniq_language_patterns_agent UNIQUE (agent_id)
+	);`
+	if err := db.Exec(oldDDL).Error; err != nil {
+		t.Fatalf("建旧表失败: %v", err)
+	}
+
+	// 2) 旧库写入一行历史缓存(模拟老桌面数据)
+	if err := db.Exec(
+		`INSERT INTO language_patterns (agent_id, system_prompt, source_fingerprint)
+		 VALUES (1, '旧提示词', 'sha256:old')`,
+	).Error; err != nil {
+		t.Fatalf("写历史数据失败: %v", err)
+	}
+
+	// 3) MaybeAutoMigrate 必须补齐新列(而不是跳过)
+	if err := MaybeAutoMigrate(); err != nil {
+		t.Fatalf("MaybeAutoMigrate 失败: %v", err)
+	}
+
+	// 4) 断言新列存在
+	cols, err := db.Migrator().ColumnTypes(&model.LanguagePattern{})
+	if err != nil {
+		t.Fatalf("读取列失败: %v", err)
+	}
+	got := map[string]bool{}
+	for _, col := range cols {
+		got[col.Name()] = true
+	}
+	for _, want := range []string{"behavior_profile", "profile_version"} {
+		if !got[want] {
+			t.Errorf("迁移后缺少列 %s;实际列: %v", want, got)
+		}
+	}
+
+	// 5) 历史行不丢,新列可写可读
+	var cnt int64
+	if err := db.Model(&model.LanguagePattern{}).Count(&cnt).Error; err != nil || cnt != 1 {
+		t.Errorf("历史行丢失或计数异常: cnt=%d err=%v", cnt, err)
+	}
+	if err := db.Model(&model.LanguagePattern{}).Where("agent_id = ?", 1).
+		Update("behavior_profile", model.JSONMap{"version": 1}).Error; err != nil {
+		t.Errorf("新列写入失败: %v", err)
+	}
+	var loaded model.LanguagePattern
+	if err := db.First(&loaded, "agent_id = ?", 1).Error; err != nil {
+		t.Fatalf("读取历史行失败: %v", err)
+	}
+	if loaded.BehaviorProfile["version"] != float64(1) {
+		t.Errorf("behavior_profile 回读异常: %+v", loaded.BehaviorProfile)
+	}
+	if loaded.SystemPrompt != "旧提示词" {
+		t.Errorf("历史 system_prompt 被破坏: %q", loaded.SystemPrompt)
 	}
 }
