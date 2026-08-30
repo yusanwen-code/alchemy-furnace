@@ -889,6 +889,19 @@
       "noReadyTitle": "道人尚未配置可用模型",
       "noReadyDesc": "为道人配置正式模型后即可发起对话。",
       "configureModel": "前往模型管理"
+    },
+    "directory": {
+      "tabs": {
+        "single": "对谈",
+        "group": "围炉论道"
+      },
+      "unknownAgent": "未知道人",
+      "untitledSingle": "未命名对谈",
+      "untitledGroup": "未命名围炉论道",
+      "singleCount": "{count} 场",
+      "groupMeta": "{count} 位道人",
+      "emptySingle": "暂无对谈",
+      "emptyGroup": "暂无围炉论道"
     }
   },
   "mention": {

@@ -890,6 +890,19 @@
       "noReadyTitle": "No agent has a working model",
       "noReadyDesc": "Configure a formal model for an agent to start chatting.",
       "configureModel": "Manage models"
+    },
+    "directory": {
+      "tabs": {
+        "single": "Solo Talk",
+        "group": "Group Discussion"
+      },
+      "unknownAgent": "Unknown daoist",
+      "untitledSingle": "Untitled talk",
+      "untitledGroup": "Untitled group discussion",
+      "singleCount": "{count} talks",
+      "groupMeta": "{count} daoists",
+      "emptySingle": "No solo talks yet",
+      "emptyGroup": "No group discussions yet"
     }
   },
   "mention": {
