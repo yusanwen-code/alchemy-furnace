@@ -80,3 +80,13 @@ export interface UpdateProgress {
 export function getUpdateProgress(): Promise<UpdateProgress> {
   return get<UpdateProgress>('/update/progress')
 }
+
+/**
+ * 桌面端外部链接:经 HTTP 桥接交系统默认浏览器打开(WKWebView 不实现
+ * target=_blank,设置关于的 GitHub 仓库链接点击静默失效;仅 desktop 模式
+ * 注册此端点,见 backend/go/cmd/desktop/open_external.go)
+ */
+export function openExternalUrl(url: string): Promise<void> {
+  return post<void>('/desktop/open-url', { url })
+}
+

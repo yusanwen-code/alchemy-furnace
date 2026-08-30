@@ -9,7 +9,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useState, useEffect } from 'react'
 import { Info, Flame, ExternalLink, Heart, Download, Globe } from 'lucide-react'
-import { getVersion, type VersionInfo } from '@/services/systemService'
+import { getVersion, openExternalUrl, type VersionInfo } from '@/services/systemService'
+import { isDesktop } from '@/services/api'
 import { UpdateDialog } from '@/components/update-dialog'
 import { TopTabs } from '@/components/interaction/top-tabs'
 import { ModelsPanel } from '@/components/models/models-panel'
@@ -19,6 +20,9 @@ import { LanguagePanel } from '@/components/settings/language-panel'
 
 const TAB_KEYS = ['models', 'fire', 'profile', 'language', 'about'] as const
 type TabKey = (typeof TAB_KEYS)[number]
+
+/** 关于区 GitHub 仓库链接(web 原生 target=_blank;桌面经 open-url 桥接交系统浏览器) */
+const REPO_URL = 'https://github.com/yusanwen-code/alchemy-furnace'
 
 function isTabKey(v: string | null): v is TabKey {
   return (
@@ -152,9 +156,16 @@ function AboutPanel() {
 
             <div className="space-y-2 w-full text-left">
               <a
-                href="https://github.com/yusanwen-code/alchemy-furnace"
+                href={REPO_URL}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  // WKWebView 不实现 target=_blank(缺 createWebViewWith),桌面点击
+                  // 静默失效;经 /desktop/open-url 交系统默认浏览器,web 保持原生行为
+                  if (!isDesktop()) return
+                  e.preventDefault()
+                  openExternalUrl(REPO_URL).catch(() => undefined)
+                }}
                 className="flex items-center gap-2 p-2.5 rounded-lg bg-muted hover:bg-gold/5 border border-border/70 hover:border-gold/40 transition-all text-sm min-w-0"
               >
                 <ExternalLink className="w-4 h-4 text-gold shrink-0" />

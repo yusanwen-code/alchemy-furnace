@@ -108,6 +108,8 @@ func main() {
 	// 桌面 Skill 导出落盘: save-export 写数据目录 exports/,reveal-export 文件管理器定位
 	// (WKWebView 不执行 Blob a[download],导出必须经此桥接落盘,见 export_save.go)
 	RegisterExportSaveEndpoints(engine)
+	// 桌面外部链接: open-url 交给系统默认浏览器(WKWebView 不实现 target=_blank)
+	RegisterOpenExternalEndpoints(engine)
 	srv := &http.Server{Handler: engine}
 	go func() {
 		log.Printf("[炼丹炉] 桌面服务已就绪: http://%s", addr)
