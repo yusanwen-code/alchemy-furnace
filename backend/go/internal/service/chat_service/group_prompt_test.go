@@ -30,6 +30,18 @@ func TestParseMentions(t *testing.T) {
 	if len(agents) != 1 {
 		t.Fatalf("标点截断失败: %v", agents)
 	}
+	// @全体成员:展开为全部成员(保序);别名与成员去重
+	for _, trigger := range []string{"@全体成员", "@所有人", "@all", "@Everyone"} {
+		agents, _ = ParseMentions(trigger+" 都来说说", members)
+		if len(agents) != 2 || agents[0] != "太上老君" || agents[1] != "孙悟空" {
+			t.Fatalf("@全体(%s)展开失败: %v", trigger, agents)
+		}
+	}
+	// @全体成员 + 单点并存:去重后仍是全部成员
+	agents, _ = ParseMentions("@全体成员 @孙悟空 加一个", members)
+	if len(agents) != 2 {
+		t.Fatalf("@全体+单点去重失败: %v", agents)
+	}
 }
 
 func TestIsPass(t *testing.T) {

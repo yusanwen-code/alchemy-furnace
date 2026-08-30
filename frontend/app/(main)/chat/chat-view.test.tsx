@@ -695,4 +695,24 @@ describe('chat launch surfaces', () => {
     // 选择后 Sheet 关闭,只剩桌面目录
     expect(screen.getAllByRole('button', { name: /Agent One/ })).toHaveLength(1)
   })
+
+  it('offers an @全体成员 entry at the top of the mention popup in a group chat', async () => {
+    const user = userEvent.setup()
+    testDoubles.chatState.currentSession = {
+      ...groupSession,
+      members: [
+        { agent_id: 'agent-1', name: 'Agent One', proactivity: 50 },
+        { agent_id: 'agent-2', name: 'Agent Two', proactivity: 50 },
+      ],
+    }
+    render(<ChatView />)
+
+    const input = await screen.findByLabelText('input.messageLabel')
+    await user.type(input, '@')
+
+    // 群聊 @ 补全浮层:全体成员置顶候选,点击后插入 @全体成员
+    expect(screen.getByRole('option', { name: /everyone/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: /everyone/ }))
+    expect(input).toHaveValue('@everyone ')
+  })
 })

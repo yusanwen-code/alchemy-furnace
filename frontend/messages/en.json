@@ -969,7 +969,8 @@
   "mention": {
     "placeholder": "Pick an agent to mention...",
     "noMatches": "No matching agents",
-    "allMembers": "All members"
+    "allMembers": "All members",
+    "everyone": "Everyone"
   },
   "onboarding": {
     "title": "Welcome to Alchemy Furnace",

@@ -17,6 +17,9 @@ const UserLabel = "用户"
 // UserAliases @用户 的可识别别名(拉丁别名大小写不敏感)
 var UserAliases = []string{"用户", "User"}
 
+// EveryoneAliases @全体成员 的可识别别名(拉丁别名大小写不敏感)
+var EveryoneAliases = []string{"全体成员", "所有人", "all", "everyone"}
+
 // mentionPattern @名字 提取:名字到空白/中英文标点为止
 var mentionPattern = regexp.MustCompile(`@([^\s@，。,.!?？！:：;；]+)`)
 
@@ -24,7 +27,7 @@ var mentionPattern = regexp.MustCompile(`@([^\s@，。,.!?？！:：;；]+)`)
 var passPattern = regexp.MustCompile(`^\s*\[\s*(?i:PASS)\s*\]`)
 
 // ParseMentions 从消息文本解析@提及,返回被@的群成员名(去重保序)与是否@了用户
-// 不匹配当前成员(含已被踢出者)的@丢弃
+// 不匹配当前成员(含已被踢出者)的@丢弃;@全体成员(EveryoneAliases)展开为全部成员
 func ParseMentions(content string, memberNames []string) (agentNames []string, userMentioned bool) {
 	inMembers := map[string]bool{}
 	for _, n := range memberNames {
@@ -37,6 +40,23 @@ func ParseMentions(content string, memberNames []string) (agentNames []string, u
 			if !seen[name] {
 				seen[name] = true
 				agentNames = append(agentNames, name)
+			}
+			continue
+		}
+		everyone := false
+		for _, alias := range EveryoneAliases {
+			if strings.EqualFold(name, alias) {
+				everyone = true
+				break
+			}
+		}
+		if everyone {
+			// @全体成员:全部成员按成员顺序入列(去重)
+			for _, n := range memberNames {
+				if !seen[n] {
+					seen[n] = true
+					agentNames = append(agentNames, n)
+				}
 			}
 			continue
 		}

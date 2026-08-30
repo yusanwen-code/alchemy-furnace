@@ -968,7 +968,8 @@
   "mention": {
     "placeholder": "选择道人来提及...",
     "noMatches": "没有匹配的道人",
-    "allMembers": "全部群成员"
+    "allMembers": "全部群成员",
+    "everyone": "全体成员"
   },
   "onboarding": {
     "title": "欢迎来到炼丹炉",

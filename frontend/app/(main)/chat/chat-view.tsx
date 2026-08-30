@@ -44,7 +44,7 @@ import { GroupTopicEditor } from '@/components/chat/group-topic-editor'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { GroupMembersPanel } from '@/components/group-members-panel'
 import { TopTabs } from '@/components/interaction/top-tabs'
-import { MentionSuggest } from '@/components/mention-suggest'
+import { MentionSuggest, EVERYONE_AGENT_ID } from '@/components/mention-suggest'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { useChatLaunchFlow, type LaunchState } from '@/hooks/use-chat-launch-flow'
 import { chatSessionHref } from '@/lib/chat-route'
@@ -1139,14 +1139,22 @@ function ChatInput({
   const [popPos, setPopPos] = useState<{ bottom: number; left: number } | null>(null)
 
   // 候选项:群聊时仅列群成员,单聊时不用(@补全不启用)
+  const tMention = useTranslations('mention')
   const candidates = useMemo(() => {
     if (!mention) return []
     const q = mention.query.toLowerCase()
     if (isGroup) {
-      return members.filter(m => m.name.toLowerCase().includes(q))
+      // @全体成员置顶:伪候选(哨兵 id),选中后插入 @全体成员(后端 EveryoneAliases 解析)
+      const everyone: import('@/services/types').GroupMember = {
+        agent_id: EVERYONE_AGENT_ID,
+        name: tMention('everyone'),
+        proactivity: 0,
+        avatar: '',
+      }
+      return [everyone, ...members.filter(m => m.name.toLowerCase().includes(q))]
     }
     return []
-  }, [mention, isGroup, members])
+  }, [mention, isGroup, members, tMention])
 
   const safeActiveIndex = Math.min(mention?.activeIndex || 0, Math.max(0, candidates.length - 1))
 

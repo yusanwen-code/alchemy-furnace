@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { MentionSuggest } from '@/components/mention-suggest'
+import { MentionSuggest, EVERYONE_AGENT_ID } from '@/components/mention-suggest'
 import type { GroupMember } from '@/services/types'
 
 vi.mock('next-intl', () => ({
@@ -52,5 +52,48 @@ describe('MentionSuggest avatar handling', () => {
     const betaOption = screen.getByRole('option', { name: /Beta/ })
     expect(within(betaOption).queryByRole('img')).toBeNull()
     expect(within(betaOption).getByText('B')).toBeInTheDocument()
+  })
+})
+
+describe('MentionSuggest @全体成员 entry', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+  })
+
+  afterEach(() => cleanup())
+
+  const everyoneCandidates: GroupMember[] = [
+    { agent_id: EVERYONE_AGENT_ID, name: '全体成员', proactivity: 0, avatar: '' },
+    ...candidates,
+  ]
+
+  it('renders the everyone entry with the members subtitle instead of an avatar', () => {
+    render(
+      <MentionSuggest
+        candidates={everyoneCandidates}
+        activeIndex={0}
+        onPick={() => {}}
+        onHover={() => {}}
+        position={{ bottom: 40, left: 24 }}
+      />,
+    )
+    const option = screen.getByRole('option', { name: /全体成员/ })
+    expect(within(option).queryByRole('img')).toBeNull()
+    expect(within(option).getByText('allMembers')).toBeInTheDocument()
+  })
+
+  it('picks the everyone label on click', async () => {
+    const onPick = vi.fn()
+    render(
+      <MentionSuggest
+        candidates={everyoneCandidates}
+        activeIndex={0}
+        onPick={onPick}
+        onHover={() => {}}
+        position={{ bottom: 40, left: 24 }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('option', { name: /全体成员/ }))
+    expect(onPick).toHaveBeenCalledWith('全体成员')
   })
 })

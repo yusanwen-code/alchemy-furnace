@@ -9,9 +9,16 @@
  */
 import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { AtSign } from 'lucide-react'
+import { AtSign, Users } from 'lucide-react'
 import type { GroupMember } from '@/services/types'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
+
+/**
+ * @全体成员伪候选哨兵:chat-view 在群聊候选头部注入
+ * (agent_id=该哨兵的候选项渲染全体成员行,选中后插入 @全体成员,
+ * 后端 EveryoneAliases 按文案别名解析)
+ */
+export const EVERYONE_AGENT_ID = '__everyone__'
 
 export interface MentionSuggestProps {
   candidates: GroupMember[]
@@ -70,6 +77,7 @@ export function MentionSuggest({
       </div>
       {candidates.map((c, i) => {
         const active = i === activeIndex
+        const everyone = c.agent_id === EVERYONE_AGENT_ID
         return (
           <button
             key={c.agent_id}
@@ -86,10 +94,18 @@ export function MentionSuggest({
               ${active ? 'bg-gold/15 text-foreground' : 'text-foreground/80 hover:bg-secondary/60'}
             `}
           >
-            <EntityAvatar name={c.name} src={c.avatar} size="sm" />
+            {everyone ? (
+              <span className="w-8 h-8 rounded-full bg-gold/15 text-gold border border-gold/30 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4" />
+              </span>
+            ) : (
+              <EntityAvatar name={c.name} src={c.avatar} size="sm" />
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{c.name}</p>
-              <p className="text-[10px] text-muted-foreground">表达欲 {c.proactivity}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {everyone ? t('allMembers') : `表达欲 ${c.proactivity}`}
+              </p>
             </div>
             {active && <span className="text-[10px] text-gold">↵</span>}
           </button>
