@@ -68,11 +68,12 @@ func NewFusion() *fusion.Fusion {
 }
 
 func NewDistillation() *distillation.Handler {
-	daoPill := service.ProvidePillDao()
 	client := service.NewDistillationClient()
 	modelResolver := credential.NewResolver()
-	distillationService := distillation_service.New(client, modelResolver, daoPill)
-	return distillation.New(distillationService)
+	daoPill := service.ProvidePillDao()
+	distillation_serviceService := distillation_service.New(client, modelResolver, daoPill)
+	handler := distillation.New(distillation_serviceService)
+	return handler
 }
 
 // NewModel 供应商与模型管理处理器装配
@@ -92,8 +93,8 @@ func NewChat() *chat.Chat {
 	client := service.NewSynthesisClient()
 	modelResolver := credential.NewResolver()
 	languagePatternService := language_pattern_service.New(daoAgent, client, modelResolver)
-	engineBaseURL := service.NewEngineBaseURL()
-	chat_serviceChat := chat_service.NewDynamic(daoChat, daoAgent, languagePatternService, modelResolver, engineBaseURL)
+	provider := service.NewEngineBaseURL()
+	chat_serviceChat := chat_service.NewDynamic(daoChat, daoAgent, languagePatternService, modelResolver, provider)
 	chatChat := chat.New(chat_serviceChat)
 	return chatChat
 }
