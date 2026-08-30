@@ -47,7 +47,7 @@ describe('FireEffectPanel', () => {
   it('falls back to defaults when nothing is stored', () => {
     render(<FireEffectPanel />)
 
-    expect(screen.getByRole('button', { name: /options\.plume\.label/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /options\.ember\.label/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -74,6 +74,6 @@ describe('FireEffectPanel', () => {
 
     expect(window.localStorage.getItem(SMOKE_LEVEL_STORAGE_KEY)).toBe('0.8')
     expect(screen.getByRole('slider')).toHaveValue('80')
-    expect(previewProps.calls.at(-1)).toEqual({ effectId: 'plume', smokeLevel: 0.8 })
+    expect(previewProps.calls.at(-1)).toEqual({ effectId: 'ember', smokeLevel: 0.8 })
   })
 })

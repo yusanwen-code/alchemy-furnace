@@ -73,7 +73,7 @@ describe('BaguaFurnace', () => {
   it('falls back to defaults when nothing is stored', () => {
     render(<BaguaFurnace alt="furnace" windows={windows} />)
 
-    expect(captured.fire.at(-1)?.effectId).toBe('plume')
+    expect(captured.fire.at(-1)?.effectId).toBe('ember')
     expect(captured.smoke.at(-1)?.level).toBe(0.55)
   })
 

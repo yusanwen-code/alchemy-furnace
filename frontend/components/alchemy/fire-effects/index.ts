@@ -15,7 +15,7 @@ import type { FurnaceWindow } from '../bagua-furnace-fire'
 
 export type FireEffectId = 'plume' | 'ember' | 'flicker' | 'veil' | 'classic' | 'sanmei' | 'spark' | 'dragon'
 
-export const DEFAULT_EFFECT_ID: FireEffectId = 'plume'
+export const DEFAULT_EFFECT_ID: FireEffectId = 'ember'
 
 /** 窗口矩形缓存：调度器每帧为每个窗口算一次，传给 effect 避免重复 */
 export interface WinRect {

@@ -25,7 +25,7 @@ export const FIRE_EFFECT_OPTIONS: readonly FireEffectId[] = [
   'dragon',
 ] as const
 
-export const DEFAULT_FIRE_EFFECT: FireEffectId = 'plume'
+export const DEFAULT_FIRE_EFFECT: FireEffectId = 'ember'
 export const DEFAULT_SMOKE_LEVEL = 0.55
 
 /** 同标签页内的瞬时同步事件（CustomEvent） */
