@@ -66,11 +66,11 @@ type Chat interface {
 	// DeleteSession 删除会话(消息由 FK CASCADE 清理)
 	DeleteSession(ctx context.Context, sessionUID uuid.UUID) errors.Error
 
-	// UpdateSessionTitle 更新会话标题(trim 后空或 >30 字返 InvalidRequest)
+	// UpdateSessionTitle 更新会话标题(trim 后空或 >200 字返 InvalidRequest)
 	UpdateSessionTitle(ctx context.Context, sessionUID uuid.UUID, title string) errors.Error
 
-	// CreateGroupSession 建群:成员≥2、去重、全部 active;title 置空待自动命名
-	CreateGroupSession(ctx context.Context, agentUIDs []uuid.UUID) (*model.ChatSession, errors.Error)
+	// CreateGroupSession 建群:成员≥2、去重、全部 active;title 可选,trim 后为空则待自动命名
+	CreateGroupSession(ctx context.Context, agentUIDs []uuid.UUID, title string) (*model.ChatSession, errors.Error)
 
 	// ListMembers 列群成员(按发言顺序,预加载道人)
 	ListMembers(ctx context.Context, sessionUID uuid.UUID) ([]*model.SessionMember, errors.Error)

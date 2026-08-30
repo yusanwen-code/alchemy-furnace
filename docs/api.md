@@ -321,13 +321,26 @@ POST /api/v1/trial/chat
 POST /api/v1/chat/sessions
 ```
 
-请求体:
+单聊请求体:
 ```json
 {
-  "agent_id": 1,
-  "title": "论道"
+  "type": "single",
+  "agent_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 }
 ```
+
+群聊请求体:
+```json
+{
+  "type": "group",
+  "member_agent_ids": ["f47ac10b-58cc-4372-a567-0e02b2c3d479", "1b4e28ba-2fa1-4d72-beb7-0e02b2c3d479"],
+  "title": "丹道夜话"
+}
+```
+
+- 单聊 `agent_id` 必填；`title` 被忽略，不消费客户端标题。
+- 群聊 `member_agent_ids` 至少 2 人；`title` 可选：trim 后 1-200 字（Unicode 字符），
+  超过 200 字返回 `service.chat.title_invalid`（校验失败不落库），空值则首次问答后自动命名。
 
 响应:
 ```json

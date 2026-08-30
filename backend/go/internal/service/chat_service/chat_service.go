@@ -275,11 +275,26 @@ func (s *Chat) DeleteSession(ctx context.Context, sessionUID uuid.UUID) ierr.Err
 	return nil
 }
 
+// sessionTitleMaxRunes 会话标题最大长度(统一 200 字,创建与重命名共用)
+const sessionTitleMaxRunes = 200
+
+// normalizeSessionTitle 统一标题归一化:trim 后空且允许空则返回空串,否则空或超长返回 InvalidRequest
+func normalizeSessionTitle(title string, allowEmpty bool) (string, ierr.Error) {
+	title = strings.TrimSpace(title)
+	if title == "" && allowEmpty {
+		return "", nil
+	}
+	if title == "" || utf8.RuneCountInString(title) > sessionTitleMaxRunes {
+		return "", ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.title_invalid", "标题需为 1-200 个字符")
+	}
+	return title, nil
+}
+
 // UpdateSessionTitle 更新会话标题
 func (s *Chat) UpdateSessionTitle(ctx context.Context, sessionUID uuid.UUID, title string) ierr.Error {
-	title = strings.TrimSpace(title)
-	if title == "" || utf8.RuneCountInString(title) > 30 {
-		return ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.title_invalid", "标题需为 1-30 个字符")
+	title, err := normalizeSessionTitle(title, false)
+	if err != nil {
+		return err
 	}
 	session, err := s.chat.TakeSessionByUUID(ctx, sessionUID)
 	if err != nil {
@@ -450,8 +465,12 @@ func (s *Chat) callChatStream(ctx context.Context, messages []map[string]string,
 	return resp.Body, nil
 }
 
-// CreateGroupSession 建群:成员≥2、去重、全部 active;title 置空待自动命名
-func (s *Chat) CreateGroupSession(ctx context.Context, agentUIDs []uuid.UUID) (*model.ChatSession, ierr.Error) {
+// CreateGroupSession 建群:成员≥2、去重、全部 active;title 可选(trim 后空则待自动命名),校验失败不落库
+func (s *Chat) CreateGroupSession(ctx context.Context, agentUIDs []uuid.UUID, title string) (*model.ChatSession, ierr.Error) {
+	title, err := normalizeSessionTitle(title, true)
+	if err != nil {
+		return nil, err
+	}
 	// 去重(保序)
 	seen := map[uuid.UUID]bool{}
 	uids := make([]uuid.UUID, 0, len(agentUIDs))
@@ -474,7 +493,7 @@ func (s *Chat) CreateGroupSession(ctx context.Context, agentUIDs []uuid.UUID) (*
 		agents = append(agents, a)
 	}
 
-	session := &model.ChatSession{Type: model.SessionTypeGroup, Title: ""}
+	session := &model.ChatSession{Type: model.SessionTypeGroup, Title: title}
 	members := make([]*model.SessionMember, 0, len(agents))
 	for i, a := range agents {
 		// 携带已验证道人,响应直接从成员取 UUID/昵称/状态,无需二次查询

@@ -24,10 +24,12 @@ type createGroupStub struct {
 	session *model.ChatSession
 	err     errors.Error
 	gotUIDs []uuid.UUID
+	gotTitle string
 }
 
-func (s *createGroupStub) CreateGroupSession(_ context.Context, uids []uuid.UUID) (*model.ChatSession, errors.Error) {
+func (s *createGroupStub) CreateGroupSession(_ context.Context, uids []uuid.UUID, title string) (*model.ChatSession, errors.Error) {
 	s.gotUIDs = uids
+	s.gotTitle = title
 	return s.session, s.err
 }
 
@@ -52,7 +54,8 @@ func TestCreateSingleSessionResponseCarriesDaoistIdentity(t *testing.T) {
 	session.Agent = model.DaoAgent{UUID: agentUID, Name: "太上老君", Avatar: "https://example.com/laojun.png", Status: "active"}
 	stub := &createSingleStub{session: session}
 
-	body := fmt.Sprintf(`{"type":"single","agent_id":%q}`, agentUID)
+	// 单聊请求即使带 title 也忽略(不消费客户端标题)
+	body := fmt.Sprintf(`{"type":"single","agent_id":%q,"title":"丹道夜话"}`, agentUID)
 	status, envelope := performCreateSession(t, New(stub), body)
 
 	if status != http.StatusCreated {
@@ -138,5 +141,26 @@ func TestCreateGroupSessionRejectsMalformedMemberUUID(t *testing.T) {
 	}
 	if stub.gotUIDs != nil {
 		t.Fatalf("参数错误不应触达 service, gotUIDs = %v", stub.gotUIDs)
+	}
+}
+
+// handler 不 trim 标题,原样转发给 service 由 service 归一化(避免 handler/service 双重 trim 规则漂移)
+func TestCreateGroupSessionForwardsTitleVerbatimToService(t *testing.T) {
+	u1, u2 := uuid.New(), uuid.New()
+	session := &model.ChatSession{UUID: uuid.New(), Type: model.SessionTypeGroup}
+	session.Members = []model.SessionMember{
+		{AgentID: 1, SortOrder: 0, Agent: model.DaoAgent{UUID: u1, Name: "太上老君", Status: "active"}},
+		{AgentID: 2, SortOrder: 1, Agent: model.DaoAgent{UUID: u2, Name: "孙悟空", Status: "active"}},
+	}
+	stub := &createGroupStub{session: session}
+
+	body := fmt.Sprintf(`{"type":"group","member_agent_ids":[%q,%q],"title":"  丹道夜话  "}`, u1, u2)
+	status, envelope := performCreateSession(t, New(stub), body)
+
+	if status != http.StatusCreated {
+		t.Fatalf("期望 HTTP 201, 实际 %d, body: %v", status, envelope)
+	}
+	if stub.gotTitle != "  丹道夜话  " {
+		t.Fatalf("handler 应原样转发标题(不 trim), gotTitle = %q", stub.gotTitle)
 	}
 }

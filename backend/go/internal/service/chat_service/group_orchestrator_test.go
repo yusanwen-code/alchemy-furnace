@@ -96,7 +96,7 @@ func newGroupSvcWithCompletion(t *testing.T, replies []string, completionReply s
 		agentByID: agentByID,
 	}
 	svc := New(chats, agents, fakePattern{}, availableCredentialResolver("test-model"), engine.server.URL)
-	s, err := svc.CreateGroupSession(context.Background(), []uuid.UUID{u1, u2})
+	s, err := svc.CreateGroupSession(context.Background(), []uuid.UUID{u1, u2}, "")
 	if err != nil {
 		t.Fatalf("建群: %v", err)
 	}

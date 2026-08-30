@@ -15,7 +15,7 @@ import (
 // CreateSessionRequest 创建会话请求
 //   - single(默认):AgentID 必填
 //   - group: Type="group" + MemberAgentIDs ≥2
-//   - Title 字段忽略(自动命名)
+//   - Title 仅 group 使用:可选,原样转发 service 归一化(trim + ≤200 字);single 忽略
 type CreateSessionRequest struct {
 	AgentID        string   `json:"agent_id"`
 	Type           string   `json:"type"`
@@ -43,7 +43,7 @@ func (cls *Chat) CreateSession(c *gin.Context) (response.Code, any, error) {
 			}
 			uids = append(uids, uid)
 		}
-		session, err := cls.chat.CreateGroupSession(ctx, uids)
+		session, err := cls.chat.CreateGroupSession(ctx, uids, body.Title)
 		if err != nil {
 			return 0, nil, err
 		}

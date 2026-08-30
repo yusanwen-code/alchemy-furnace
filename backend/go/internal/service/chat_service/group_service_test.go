@@ -243,14 +243,14 @@ func TestCreateGroupSession(t *testing.T) {
 	svc, chats, u1, u2, u3 := newGroupTestSvc()
 	ctx := context.Background()
 
-	if _, err := svc.CreateGroupSession(ctx, []uuid.UUID{u1}); err == nil {
+	if _, err := svc.CreateGroupSession(ctx, []uuid.UUID{u1}, ""); err == nil {
 		t.Fatal("成员不足2人应报错")
 	}
-	if _, err := svc.CreateGroupSession(ctx, []uuid.UUID{u1, u3}); err == nil {
+	if _, err := svc.CreateGroupSession(ctx, []uuid.UUID{u1, u3}, ""); err == nil {
 		t.Fatal("含 inactive 成员应报错")
 	}
 	// 正常建群(重复 uuid 去重)
-	s, err := svc.CreateGroupSession(ctx, []uuid.UUID{u1, u2, u1})
+	s, err := svc.CreateGroupSession(ctx, []uuid.UUID{u1, u2, u1}, "")
 	if err != nil {
 		t.Fatalf("CreateGroupSession: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestListSessionsBatchesMemberLoading(t *testing.T) {
 
 func TestListSessionsLoadsCurrentGroupMembers(t *testing.T) {
 	svc, chats, u1, u2, _ := newGroupTestSvc()
-	session, err := svc.CreateGroupSession(context.Background(), []uuid.UUID{u1, u2})
+	session, err := svc.CreateGroupSession(context.Background(), []uuid.UUID{u1, u2}, "")
 	if err != nil {
 		t.Fatalf("CreateGroupSession() error = %v", err)
 	}
@@ -392,7 +392,7 @@ func TestCreateGroupSessionRejectsInvalidMemberBeforePersistence(t *testing.T) {
 			}}
 			svc := New(chats, agents, nil, resolver, "http://unused")
 
-			session, err := svc.CreateGroupSession(context.Background(), tt.uids)
+			session, err := svc.CreateGroupSession(context.Background(), tt.uids, "")
 
 			if err == nil {
 				t.Fatalf("CreateGroupSession() error = nil, want %s", tt.wantCode)
@@ -419,7 +419,7 @@ func TestCreateGroupSessionRejectsInvalidMemberBeforePersistence(t *testing.T) {
 func TestAddAndRemoveMember(t *testing.T) {
 	svc, chats, u1, u2, _ := newGroupTestSvc()
 	ctx := context.Background()
-	s, _ := svc.CreateGroupSession(ctx, []uuid.UUID{u1, u2})
+	s, _ := svc.CreateGroupSession(ctx, []uuid.UUID{u1, u2}, "")
 
 	// 重复邀请静默跳过
 	if err := svc.AddMembers(ctx, s.UUID, []uuid.UUID{u1}); err != nil {
@@ -462,10 +462,35 @@ func TestUpdateSessionTitleValidation(t *testing.T) {
 	if err := svc.UpdateSessionTitle(ctx, s.UUID, "   "); err == nil {
 		t.Fatal("空白标题应报错")
 	}
-	if err := svc.UpdateSessionTitle(ctx, s.UUID, strings.Repeat("长", 31)); err == nil {
-		t.Fatal("超30字标题应报错")
+	if err := svc.UpdateSessionTitle(ctx, s.UUID, strings.Repeat("长", 201)); err == nil {
+		t.Fatal("超200字标题应报错")
+	}
+	if err := svc.UpdateSessionTitle(ctx, s.UUID, strings.Repeat("丹", 200)); err != nil {
+		t.Fatalf("200 字标题应成功: %v", err)
 	}
 	if err := svc.UpdateSessionTitle(ctx, s.UUID, "丹道夜话"); err != nil {
 		t.Fatalf("合法标题: %v", err)
+	}
+}
+
+func TestCreateGroupSessionPersistsOptionalTitleAtomically(t *testing.T) {
+	svc, chats, u1, u2, _ := newGroupTestSvc()
+	session, err := svc.CreateGroupSession(context.Background(), []uuid.UUID{u1, u2}, "  丹道夜话  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Title != "丹道夜话" || chats.sessions[session.UUID.String()].Title != "丹道夜话" {
+		t.Fatalf("title not persisted atomically: %+v", session)
+	}
+}
+
+func TestCreateGroupSessionRejectsOverlongTitleBeforePersistence(t *testing.T) {
+	svc, chats, u1, u2, _ := newGroupTestSvc()
+	_, err := svc.CreateGroupSession(context.Background(), []uuid.UUID{u1, u2}, strings.Repeat("丹", 201))
+	if err == nil || err.GetCode() != "service.chat.title_invalid" {
+		t.Fatalf("error = %v", err)
+	}
+	if chats.groupSaveCalls != 0 || len(chats.sessions) != 0 {
+		t.Fatal("invalid title must not persist session or members")
 	}
 }
