@@ -869,8 +869,9 @@ describe('AgentDetailPage', () => {
       expect(td.updateMemory).toHaveBeenCalledWith(AGENT_ID, MEMORY_A_ID, { pinned: false })
     })
 
-    it('删除:confirm 通过后调用 deleteAgentMemory 并从列表移除', async () => {
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    // 删除/清空走应用内确认框(WKWebView 不实现 window.confirm,桌面端
+    // confirm 恒 false 会让操作静默失效;对话框文案来自 memory namespace)
+    it('删除:应用内确认后调用 deleteAgentMemory 并从列表移除', async () => {
       td.fetchMemories.mockResolvedValue([memoryA])
       td.deleteMemory.mockResolvedValue(undefined)
       setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
@@ -878,14 +879,27 @@ describe('AgentDetailPage', () => {
       renderPage()
       await screen.findByText('用户喜欢围棋')
       await user.click(screen.getByRole('button', { name: '删除' }))
-      expect(confirmSpy).toHaveBeenCalledWith('确定删除这条记忆吗？删除后不可恢复。')
+      const dialog = screen.getByRole('alertdialog')
+      expect(dialog).toHaveTextContent('确定删除这条记忆吗？删除后不可恢复。')
+      await user.click(within(dialog).getByRole('button', { name: '确认删除' }))
       expect(td.deleteMemory).toHaveBeenCalledWith(AGENT_ID, MEMORY_A_ID)
       await waitFor(() => expect(screen.queryByText('用户喜欢围棋')).toBeNull())
-      confirmSpy.mockRestore()
     })
 
-    it('清空:confirm 通过后调用 clearAgentMemories 并清空列表', async () => {
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    it('删除:取消则保留记忆且零 API', async () => {
+      td.fetchMemories.mockResolvedValue([memoryA])
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('用户喜欢围棋')
+      await user.click(screen.getByRole('button', { name: '删除' }))
+      await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '取消' }))
+      expect(td.deleteMemory).not.toHaveBeenCalled()
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+      expect(screen.getByText('用户喜欢围棋')).toBeInTheDocument()
+    })
+
+    it('清空:应用内确认后调用 clearAgentMemories 并清空列表', async () => {
       td.fetchMemories.mockResolvedValue([memoryA])
       td.clearMemories.mockResolvedValue(undefined)
       setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
@@ -893,10 +907,11 @@ describe('AgentDetailPage', () => {
       renderPage()
       await screen.findByText('用户喜欢围棋')
       await user.click(screen.getByRole('button', { name: '清空记忆' }))
-      expect(confirmSpy).toHaveBeenCalledWith('确定清空该道人的全部记忆吗？此操作不可逆。')
+      const dialog = screen.getByRole('alertdialog')
+      expect(dialog).toHaveTextContent('确定清空该道人的全部记忆吗？此操作不可逆。')
+      await user.click(within(dialog).getByRole('button', { name: '确认清空' }))
       expect(td.clearMemories).toHaveBeenCalledWith(AGENT_ID)
       await waitFor(() => expect(screen.queryByText('用户喜欢围棋')).toBeNull())
-      confirmSpy.mockRestore()
     })
   })
 })

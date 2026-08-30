@@ -47,6 +47,7 @@ import { pillDetailHref } from '@/lib/entity-detail-route'
 import { AgentPillComposer } from '@/components/agent-pill-composer'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ApiError } from '@/services/api'
 import * as agentService from '@/services/agentService'
 import * as modelService from '@/services/modelService'
@@ -113,6 +114,9 @@ function LocalMemorySection({ agent }: { agent: AgentDetail }) {
   const [clearing, setClearing] = useState(false)
   const [notice, setNotice] = useState('')
   const [formError, setFormError] = useState('')
+  // 应用内确认框(WKWebView 不实现 window.confirm,桌面端 confirm 恒 false)
+  const [confirmDelete, setConfirmDelete] = useState<AgentMemory | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
 
   /** kind 标签文案(键名映射见 MEMORY_KIND_LABEL_KEY) */
   const kindLabel = (kind: MemoryKind): string => tMem(MEMORY_KIND_LABEL_KEY[kind])
@@ -163,9 +167,12 @@ function LocalMemorySection({ agent }: { agent: AgentDetail }) {
     }
   }
 
-  /** 删除单条(物理删除,二次确认) */
-  const handleDelete = async (memory: AgentMemory) => {
-    if (!window.confirm(tMem('delete_confirm'))) return
+  /** 删除单条(物理删除,应用内二次确认) */
+  const handleDelete = (memory: AgentMemory) => {
+    setConfirmDelete(memory)
+  }
+
+  const doDeleteMemory = async (memory: AgentMemory) => {
     setNotice('')
     try {
       await agentService.deleteAgentMemory(agent.id, memory.uuid)
@@ -176,9 +183,12 @@ function LocalMemorySection({ agent }: { agent: AgentDetail }) {
     }
   }
 
-  /** 清空全部(物理删除,二次确认) */
-  const handleClear = async () => {
-    if (!window.confirm(tMem('clear_confirm'))) return
+  /** 清空全部(物理删除,应用内二次确认) */
+  const handleClear = () => {
+    setConfirmClear(true)
+  }
+
+  const doClearMemories = async () => {
     setClearing(true)
     setNotice('')
     try {
@@ -421,6 +431,35 @@ function LocalMemorySection({ agent }: { agent: AgentDetail }) {
             <p role="status" className="mt-3 text-xs text-sage">
               {notice}
             </p>
+          )}
+
+          {/* 删除/清空确认(应用内对话框,web/桌面行为一致) */}
+          {confirmDelete && (
+            <ConfirmDialog
+              description={tMem('delete_confirm')}
+              confirmLabel={tMem('delete_confirm_btn')}
+              cancelLabel={tMem('cancel_edit')}
+              destructive
+              onConfirm={() => {
+                const memory = confirmDelete
+                setConfirmDelete(null)
+                void doDeleteMemory(memory)
+              }}
+              onCancel={() => setConfirmDelete(null)}
+            />
+          )}
+          {confirmClear && (
+            <ConfirmDialog
+              description={tMem('clear_confirm')}
+              confirmLabel={tMem('clear_confirm_btn')}
+              cancelLabel={tMem('cancel_edit')}
+              destructive
+              onConfirm={() => {
+                setConfirmClear(false)
+                void doClearMemories()
+              }}
+              onCancel={() => setConfirmClear(false)}
+            />
           )}
         </>
       )}
