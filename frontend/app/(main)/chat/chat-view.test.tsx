@@ -535,6 +535,67 @@ describe('chat launch surfaces', () => {
     })
   })
 
+  it('updates the group topic in the header and the directory after a successful rename', async () => {
+    const user = userEvent.setup()
+    const groupWithTitle = {
+      ...groupSession,
+      title: '群聊会话乙',
+      members: [
+        { agent_id: 'agent-1', name: 'Agent One', proactivity: 50 },
+        { agent_id: 'agent-2', name: 'Agent Two', proactivity: 50 },
+      ],
+    }
+    testDoubles.chatState.sessions = [groupWithTitle]
+    testDoubles.chatState.currentSession = groupWithTitle
+    testDoubles.renameSession.mockResolvedValue({ ...groupWithTitle, title: '新主题' })
+    const view = render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'rename' }))
+    await user.clear(screen.getByLabelText('renameLabel'))
+    await user.type(screen.getByLabelText('renameLabel'), '新主题')
+    await user.click(screen.getByRole('button', { name: 'saveRename' }))
+
+    // 真实运行里 ChatContext 的 SET_SESSION_TITLE 同步 sessions + currentSession;
+    // mock 下模拟同样更新,并用 rerender 触发一次消费方重渲染
+    testDoubles.chatState.currentSession = { ...groupWithTitle, title: '新主题' }
+    testDoubles.chatState.sessions = [{ ...groupWithTitle, title: '新主题' }]
+    view.rerender(<ChatView />)
+
+    expect(screen.queryByLabelText('renameLabel')).not.toBeInTheDocument()
+    // 页头主题与目录条目同时更新
+    expect(screen.getAllByText('新主题').length).toBeGreaterThan(1)
+    expect(testDoubles.renameSession).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222',
+      '新主题',
+    )
+  })
+
+  it('keeps the old topic in header and directory when a rename fails', async () => {
+    const user = userEvent.setup()
+    const groupWithTitle = {
+      ...groupSession,
+      title: '群聊会话乙',
+      members: [
+        { agent_id: 'agent-1', name: 'Agent One', proactivity: 50 },
+        { agent_id: 'agent-2', name: 'Agent Two', proactivity: 50 },
+      ],
+    }
+    testDoubles.chatState.sessions = [groupWithTitle]
+    testDoubles.chatState.currentSession = groupWithTitle
+    testDoubles.renameSession.mockResolvedValue(null)
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'rename' }))
+    await user.clear(screen.getByLabelText('renameLabel'))
+    await user.type(screen.getByLabelText('renameLabel'), '仍要保存的主题')
+    await user.click(screen.getByRole('button', { name: 'saveRename' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('renameError')
+    expect(screen.getByLabelText('renameLabel')).toHaveValue('仍要保存的主题')
+    // 页头与目录仍是旧标题
+    expect(screen.getAllByText('群聊会话乙').length).toBeGreaterThan(0)
+  })
+
   it('shows the shared launch failure and retry on agent detail', async () => {
     const user = userEvent.setup()
     testDoubles.createSession.mockRejectedValueOnce(new ApiError(

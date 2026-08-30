@@ -912,6 +912,15 @@
       "groupMeta": "{count} 位道人",
       "emptySingle": "暂无对谈",
       "emptyGroup": "暂无围炉论道"
+    },
+    "topic": {
+      "rename": "修改主题",
+      "renameLabel": "围炉主题",
+      "saveRename": "保存",
+      "cancelRename": "取消",
+      "renameError": "重命名失败,请重试",
+      "emptyError": "主题不能为空",
+      "tooLongError": "主题最长 200 字"
     }
   },
   "mention": {

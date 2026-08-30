@@ -40,6 +40,7 @@ import { useChat } from '@/contexts/ChatContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { ChatMessage } from '@/components/chat-message'
 import { ConversationDirectory } from '@/components/chat/conversation-directory'
+import { GroupTopicEditor } from '@/components/chat/group-topic-editor'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { GroupMembersPanel } from '@/components/group-members-panel'
 import { TopTabs } from '@/components/interaction/top-tabs'
@@ -524,9 +525,11 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
                 <Users className="w-4 h-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {currentSession.title}
-                </p>
+                <GroupTopicEditor
+                  sessionId={currentSession.id}
+                  title={currentSession.title || t('directory.untitledGroup')}
+                  onRename={renameSession}
+                />
                 <p className="text-[10px] text-muted-foreground">
                   围炉论道 · {currentSession.members?.length || 0} 位道人
                 </p>

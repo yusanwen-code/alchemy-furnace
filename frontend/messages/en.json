@@ -913,6 +913,15 @@
       "groupMeta": "{count} daoists",
       "emptySingle": "No solo talks yet",
       "emptyGroup": "No group discussions yet"
+    },
+    "topic": {
+      "rename": "Edit topic",
+      "renameLabel": "Discussion topic",
+      "saveRename": "Save",
+      "cancelRename": "Cancel",
+      "renameError": "Rename failed. Please try again.",
+      "emptyError": "Topic cannot be empty",
+      "tooLongError": "Topic must be at most 200 characters"
     }
   },
   "mention": {
