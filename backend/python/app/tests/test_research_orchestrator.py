@@ -152,3 +152,31 @@ def test_all_unavailable_is_not_reported_as_insufficient_content():
             global_providers=[unavailable_provider("wikipedia")],
         ).collect("人物", "目标描述", "zh-CN")
     assert captured.value.code == "research_provider_unavailable"
+
+
+def test_global_lane_accepts_wikipedia_limited_without_calling_ddg():
+    wikipedia = StubProvider(
+        "wikipedia",
+        documents=[_document(0, "wikipedia.org", 2200)],
+    )
+    ddg = FailIfCalled()
+
+    report = ResearchOrchestrator(
+        domestic=[],
+        global_providers=[wikipedia, ddg],
+    ).collect("Paul Graham", "extract startup decisions", "en")
+
+    assert report.evidence_level == EvidenceLevel.LIMITED
+
+
+def test_global_lane_with_baike_limited_pursues_standard_via_wikipedia():
+    wikipedia = StubProvider(
+        "wikipedia",
+        documents=[_document(0, "wikipedia.org", 2200)],
+    )
+    report = ResearchOrchestrator(
+        domestic=[fixed_baike(length=2200)],
+        global_providers=[wikipedia],
+    ).collect("人物", "目标描述", "zh-CN")
+
+    assert report.evidence_level == EvidenceLevel.STANDARD

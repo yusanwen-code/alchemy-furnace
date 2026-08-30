@@ -60,3 +60,52 @@ def test_single_long_authoritative_document_is_limited_not_insufficient(fake_fet
     report = provider.collect("某人", "提炼决策方式", "zh-CN")
     assert report.evidence_level == EvidenceLevel.LIMITED
     assert len(report.documents) == 1
+
+
+def test_provider_honors_max_documents(fake_fetcher):
+    candidates = [
+        SearchCandidate(f"doc-{i}", f"https://example{i}.com/doc")
+        for i in range(5)
+    ]
+    for item in candidates:
+        fake_fetcher.add(item.url, "x" * 800)
+    provider = DuckDuckGoResearchProvider(
+        max_documents=2,
+        sleep=lambda _: None,
+        discovery=_FakeDiscovery(candidates),
+        fetcher=fake_fetcher,
+    )
+
+    report = provider.collect("人物", "提炼决策方式", "zh-CN")
+
+    assert len(report.documents) == 2
+
+
+class _ExplodingFetcher:
+    """只有第一篇可抓；后续任何 URL 被访问都会失败测试。"""
+
+    def __init__(self, ok_url, ok_excerpt):
+        self.ok_url = ok_url
+        self.ok_excerpt = ok_excerpt
+
+    def fetch(self, url):
+        if url == self.ok_url:
+            from app.services.web_document_fetcher import FetchResult
+            return FetchResult(url, self.ok_excerpt, "ok", "")
+        raise AssertionError(f"不应抓取 {url}")
+
+
+def test_provider_stops_after_limited_evidence():
+    first = SearchCandidate("first", "https://example1.com/doc")
+    second = SearchCandidate("second", "https://example2.com/doc")
+    fetcher = _ExplodingFetcher(first.url, "x" * 2000)
+    provider = DuckDuckGoResearchProvider(
+        sleep=lambda _: None,
+        discovery=_FakeDiscovery([first, second]),
+        fetcher=fetcher,
+    )
+
+    report = provider.collect("人物", "提炼决策方式", "zh-CN")
+
+    assert len(report.documents) == 1
+    assert report.evidence_level == EvidenceLevel.LIMITED

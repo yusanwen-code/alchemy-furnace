@@ -219,13 +219,22 @@ class ResearchOrchestrator(ResearchProvider):
     ) -> list[ResearchAttempt]:
         added: list[ResearchAttempt] = []
         deadline = self.clock.now() + self.global_budget_seconds
+        # 进入全球 lane 前是否已有可用证据：
+        # - 已有（如百度 limited）：允许继续追 standard；
+        # - 没有：第一个 provider 达到 limited 即可停止，不再无条件访问 DDG。
+        started_with_evidence = (
+            classify_evidence(documents) is not EvidenceLevel.INSUFFICIENT
+        )
         for provider in self.global_providers:
             if self.clock.now() >= deadline:
                 break
             added.extend(
                 self._run_provider(provider, subject, brief, locale, credentials, attempts, documents)
             )
-            if classify_evidence(documents) is EvidenceLevel.STANDARD:
+            level = classify_evidence(documents)
+            if level is EvidenceLevel.STANDARD:
+                break
+            if not started_with_evidence and level is EvidenceLevel.LIMITED:
                 break
         return added
 

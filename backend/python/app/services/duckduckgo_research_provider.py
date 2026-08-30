@@ -24,6 +24,7 @@ import httpx
 
 from app.services.research_orchestrator import classify_evidence
 from app.services.research_provider import (
+    EvidenceLevel,
     ResearchAttempt,
     ResearchCredentials,
     ResearchDocument,
@@ -175,7 +176,7 @@ class DuckDuckGoResearchProvider(ResearchProvider):
     def __init__(
         self,
         timeout: float = 4.0,
-        max_documents: int = 10,
+        max_documents: int = 3,
         sleep=_real_sleep,
         discovery=None,
         fetcher=None,
@@ -214,11 +215,16 @@ class DuckDuckGoResearchProvider(ResearchProvider):
         documents: list[ResearchDocument] = []
         failures: dict[str, int] = {}
         for dimension, candidate in picked:
+            if len(documents) >= self.max_documents:
+                break
             result = self.fetcher.fetch(candidate.url)
             if result.status == "ok" and result.excerpt:
                 documents.append(
                     ResearchDocument(candidate.title, result.url, result.excerpt, dimension)
                 )
+                # 已有可用证据（limited/standard）立即停止，不再无界抓取候选
+                if classify_evidence(documents) is not EvidenceLevel.INSUFFICIENT:
+                    break
             else:
                 failures[result.reason] = failures.get(result.reason, 0) + 1
         if failures and attempts:

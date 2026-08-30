@@ -16,8 +16,8 @@ OpenAI 兼容模型提炼心智模型、决策启发式、表达 DNA、价值观
 
 ## 资料源与失败语义
 
-收集由 `ResearchOrchestrator` 编排：zh locale 先走国内 lane，证据未达 standard 时在国际
-6 秒总预算内补全球 lane；非 zh 先国际、subject 含中文时补百度百科。决策只看 locale 与
+收集由 `ResearchOrchestrator` 编排：zh locale 先走国内 lane，证据未达 standard 时补全球
+lane；非 zh 先国际、subject 含中文时补百度百科。决策只看 locale 与
 返回协议，不做 IP/地理/语言归类。
 
 - **百度百科直达页**：中文免密基线。只访问 `baike.baidu.com/item/{subject}`，要求最终 URL
@@ -30,9 +30,14 @@ OpenAI 兼容模型提炼心智模型、决策启发式、表达 DNA、价值观
 - **DuckDuckGo HTML**：尽力型补充。202/429 或 anomaly 挑战页记 `blocked`（
   `research_search_blocked`），不会把挑战页当结果。
 
-超时与熔断：国内抓取 3s、国际提供者 4s、国际总预算 6s；任一提供者一次
+超时与熔断：国内抓取 3s、国际提供者 4s；6 秒是启动下一个 provider 前的预算（provider
+开始后的单个请求由各自 timeout 约束，同步 HTTP 请求无法被可靠硬取消）。任一提供者一次
 `unavailable/blocked` 即熔断 600s（测试用 FakeClock 注入）。国内有证据且国际全部不可达时，
 草稿仍可生成并追加 warning「国际资料源当前不可达，草稿仅基于国内公开资料」。
+
+全球 lane 早停：进入时无可用证据（insufficient）则第一个 provider 达到 limited 即停止，
+Wikipedia limited 可直接生成草稿；已有国内 limited 时允许继续追 standard（跨域合并）。
+DDG 默认最多采纳 3 篇文档，达到 limited 立即停止，不再无界抓取候选网页。
 
 证据等级：`standard`（≥4000 字符、≥2 文档、≥2 域名）/ `limited`（≥1500 字符、≥1 文档）/
 `insufficient`。`limited` 草稿允许生成，但前端必须提示人工核对，模型也被要求只输出证据
