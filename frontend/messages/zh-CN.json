@@ -186,8 +186,9 @@
       "title": "论道旧录",
       "count": "{count} 场 · 在录",
       "fallbackTitle": "未命名论道",
-      "fallbackAgent": "道人 #{id}",
-      "empty": "尚无论道旧录"
+      "empty": "尚无论道旧录",
+      "unknownAgent": "未知道人",
+      "groupIdentity": "围炉论道 · {count} 位道人"
     },
     "closer": {
       "title": "丹成 · 开炉",

@@ -283,10 +283,13 @@ export interface ChatSession {
   type?: 'single' | 'group'
   /** single: 所属道人 UUID;group 留空 */
   agent_id: string
+  /** single: 服务端预加载的真实道号;group 为空串 */
+  agent_name?: string
+  /** single: 服务端预加载的道人头像;group 为空串 */
+  agent_avatar?: string
   title?: string
   created_at: string
   updated_at: string
-  agent?: Agent
   /** 会话加载响应中的当前道人状态，用于历史只读提示。 */
   agent_status?: AgentStatus
   /** group: 群成员列表(按发言顺序) */

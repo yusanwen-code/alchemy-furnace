@@ -8,9 +8,9 @@ import { useLocale, useTranslations } from 'next-intl'
 import { usePill } from '@/contexts/PillContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
-import { chatSessionHref } from '@/lib/chat-route'
 import { pillDetailHref } from '@/lib/entity-detail-route'
-import { FloatCard, CoinIcon, SealDot } from '@/components/alchemy/float-card'
+import { RecentSessionList } from '@/components/home/recent-session-list'
+import { FloatCard, CoinIcon } from '@/components/alchemy/float-card'
 import { BaguaFurnace } from '@/components/alchemy/bagua-furnace'
 import type { FurnaceWindow } from '@/components/alchemy/bagua-furnace-fire'
 import { formatDateTime } from '@/utils/format'
@@ -100,7 +100,7 @@ export default function HomePage() {
 
   const spotlight = pills[0]
   const recentPills = pills.slice(0, 4)
-  const recentSessions = sessions.slice(0, 4)
+  const sessions = chatState.sessions
 
   return (
     <div className="pb-24">
@@ -327,37 +327,7 @@ export default function HomePage() {
                 </span>
               </div>
 
-              <ol className="relative flex flex-col gap-6 pl-4">
-                <span
-                  aria-hidden
-                  className="absolute bottom-2 left-[3px] top-2 w-px bg-gradient-to-b from-gold/50 via-border to-transparent"
-                />
-                {recentSessions.map((s) => (
-                  <li key={s.id} className="relative">
-                    <span className="absolute -left-4 top-1.5" aria-hidden>
-                      <SealDot />
-                    </span>
-                    <Link href={chatSessionHref(s.id)} className="group block">
-                      <div className="flex items-center gap-2">
-                        <p className="font-serif text-sm font-bold text-foreground transition-colors group-hover:text-primary">
-                          {s.title || tSessions('fallbackTitle')}
-                        </p>
-                        <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-sage">
-                          {s.agent?.name || tSessions('fallbackAgent', { id: s.agent_id })}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        {formatDateTime(s.updated_at || s.created_at)}
-                      </p>
-                    </Link>
-                  </li>
-                ))}
-                {recentSessions.length === 0 && (
-                  <li className="py-2 text-sm text-muted-foreground">
-                    {tSessions('empty')}
-                  </li>
-                )}
-              </ol>
+              <RecentSessionList sessions={sessions} />
             </div>
           </FloatCard>
 

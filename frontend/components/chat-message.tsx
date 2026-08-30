@@ -48,6 +48,10 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
   const { profile: userProfile } = useUser()
   const { state: agentState } = useAgent()
   const { state: chatState } = useChat()
+  const currentSession = chatState.currentSession
+  // 单聊会话身份兜底(群聊不得使用单聊的 session 身份;群聊 agent_name/agent_avatar 为空)
+  const sessionAgentName = currentSession && currentSession.type !== 'group' ? currentSession.agent_name : undefined
+  const sessionAgentAvatar = currentSession && currentSession.type !== 'group' ? currentSession.agent_avatar : undefined
 
   /**
    * 查找消息对应道人的完整档案(用于 popover 展示 personality / model_name / proactivity)
@@ -74,9 +78,20 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
       const fromSession = all.find(a => a.id === sessionAgentId)
       if (fromSession) return fromSession
     }
-    // 4) 会话或群成员数据足以生成简略档案，确保头像始终可点。
-    const sessionAgent = chatState.currentSession?.agent
-    if (sessionAgent && (!message.agent_id || sessionAgent.id === message.agent_id)) return sessionAgent
+    // 4) 当前会话新字段足以生成简略档案，确保头像始终可点。
+    const session = chatState.currentSession
+    if (session && session.type !== 'group' && session.agent_name && (!message.agent_id || session.agent_id === message.agent_id)) {
+      return {
+        id: session.agent_id,
+        name: session.agent_name,
+        avatar: session.agent_avatar,
+        personality: '',
+        model_name: '',
+        status: session.agent_status ?? 'active',
+        proactivity: 0,
+        created_at: session.updated_at || session.created_at,
+      }
+    }
     const member = members?.find(x => x.agent_id === message.agent_id)
     if (member) {
       return {
@@ -91,10 +106,10 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
       }
     }
     return null
-  }, [isUser, message.agent_id, message.agent_name, message.created_at, agentState.agents, chatState.currentSession, members])
+  }, [isUser, message.agent_id, message.agent_name, message.created_at, agentState.agents, chatState.currentSession?.agent_id, chatState.currentSession?.agent_name, chatState.currentSession?.agent_avatar, chatState.currentSession?.agent_status, members])
 
   const memberAvatar = members?.find(member => member.agent_id === message.agent_id)?.avatar
-  const avatarSrc = isUser ? userProfile?.avatar : (message.agent_avatar || agentProfile?.avatar || memberAvatar)
+  const avatarSrc = isUser ? userProfile?.avatar : (message.agent_avatar || agentProfile?.avatar || memberAvatar || sessionAgentAvatar)
 
   // Hook 必须在所有渲染分支中保持同序；通知条在档案数据解析后再提前返回。
   if (message.role === 'system' && !message.is_error) {
@@ -117,7 +132,7 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
       <button
         ref={avatarAnchorRef}
         type="button"
-        aria-label={isUser ? t('userLabel') : (message.agent_name || t('assistantLabel'))}
+        aria-label={isUser ? t('userLabel') : (message.agent_name || sessionAgentName || t('assistantLabel'))}
         onClick={() => setPopoverOpen(true)}
         className={`
           shrink-0 self-start
@@ -136,10 +151,10 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
         <EntityAvatar
           name={isUser
             ? (userProfile?.display_name || t('userLabel'))
-            : (message.agent_name || t('assistantLabel'))}
+            : (message.agent_name || sessionAgentName || t('assistantLabel'))}
           src={avatarSrc}
           size="sm"
-          fallback={isUser ? 'initial' : message.agent_name ? 'initial' : 'bot'}
+          fallback={isUser ? 'initial' : (message.agent_name || sessionAgentName) ? 'initial' : 'bot'}
         />
       </button>
 
@@ -159,7 +174,7 @@ export function ChatMessage({ message, streaming = false, members, onRetry }: Ch
         `}>
           {isUser
             ? (userProfile?.display_name || t('userLabel'))
-            : (message.agent_name || t('assistantLabel'))}
+            : (message.agent_name || sessionAgentName || t('assistantLabel'))}
         </span>
 
         {/* 消息气泡:block,宽由 max-w 控制,长内容自然换行 */}

@@ -186,8 +186,9 @@
       "title": "Past discourses",
       "count": "{count} sessions · recorded",
       "fallbackTitle": "Untitled discourse",
-      "fallbackAgent": "Daoist #{id}",
-      "empty": "No past discourses yet"
+      "empty": "No past discourses yet",
+      "unknownAgent": "Unknown daoist",
+      "groupIdentity": "Furnace circle · {count} daoists"
     },
     "closer": {
       "title": "Pill done · open the furnace",

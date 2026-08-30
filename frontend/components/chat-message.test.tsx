@@ -706,6 +706,29 @@ describe('recoverable chat history and streaming', () => {
     expect(within(userBtn).getByText('炼')).toBeInTheDocument()
   })
 
+  it('uses the session-level daoist identity for single chat when the agents list is empty', async () => {
+    doubles.agents = []
+    const sessionWithIdentity: ChatSession = {
+      ...singleSession,
+      agent_name: '真实道号',
+      agent_avatar: 'https://example.com/session-daoist.png',
+    }
+    doubles.listSessions.mockResolvedValue({ list: [sessionWithIdentity], total: 1 })
+    doubles.getSession.mockResolvedValue(sessionWithIdentity)
+    doubles.getMessages.mockResolvedValueOnce({
+      list: [{ id: 'historical', role: 'assistant', content: 'past wisdom', created_at: '2026-08-19T00:00:00Z' }],
+      total: 1,
+    })
+
+    renderSession(sessionWithIdentity.id)
+
+    expect(await screen.findByText('past wisdom')).toBeInTheDocument()
+    expect(screen.getByText('真实道号')).toBeInTheDocument()
+    expect(screen.queryByText('assistantLabel')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '真实道号' }).querySelector('img'))
+      .toHaveAttribute('src', 'https://example.com/session-daoist.png')
+  })
+
   it('does not mark a completed speaker incomplete when the next group speaker fails before a chunk', async () => {
     doubles.agents = [activeAgent('agent-a', 'Alpha'), activeAgent('agent-b', 'Beta')]
     doubles.listSessions.mockResolvedValue({ list: [groupSession], total: 1 })
