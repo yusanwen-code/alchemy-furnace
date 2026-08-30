@@ -29,6 +29,9 @@ jobs:
           bash -n scripts/lib/*.sh scripts/*.sh scripts/tests/*.sh
           python3 -m json.tool backend/go/wails.json >/dev/null
 
+      - name: Verify desktop visible-name contract
+        run: bash scripts/tests/desktop-name-contract-test.sh
+
       - name: Run runtime contract tests
         run: bash scripts/tests/runtime-common-test.sh
 

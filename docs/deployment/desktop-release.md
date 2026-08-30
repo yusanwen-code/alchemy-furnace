@@ -5,14 +5,37 @@ Desktop releases use one packaging chain locally and in GitHub Actions:
 1. Next.js exports static assets for Go embedding.
 2. `build-python-runtime.sh` builds a target-native, self-contained Python
    runtime and copies the engine source into it.
-3. Wails builds `AlchemyFurnace.app` or `AlchemyFurnace.exe` with release
-   metadata injected through Go linker flags.
+3. Wails builds the desktop app with release metadata injected through Go
+   linker flags.
 4. `ci-assemble.sh` installs the runtime, signs and packages the macOS bundle,
    or builds the Windows NSIS installer.
 5. The release job gates every asset through `scripts/verify-release-assets.sh`
    (5 platform binaries, `checksums.txt`, `release-manifest.json`), creates a
    draft Release, re-verifies the assets downloaded from the draft, and only
    then publishes.
+
+## Visible-name / technical-name contract
+
+All user-visible product names are fixed as `炼丹炉`; all ASCII names that
+scripts, the updater and existing user data depend on are fixed as
+`AlchemyFurnace`. The static contract is enforced by
+`scripts/tests/desktop-name-contract-test.sh` in CI and locally:
+
+| Role | Name | Mutable? |
+|------|------|----------|
+| Display name (window title, installer, shortcuts, tray) | `炼丹炉` | no |
+| Internal executable (`.exe` / macOS binary) | `AlchemyFurnace` | no |
+| macOS DMG bundle (new installs) | `炼丹炉.app` | no |
+| macOS update ZIP root directory | `AlchemyFurnace.app` | **never** — published updater versions hard-depend on it |
+| Data directory (user config) | `AlchemyFurnace` | no (rename loses user data) |
+| Bundle ID / single-instance lock | `com.alchemyfurnace.desktop` | no |
+| Windows install dir | `%LOCALAPPDATA%\Programs\AlchemyFurnace` | no |
+| Release assets (5 binaries) | `AlchemyFurnace-mac-arm64.dmg`, `AlchemyFurnace-mac-arm64.zip`, `AlchemyFurnace-mac-x64.dmg`, `AlchemyFurnace-mac-x64.zip`, `AlchemyFurnace-Setup.exe` | no |
+
+The updater accepts both `炼丹炉.app` and legacy `AlchemyFurnace.app` as the
+extracted ZIP root, but the release pipeline only ever publishes
+`AlchemyFurnace.app` inside update ZIPs (`scripts/ci-assemble.sh` builds the
+ZIP from a separate staging copy).
 
 ## Release integrity gate (draft flow)
 
