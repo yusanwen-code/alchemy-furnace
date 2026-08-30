@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -102,6 +102,66 @@ describe('ProfilePanel', () => {
     expect(td.updateProfile).toHaveBeenCalledWith({
       display_name: 'New Name',
       bio: 'Alchemist',
+      avatar: '',
+    })
+  })
+
+  it('previews and saves the user avatar', async () => {
+    td.userState.profile = { ...profileA, avatar: 'https://example.com/old.png' }
+    const user = userEvent.setup()
+    render(<ProfilePanel />)
+
+    expect(screen.getByRole('img', { name: 'avatarPreviewAlt' })).toHaveAttribute('src', 'https://example.com/old.png')
+
+    const input = screen.getByLabelText('avatarLabel')
+    await user.clear(input)
+    await user.type(input, 'https://example.com/new.png')
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    expect(td.updateProfile).toHaveBeenCalledWith({
+      display_name: 'Yao',
+      bio: 'Alchemist',
+      avatar: 'https://example.com/new.png',
+    })
+  })
+
+  it('blocks saving an invalid avatar without any API call', async () => {
+    td.userState.profile = profileA
+    const user = userEvent.setup()
+    render(<ProfilePanel />)
+
+    const input = screen.getByLabelText('avatarLabel')
+    await user.clear(input)
+    await user.type(input, 'javascript:alert(1)')
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    expect(td.updateProfile).not.toHaveBeenCalled()
+    expect(screen.getByText('avatarInvalid')).toBeInTheDocument()
+  })
+
+  it('falls back to the initial when the avatar image fails to load', () => {
+    td.userState.profile = { ...profileA, avatar: 'https://example.com/old.png' }
+    render(<ProfilePanel />)
+
+    fireEvent.error(screen.getByRole('img', { name: 'avatarPreviewAlt' }))
+
+    expect(screen.queryByRole('img', { name: 'avatarPreviewAlt' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('avatarPreviewAlt')).toHaveTextContent('Y')
+  })
+
+  it('clears the avatar by submitting an empty value', async () => {
+    td.userState.profile = { ...profileA, avatar: 'https://example.com/old.png' }
+    const user = userEvent.setup()
+    render(<ProfilePanel />)
+
+    const input = screen.getByLabelText('avatarLabel')
+    await user.clear(input)
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    expect(td.updateProfile).toHaveBeenCalledWith({
+      display_name: 'Yao',
+      bio: 'Alchemist',
+      avatar: '',
     })
   })
 })

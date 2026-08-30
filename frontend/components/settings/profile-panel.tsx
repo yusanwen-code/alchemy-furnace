@@ -9,6 +9,8 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { User, Check, AlertCircle, Loader2 } from 'lucide-react'
 import { useUser } from '@/contexts/UserContext'
+import { EntityAvatar } from '@/components/avatar/entity-avatar'
+import { avatarInputMaxLength, validateAvatarField } from '@/lib/avatar-validation'
 import type { UserProfile } from '@/services/userService'
 
 const DISPLAY_NAME_MAX = 32
@@ -20,6 +22,7 @@ export function ProfilePanel() {
 
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
+  const [avatar, setAvatar] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -38,6 +41,7 @@ export function ProfilePanel() {
     if (profile) {
       setDisplayName(profile.display_name || '')
       setBio(profile.bio || '')
+      setAvatar(profile.avatar || '')
     }
   }
 
@@ -56,8 +60,14 @@ export function ProfilePanel() {
       setValidationError(t('tooLong', { max: BIO_MAX }))
       return
     }
+    // 头像共用校验器:非法值(含超长)零 API,清空表示清除自定义头像
+    const avatarError = validateAvatarField(avatar)
+    if (avatarError) {
+      setValidationError(avatarError === 'tooLong' ? t('avatarTooLong') : t('avatarInvalid'))
+      return
+    }
     setSaving(true)
-    const updated = await updateProfile({ display_name: name, bio })
+    const updated = await updateProfile({ display_name: name, bio, avatar: avatar.trim() })
     setSaving(false)
     if (updated) {
       setSavedAt(Date.now())
@@ -132,6 +142,32 @@ export function ProfilePanel() {
             <span>{t('bioHint')}</span>
             <span className="tabular-nums">{bioCount} / {BIO_MAX}</span>
           </p>
+        </div>
+
+        {/* 头像 */}
+        <div>
+          <label htmlFor="profile-avatar" className="block text-xs font-medium text-foreground mb-1.5">
+            {t('avatarLabel')}
+          </label>
+          <div className="flex items-center gap-3">
+            <EntityAvatar
+              name={displayName.trim() || t('defaultUser')}
+              src={avatar}
+              size="lg"
+              shape="circle"
+              alt={t('avatarPreviewAlt')}
+            />
+            <input
+              id="profile-avatar"
+              type="text"
+              value={avatar}
+              onChange={event => setAvatar(event.target.value)}
+              placeholder={t('avatarPlaceholder')}
+              maxLength={avatarInputMaxLength(avatar)}
+              className="dao-input w-full"
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">{t('avatarHint')}</p>
         </div>
 
         {/* 校验/保存反馈 */}

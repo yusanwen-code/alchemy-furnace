@@ -11,42 +11,13 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { useAgent } from '@/contexts/AgentContext'
-import { normalizeAvatarUrl } from '@/lib/avatar-url'
+import { validateAvatarField } from '@/lib/avatar-validation'
 import { getAgent, replacePills, updateAgent } from '@/services/agentService'
 import type {
   AgentDetail,
   AgentEditorDraft,
   DistillationDraft,
 } from '@/services/types'
-
-/** 头像字段契约(与后端 handler/agent/avatar.go 校验口径一致) */
-export const avatarMaxURLLen = 2048
-export const avatarMaxDataURILen = 1_500_000
-
-/**
- * 头像字段校验(与后端 validateAvatar 对齐):
- * - 空/空白值合法(清空头像)
- * - 完整 http/https URL:长度 ≤2048
- * - data:image/(png|jpeg|webp|gif) 数据 URI:总长 ≤1_500_000
- * - 其余(相对路径 / javascript: 等 / 超长 / 非白名单 MIME)→ 'invalid' | 'tooLong'
- */
-export function validateAvatarField(value: string): 'invalid' | 'tooLong' | undefined {
-  const trimmed = value.trim()
-  if (!trimmed) return undefined
-  const normalized = normalizeAvatarUrl(trimmed)
-  if (!normalized) return 'invalid'
-  if (normalized.startsWith('data:image/')) {
-    if (normalized.length > avatarMaxDataURILen) return 'tooLong'
-    if (!/^data:image\/(png|jpeg|webp|gif);/.test(normalized)) return 'invalid'
-    return undefined
-  }
-  return normalized.length > avatarMaxURLLen ? 'tooLong' : undefined
-}
-
-/** 头像输入框动态 maxLength:data URI 按 1_500_000,其余(含空值)按 2048 */
-export function avatarInputMaxLength(value: string): number {
-  return value.startsWith('data:image/') ? avatarMaxDataURILen : avatarMaxURLLen
-}
 
 export type AgentEditorMode = 'readonly' | 'editing'
 export type AgentSaveStatus = 'idle' | 'submitting' | 'error'

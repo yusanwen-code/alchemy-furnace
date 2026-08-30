@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
 import { AgentCard } from '@/components/agent-card'
-import { avatarInputMaxLength, validateAvatarField } from '@/hooks/use-agent-editor-flow'
+import { avatarInputMaxLength, validateAvatarField } from '@/lib/avatar-validation'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
 import type { AgentListParams, AgentStatus } from '@/services/types'
