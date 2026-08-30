@@ -30,6 +30,47 @@ BeforeAll {
     } finally { $fs.Dispose() }
   }
 
+  # 生成带完整 PE32+ Optional Header 的夹具(供 Subsystem 解析测试):
+  # Subsystem 字段位于 Optional Header 起点 +0x44, 与 Get-PeSubsystem 读法一致
+  function New-TestPeFile {
+    param([string]$Path, [uint16]$Machine, [uint16]$Subsystem)
+    $fs = [System.IO.File]::Create($Path)
+    try {
+      $bw = New-Object System.IO.BinaryWriter($fs)
+      $bw.Write([byte]0x4D); $bw.Write([byte]0x5A)      # 'MZ'
+      $bw.BaseStream.Position = 0x3C
+      $bw.Write([uint32]0x80)                           # e_lfanew
+      $bw.BaseStream.Position = 0x80
+      $bw.Write([uint32]0x00004550)                     # 'PE\0\0'
+      $bw.Write([uint16]$Machine)                       # COFF Machine
+      $bw.Write([uint16]0)                              # NumberOfSections
+      $bw.Write([uint16]0x00F0)                         # SizeOfOptionalHeader (PE32+)
+      $bw.Write([uint16]0)                              # Characteristics
+      $bw.Write([uint16]0x20B)                          # Optional Magic (PE32+)
+      $bw.Write([byte]0); $bw.Write([byte]0)            # linker versions
+      $bw.Write([uint32]0)                              # SizeOfCode
+      $bw.Write([uint32]0)                              # SizeOfInitializedData
+      $bw.Write([uint32]0)                              # SizeOfUninitializedData
+      $bw.Write([uint32]0)                              # AddressOfEntryPoint
+      $bw.Write([uint32]0)                              # BaseOfCode
+      $bw.Write([uint64]0)                              # ImageBase
+      $bw.Write([uint32]0)                              # SectionAlignment
+      $bw.Write([uint32]0)                              # FileAlignment
+      $bw.Write([uint16]0)                              # MajorOperatingSystemVersion
+      $bw.Write([uint16]0)                              # MinorOperatingSystemVersion
+      $bw.Write([uint16]0)                              # MajorImageVersion
+      $bw.Write([uint16]0)                              # MinorImageVersion
+      $bw.Write([uint16]0)                              # MajorSubsystemVersion
+      $bw.Write([uint16]0)                              # MinorSubsystemVersion
+      $bw.Write([uint32]0)                              # Win32VersionValue
+      $bw.Write([uint32]0)                              # SizeOfImage
+      $bw.Write([uint32]0)                              # SizeOfHeaders
+      $bw.Write([uint32]0)                              # CheckSum
+      $bw.Write([uint16]$Subsystem)                     # Subsystem @ +0x44
+      $bw.Flush()
+    } finally { $fs.Dispose() }
+  }
+
   # 构造与 ci-assemble.sh 一致的包布局:
   #   <root>/AlchemyFurnace.exe
   #   <root>/runtime/python.exe
@@ -70,6 +111,26 @@ Describe 'verify-windows-package.ps1 架构解析' {
     New-FakePe -Path $x86 -Machine 0x014C
     Get-PeMachine $x64 | Should -Be 0x8664
     Get-PeMachine $x86 | Should -Be 0x014C
+  }
+}
+
+Describe 'verify-windows-package.ps1 PE Subsystem 契约' {
+  It '读取 Windows GUI subsystem 2' {
+    $path = Join-Path $script:FixtureRoot 'subsystem-gui.exe'
+    New-TestPeFile -Path $path -Machine 0x8664 -Subsystem 2
+    Get-PeSubsystem $path | Should -Be 2
+  }
+
+  It '读取 Console subsystem 3(区分桌面 GUI 与 python 控制台)' {
+    $path = Join-Path $script:FixtureRoot 'subsystem-console.exe'
+    New-TestPeFile -Path $path -Machine 0x8664 -Subsystem 3
+    Get-PeSubsystem $path | Should -Be 3
+  }
+
+  It '非 PE 文件必须抛错而非返回误判' {
+    $path = Join-Path $script:FixtureRoot 'not-pe.bin'
+    Set-Content -Path $path -Value 'plain text' -Encoding ASCII
+    { Get-PeSubsystem $path } | Should -Throw
   }
 }
 
