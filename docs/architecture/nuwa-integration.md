@@ -71,6 +71,9 @@ cd backend/python
 .venv/bin/pytest -q -m network_global app/tests/test_distillation_research_integration.py # Wikipedia/DDG
 ```
 
-CI 不要求公网成功；中国大陆发布前必须执行 `network_cn`，具备国际网络的发布环境再执行
-`network_global`。用例只断言知名人物得到 `standard/limited` 或有明确 provider 状态，
-绝不接受无诊断的空列表。
+CI 不要求公网成功；两条 smoke 是发布门禁：
+
+- `network_cn` 是中国大陆发布前门禁，必须取得百度百科有效证据；
+- `network_global` 在具备国际网络的 runner 上执行，必须取得 Wikipedia/DDG 有效证据；
+- 明确错误状态（`blocked`/`unavailable`/`empty`）只用于诊断，不再算成功；
+- 外部站点临时不可用时门禁失败是预期信号，不得改回宽松 OR 断言。

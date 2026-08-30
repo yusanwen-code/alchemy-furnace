@@ -144,7 +144,7 @@ from app.services.web_document_fetcher import FetchResult
 
 
 def pytest_configure(config):
-    """注册默认不运行的联网 smoke 标记（中国大陆发布前跑 network_cn）。"""
+    """注册默认不运行的联网 smoke 标记（发布门禁：network_cn 中国区、network_global 国际 runner）。"""
     config.addinivalue_line(
         "markers", "network_cn: 联网 smoke: 百度百科/千帆可达性（默认不运行）"
     )

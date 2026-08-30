@@ -164,8 +164,8 @@ def _live_orchestrator(with_global: bool) -> ResearchOrchestrator:
 
 
 @pytest.mark.network_cn
-def test_network_cn_baike_produces_evidence_or_explicit_status():
-    """百度百科（+可选千帆）：知名人物要么得到 limited/standard，要么有明确 provider 状态。"""
+def test_network_cn_baike_requires_real_evidence():
+    """百度百科（+可选千帆）：知名中文主体必须取得至少一篇有效证据，错误状态不再算成功。"""
     orchestrator = _live_orchestrator(with_global=False)
     report = orchestrator.collect_report_without_raising(
         "保罗·格雷厄姆", "提炼创业判断方式", "zh-CN"
@@ -173,12 +173,19 @@ def test_network_cn_baike_produces_evidence_or_explicit_status():
     assert report.evidence_level in {
         EvidenceLevel.STANDARD,
         EvidenceLevel.LIMITED,
-    } or any(a.status not in {"", "empty"} for a in report.attempts)
+    }
+    assert report.documents
+    assert any(
+        attempt.provider == "baidu_baike"
+        and attempt.status == "ok"
+        and attempt.accepted >= 1
+        for attempt in report.attempts
+    )
 
 
 @pytest.mark.network_global
-def test_network_global_wikipedia_or_ddg_produces_evidence_or_explicit_status():
-    """Wikipedia/DDG：知名人物要么得到 limited/standard，要么有明确 provider 状态。"""
+def test_network_global_requires_real_evidence():
+    """Wikipedia/DDG：知名英文主体必须取得至少一篇有效证据，错误状态不再算成功。"""
     orchestrator = _live_orchestrator(with_global=True)
     report = orchestrator.collect_report_without_raising(
         "Paul Graham", "提炼创业判断方式", "en"
@@ -186,4 +193,10 @@ def test_network_global_wikipedia_or_ddg_produces_evidence_or_explicit_status():
     assert report.evidence_level in {
         EvidenceLevel.STANDARD,
         EvidenceLevel.LIMITED,
-    } or any(a.status not in {"", "empty"} for a in report.attempts)
+    }
+    assert report.documents
+    assert any(
+        attempt.status == "ok" and attempt.accepted >= 1
+        for attempt in report.attempts
+        if attempt.provider in {"wikipedia", "duckduckgo"}
+    )
