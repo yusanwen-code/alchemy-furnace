@@ -13,6 +13,7 @@ require (
 	github.com/wailsapp/wails/v2 v2.14.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/mod v0.39.0
+	golang.org/x/sys v0.46.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.10
@@ -89,7 +90,6 @@ require (
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
