@@ -11,9 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alchemy-furnace/server/internal/behavior"
 	concretedao "github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/engineendpoint"
 	"github.com/alchemy-furnace/server/internal/errors"
+	"github.com/alchemy-furnace/server/internal/interface/service"
+	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
@@ -723,5 +726,137 @@ func TestGroupTurnAutoTitleSkipsWhenRenamed(t *testing.T) {
 	svc.RunGroupTurn(context.Background(), s.UUID, "什么是金丹?", log.emit)
 	if countEvent(log, "title") != 0 || chats.sessions[s.UUID.String()].Title != "用户改的名" {
 		t.Fatal("已手动改名不应被覆盖")
+	}
+}
+
+// ---------- P3 本地记忆挂载(§10.3/§10.4) ----------
+
+// memoryPattern 带行为档案的语言模式(动态分区渲染前提:profile 非 nil)
+type memoryPattern struct{}
+
+func (memoryPattern) GetOrBuildPattern(ctx context.Context, agentID uint) (*model.LanguagePattern, errors.Error) {
+	profile, err := behavior.ProfileToJSONMap(&behavior.DaoistBehaviorProfile{BasePersonality: "以丹道应世"})
+	if err != nil {
+		return nil, errors.New(errors.ErrorTypeServerInternalError, "test.profile", err.Error())
+	}
+	return &model.LanguagePattern{SystemPrompt: "你是道人。", BehaviorProfile: profile}, nil
+}
+
+// memoryStub iservice.Memory 测试替身:按道人返回检索片段,记录蒸馏 spec
+type memoryStub struct {
+	snippetsByAgent map[uint][]turnpolicy.MemorySnippet
+	retrieveCalls   int
+	distillSpecs    []service.DistillationSpec
+}
+
+func (m *memoryStub) ListMemories(context.Context, uint, string, bool) ([]*model.AgentMemory, errors.Error) {
+	return nil, nil
+}
+
+func (m *memoryStub) CreateMemory(context.Context, uint, service.MemoryInput) (*model.AgentMemory, errors.Error) {
+	return nil, nil
+}
+
+func (m *memoryStub) UpdateMemory(context.Context, uint, uuid.UUID, service.MemoryInput) (*model.AgentMemory, errors.Error) {
+	return nil, nil
+}
+
+func (m *memoryStub) DeleteMemory(context.Context, uint, uuid.UUID) errors.Error { return nil }
+
+func (m *memoryStub) ClearMemories(context.Context, uint) (int64, errors.Error) { return 0, nil }
+
+func (m *memoryStub) Retrieve(_ context.Context, agentID uint, _ string) ([]turnpolicy.MemorySnippet, errors.Error) {
+	m.retrieveCalls++
+	return m.snippetsByAgent[agentID], nil
+}
+
+func (m *memoryStub) EnqueueDistillation(_ context.Context, spec service.DistillationSpec) bool {
+	m.distillSpecs = append(m.distillSpecs, spec)
+	return true
+}
+
+func (m *memoryStub) Close() {}
+
+// P3:两位 memory_enabled 道人的回合各自注入本人记忆;蒸馏一次、Targets=2 个成功发言人
+func TestGroupTurnMemoryInjectedPerSpeaker(t *testing.T) {
+	svc, chats, engine, s := newGroupSvc(t, []string{"老君记着你爱围棋", "悟空记着你爱炼丹"})
+	chats.agentByID[1].MemoryEnabled = true
+	chats.agentByID[2].MemoryEnabled = true
+	mem := &memoryStub{snippetsByAgent: map[uint][]turnpolicy.MemorySnippet{
+		1: {{Kind: "fact", Content: "老君记忆:用户爱围棋"}},
+		2: {{Kind: "fact", Content: "悟空记忆:用户爱炼丹"}},
+	}}
+	svc.Memory = mem
+	svc.pattern = memoryPattern{}
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "大家每人一句", log.emit)
+
+	if len(engine.streamMessages) != 2 {
+		t.Fatalf("引擎调用=%d, 期望2(1轮×2人)", len(engine.streamMessages))
+	}
+	wants := []string{"老君记忆:用户爱围棋", "悟空记忆:用户爱炼丹"}
+	for i, want := range wants {
+		sys := engine.streamMessages[i][0]["content"]
+		if !strings.Contains(sys, "【本地记忆事实】") || !strings.Contains(sys, want) {
+			t.Fatalf("第%d次引擎调用 system 应含本人记忆 %q:\n%s", i, want, sys)
+		}
+	}
+	if countEvent(log, "speaker_done") != 2 {
+		t.Fatalf("speaker_done=%d, 期望2: %v", countEvent(log, "speaker_done"), log.events)
+	}
+	if len(mem.distillSpecs) != 1 {
+		t.Fatalf("蒸馏 spec 数=%d, 期望1", len(mem.distillSpecs))
+	}
+	spec := mem.distillSpecs[0]
+	if spec.SessionUUID != s.UUID.String() || spec.Model != "test-model" || spec.UserMessage != "大家每人一句" {
+		t.Fatalf("spec=%+v, 期望 session/model/userMessage 匹配", spec)
+	}
+	if len(spec.Targets) != 2 {
+		t.Fatalf("Targets=%d, 期望2个发言道人: %+v", len(spec.Targets), spec.Targets)
+	}
+	if spec.Targets[0].AgentID != 1 || spec.Targets[1].AgentID != 2 {
+		t.Fatalf("Targets 顺序=%d/%d, 期望 1/2(按发言顺序)",
+			spec.Targets[0].AgentID, spec.Targets[1].AgentID)
+	}
+	if len(spec.Targets[0].Messages) != 2 || spec.Targets[0].Messages[0].Role != "user" ||
+		spec.Targets[0].Messages[1].Role != "assistant" {
+		t.Fatalf("Target[0].Messages=%+v, 期望 [user, assistant]", spec.Targets[0].Messages)
+	}
+}
+
+// P3:MemoryEnabled=false 成员不注入记忆、蒸馏目标排除该成员(门控)
+func TestGroupTurnMemoryDisabledMemberExcluded(t *testing.T) {
+	svc, chats, engine, s := newGroupSvc(t, []string{"老君记着你爱围棋", "悟空记着你爱炼丹"})
+	chats.agentByID[1].MemoryEnabled = true
+	chats.agentByID[2].MemoryEnabled = false
+	mem := &memoryStub{snippetsByAgent: map[uint][]turnpolicy.MemorySnippet{
+		1: {{Kind: "fact", Content: "老君记忆:用户爱围棋"}},
+	}}
+	svc.Memory = mem
+	svc.pattern = memoryPattern{}
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "大家每人一句", log.emit)
+
+	if len(engine.streamMessages) != 2 {
+		t.Fatalf("引擎调用=%d, 期望2", len(engine.streamMessages))
+	}
+	if !strings.Contains(engine.streamMessages[0][0]["content"], "老君记忆:用户爱围棋") {
+		t.Fatalf("启用成员应注入记忆:\n%s", engine.streamMessages[0][0]["content"])
+	}
+	disabledSys := engine.streamMessages[1][0]["content"]
+	if !strings.Contains(disabledSys, "(无)") {
+		t.Fatalf("禁用成员记忆分区应为(无):\n%s", disabledSys)
+	}
+	if strings.Contains(disabledSys, "用户爱围棋") {
+		t.Fatalf("禁用成员不得注入记忆:\n%s", disabledSys)
+	}
+	if len(mem.distillSpecs) != 1 {
+		t.Fatalf("蒸馏 spec 数=%d, 期望1", len(mem.distillSpecs))
+	}
+	if len(mem.distillSpecs[0].Targets) != 1 || mem.distillSpecs[0].Targets[0].AgentID != 1 {
+		t.Fatalf("Targets=%+v, 期望仅含启用成员1", mem.distillSpecs[0].Targets)
+	}
+	if countEvent(log, "turn_done") != 1 {
+		t.Fatalf("仍应 turn_done: %v", log.events)
 	}
 }

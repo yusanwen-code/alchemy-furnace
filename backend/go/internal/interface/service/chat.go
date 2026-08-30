@@ -6,6 +6,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/service/credential"
+	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/google/uuid"
 )
@@ -98,4 +99,8 @@ type Chat interface {
 
 	// RetryGroupTurn 重试最近一个同内容用户回合，不重复保存用户消息。
 	RetryGroupTurn(ctx context.Context, sessionUID uuid.UUID, content string, emit func(event string, payload any))
+
+	// P3 记忆挂载:检索结果注入 TurnPlan.Memories;蒸馏异步触发(实现为空实现=不启用)
+	RetrieveMemories(ctx context.Context, agentID uint, userMessage string) []turnpolicy.MemorySnippet
+	EnqueueMemoryDistillation(ctx context.Context, spec DistillationSpec) bool
 }

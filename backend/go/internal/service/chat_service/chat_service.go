@@ -23,6 +23,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
 	"github.com/alchemy-furnace/server/internal/service/engine"
+	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -35,6 +36,7 @@ type Chat struct {
 	pattern       service.LanguagePatternProvider
 	creds         credential.Resolver
 	engineBaseURL engineendpoint.Provider
+	Memory        service.Memory // P3:可空,空=不启用本地记忆(检索/蒸馏)
 }
 
 // StreamInterruptedError 表示上游 SSE 未按协议完整结束。它只暴露稳定、安全的
@@ -54,14 +56,38 @@ const (
 	StreamRecoveryPersistedRetry StreamRecoveryMode = "persisted_retry"
 )
 
-// New 构造固定引擎地址的对话业务实例（Web 与单元测试兼容）。
-func New(chat dao.Chat, agent dao.Agent, pattern service.LanguagePatternProvider, creds credential.Resolver, engineBaseURL string) *Chat {
-	return NewDynamic(chat, agent, pattern, creds, engineendpoint.Static(engineBaseURL))
+// New 构造固定引擎地址的对话业务实例（Web 与单元测试兼容）。memory 可传 nil(不启用本地记忆)。
+func New(chat dao.Chat, agent dao.Agent, pattern service.LanguagePatternProvider, creds credential.Resolver, engineBaseURL string, memory ...service.Memory) *Chat {
+	var mem service.Memory
+	if len(memory) > 0 {
+		mem = memory[0]
+	}
+	return NewDynamic(chat, agent, pattern, creds, engineendpoint.Static(engineBaseURL), mem)
 }
 
-// NewDynamic 构造运行时读取最新地址的对话业务实例（桌面随机端口场景）。
-func NewDynamic(chat dao.Chat, agent dao.Agent, pattern service.LanguagePatternProvider, creds credential.Resolver, engineBaseURL engineendpoint.Provider) *Chat {
-	return &Chat{chat: chat, agent: agent, pattern: pattern, creds: creds, engineBaseURL: engineBaseURL}
+// NewDynamic 构造运行时读取最新地址的对话业务实例（桌面随机端口场景）。memory 可传 nil。
+func NewDynamic(chat dao.Chat, agent dao.Agent, pattern service.LanguagePatternProvider, creds credential.Resolver, engineBaseURL engineendpoint.Provider, memory service.Memory) *Chat {
+	return &Chat{chat: chat, agent: agent, pattern: pattern, creds: creds, engineBaseURL: engineBaseURL, Memory: memory}
+}
+
+// RetrieveMemories 本地记忆检索(§10.4);未装配/出错返回 nil,由 memory_enabled 门控调用
+func (s *Chat) RetrieveMemories(ctx context.Context, agentID uint, userMessage string) []turnpolicy.MemorySnippet {
+	if s.Memory == nil {
+		return nil
+	}
+	snips, err := s.Memory.Retrieve(ctx, agentID, userMessage)
+	if err != nil {
+		return nil
+	}
+	return snips
+}
+
+// EnqueueMemoryDistillation 记忆蒸馏异步入队(§10.3);未装配返回 false(静默)
+func (s *Chat) EnqueueMemoryDistillation(ctx context.Context, spec service.DistillationSpec) bool {
+	if s.Memory == nil {
+		return false
+	}
+	return s.Memory.EnqueueDistillation(ctx, spec)
 }
 
 func (s *Chat) validateChatAgentAccess(ctx context.Context, agentUID uuid.UUID) (*model.DaoAgent, *credential.ModelCredentials, ierr.Error) {

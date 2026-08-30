@@ -21,7 +21,7 @@ func TestChatReadsEngineEndpointAtRequestTime(t *testing.T) {
 	defer server.Close()
 
 	baseURL := "http://127.0.0.1:1"
-	chat := NewDynamic(nil, nil, nil, nil, engineendpoint.Provider(func() string { return baseURL }))
+	chat := NewDynamic(nil, nil, nil, nil, engineendpoint.Provider(func() string { return baseURL }), nil)
 	baseURL = server.URL // 模拟桌面路由装配后，内嵌引擎才完成健康检查并发布随机端口。
 
 	content, err := chat.callChatCompletion(context.Background(), []map[string]string{{"role": "user", "content": "ping"}}, nil)

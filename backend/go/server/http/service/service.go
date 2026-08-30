@@ -96,7 +96,7 @@ func NewEngineBaseURL() engineendpoint.Provider {
 	return engineendpoint.Current
 }
 
-// ChatService 对话域装配集(依赖道人 DAO + 合成客户端 + 凭证解析器 + 语言模式服务)
+// ChatService 对话域装配集(依赖道人 DAO + 合成客户端 + 凭证解析器 + 语言模式服务 + 记忆服务)
 var ChatService = wire.NewSet(
 	ProvideChatDao,
 	ProvideAgentDao,
@@ -104,6 +104,8 @@ var ChatService = wire.NewSet(
 	credential.NewResolver, wire.Bind(new(credential.Resolver), new(*credential.ModelResolver)),
 	NewEngineBaseURL,
 	language_pattern_service.New, wire.Bind(new(iservice.LanguagePatternProvider), new(*language_pattern_service.LanguagePatternService)),
+	ProvideMemoryDao,
+	ProvideMemoryService,
 	chat_service.NewDynamic, wire.Bind(new(iservice.Chat), new(*chat_service.Chat)),
 )
 

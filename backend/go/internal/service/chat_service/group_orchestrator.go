@@ -170,6 +170,9 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 	totalSpoke := 0
 	firstReply := ""      // 首条 assistant 内容(自动命名用)
 	replies := []string{} // 去重库(§9.2):整回合累计,≥8 字符且 ≥0.85 相似即收敛
+	// 蒸馏目标(§10.3):仅 memory_enabled 且发言成功的成员;模型=首个成功发言人
+	distillTargets := []service.DistillTarget{}
+	firstSpeakerModel := ""
 
 	for round := 1; round <= turnPlan.MaxRounds; round++ {
 		// 发言队列:必答者优先(按被@顺序),其余按相关度/成员顺序(必答者不再重复入列)
@@ -231,6 +234,18 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 			if !mustAnswer {
 				voluntarySpoke = true
 			}
+			if firstSpeakerModel == "" {
+				firstSpeakerModel = memberCredentials[m.AgentID].Model
+			}
+			if m.Agent.MemoryEnabled {
+				distillTargets = append(distillTargets, service.DistillTarget{
+					AgentID: m.AgentID,
+					Messages: []service.DistillMessage{
+						{Role: "user", Content: content},
+						{Role: "assistant", Content: full},
+					},
+				})
+			}
 			if firstReply == "" {
 				firstReply = full
 			}
@@ -260,6 +275,16 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 		if title := s.generateSessionTitle(ctx, session, members, content, firstReply); title != "" {
 			emit("title", GroupTitlePayload{Title: title})
 		}
+	}
+
+	// 蒸馏:每轮一次、模型=首个成功发言人(spec §10.3;失败/禁用静默)
+	if len(distillTargets) > 0 && firstSpeakerModel != "" {
+		s.EnqueueMemoryDistillation(ctx, service.DistillationSpec{
+			SessionUUID: session.UUID.String(),
+			Model:       firstSpeakerModel,
+			UserMessage: content,
+			Targets:     distillTargets,
+		})
 	}
 
 	emit("turn_done", GroupTurnDonePayload{Spoke: totalSpoke})
@@ -339,6 +364,10 @@ func (s *Chat) letAgentSpeak(ctx context.Context, session *model.ChatSession, m 
 	memberPlan.MustAnswer = mustAnswer
 	memberPlan.MaxSpeakers = turnPlan.MaxSpeakers
 	memberPlan.MaxRounds = turnPlan.MaxRounds
+	// 本地记忆注入(§10.4;memory_enabled 门控,检索失败静默降级为无记忆)
+	if m.Agent.MemoryEnabled {
+		memberPlan.Memories = s.RetrieveMemories(ctx, m.AgentID, constraints.LatestQuestion)
+	}
 
 	systemPrompt := behavior.ComposeSystemPrompt(profile, m.Agent.Name, memberPlan)
 	if systemPrompt == "" {

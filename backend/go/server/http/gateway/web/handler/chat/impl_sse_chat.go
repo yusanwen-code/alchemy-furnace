@@ -161,6 +161,10 @@ func (cls *Chat) SSEChat(c *gin.Context) {
 	if profile != nil {
 		plan.ActivatedRules = behavior.ActivatePillRules(content, profile)
 	}
+	// 本地记忆注入(§10.4;memory_enabled 门控,检索失败静默降级为无记忆)
+	if session.Agent.MemoryEnabled {
+		plan.Memories = cls.chat.RetrieveMemories(ctx, session.Agent.ID, content)
+	}
 	systemPrompt := behavior.ComposeSystemPrompt(profile, session.Agent.Name, plan)
 	if systemPrompt == "" {
 		systemPrompt = pattern.SystemPrompt // 防御:profile 缺失时用缓存提示词
@@ -204,6 +208,21 @@ func (cls *Chat) SSEChat(c *gin.Context) {
 
 		case res := <-resultCh:
 			cls.finishSSEStream(ctx, sessionUID, sessionID, content, w, flusher, res)
+			// 记忆蒸馏异步入队(§10.3;失败/禁用/中断/空回复静默)
+			if session.Agent.MemoryEnabled && res.err == nil && !res.canceled && res.full != "" {
+				cls.chat.EnqueueMemoryDistillation(ctx, service.DistillationSpec{
+					SessionUUID: session.UUID.String(),
+					Model:       session.Agent.ModelName,
+					UserMessage: content,
+					Targets: []service.DistillTarget{{
+						AgentID: session.Agent.ID,
+						Messages: []service.DistillMessage{
+							{Role: "user", Content: content},
+							{Role: "assistant", Content: res.full},
+						},
+					}},
+				})
+			}
 			return
 
 		case <-ctx.Done():

@@ -98,7 +98,9 @@ func NewChat() *chat.Chat {
 	modelResolver := credential.NewResolver()
 	languagePatternService := language_pattern_service.New(daoAgent, client, modelResolver)
 	provider := service.NewEngineBaseURL()
-	chat_serviceChat := chat_service.NewDynamic(daoChat, daoAgent, languagePatternService, modelResolver, provider)
+	memory := service.ProvideMemoryDao()
+	serviceMemory := service.ProvideMemoryService(memory, modelResolver, provider)
+	chat_serviceChat := chat_service.NewDynamic(daoChat, daoAgent, languagePatternService, modelResolver, provider, serviceMemory)
 	chatChat := chat.New(chat_serviceChat)
 	return chatChat
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	chatservice "github.com/alchemy-furnace/server/internal/service/chat_service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
+	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/internal/synthesis"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/gin-gonic/gin"
@@ -40,6 +41,25 @@ type sseChatStub struct {
 	lastMessages   []map[string]string
 	lastOptions    service.GenerationOptions
 	members        []*model.SessionMember
+
+	retrievedSnippets   []turnpolicy.MemorySnippet
+	retrieveCalls       int
+	lastRetrieveAgentID uint
+	lastRetrieveMessage string
+	distillSpecs        []service.DistillationSpec
+}
+
+// P3 记忆挂载:检索委托 + 蒸馏入队(handler 经 service.Chat 接口调用)
+func (s *sseChatStub) RetrieveMemories(_ context.Context, agentID uint, userMessage string) []turnpolicy.MemorySnippet {
+	s.retrieveCalls++
+	s.lastRetrieveAgentID = agentID
+	s.lastRetrieveMessage = userMessage
+	return s.retrievedSnippets
+}
+
+func (s *sseChatStub) EnqueueMemoryDistillation(_ context.Context, spec service.DistillationSpec) bool {
+	s.distillSpecs = append(s.distillSpecs, spec)
+	return true
 }
 
 func (s *sseChatStub) GetSessionAgentInfo(context.Context, uuid.UUID) (*model.ChatSession, errors.Error) {
@@ -624,5 +644,108 @@ func TestGetSessionReturnsDirectGroupMetadata(t *testing.T) {
 	}
 	if response.ID != sessionUID.String() || len(response.Members) != 1 || response.Members[0].Status != "inactive" {
 		t.Fatalf("GetSession() response = %+v, want direct group metadata with current member status", response)
+	}
+}
+
+// ---------- P3 本地记忆挂载(§10.3/§10.4) ----------
+
+// memoryProfile 最小档案:仅保证 profile 非 nil,动态四分区正常渲染
+func memoryProfile(t *testing.T) model.JSONMap {
+	t.Helper()
+	m, err := behavior.ProfileToJSONMap(&behavior.DaoistBehaviorProfile{BasePersonality: "以丹道应世"})
+	if err != nil {
+		t.Fatalf("ProfileToJSONMap() error = %v", err)
+	}
+	return m
+}
+
+// P3:memory_enabled 道人 → 检索结果注入 system 记忆分区,以 agentID+用户内容检索
+func TestSSEChatMemoryInjectedIntoPrompt(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model", MemoryEnabled: true},
+		},
+		pattern:           &model.LanguagePattern{SystemPrompt: "cached static prompt", BehaviorProfile: memoryProfile(t)},
+		streamFull:        "道友请讲",
+		retrievedSnippets: []turnpolicy.MemorySnippet{{Kind: "fact", Content: "用户喜欢围棋"}},
+	}
+
+	w := performSSEChat(t, stub, sessionUID)
+	if !strings.Contains(w.Body.String(), "event: done") {
+		t.Fatalf("SSE body = %q, want done", w.Body.String())
+	}
+	if stub.retrieveCalls != 1 {
+		t.Fatalf("RetrieveMemories calls = %d, want 1", stub.retrieveCalls)
+	}
+	if stub.lastRetrieveAgentID != agentID || stub.lastRetrieveMessage != "hello" {
+		t.Fatalf("检索入参 agentID=%d message=%q, want %d/hello", stub.lastRetrieveAgentID, stub.lastRetrieveMessage, agentID)
+	}
+	sys := stub.lastMessages[0]["content"]
+	if !strings.Contains(sys, "【本地记忆事实】") || !strings.Contains(sys, "用户喜欢围棋") {
+		t.Fatalf("system 消息应含检索记忆:\n%s", sys)
+	}
+}
+
+// P3:MemoryEnabled=false → 不检索不注入不蒸馏(门控)
+func TestSSEChatMemoryDisabledNoInjection(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model"},
+		},
+		pattern:    &model.LanguagePattern{SystemPrompt: "cached static prompt", BehaviorProfile: memoryProfile(t)},
+		streamFull: "道友请讲",
+	}
+
+	w := performSSEChat(t, stub, sessionUID)
+	if !strings.Contains(w.Body.String(), "event: done") {
+		t.Fatalf("SSE body = %q, want done", w.Body.String())
+	}
+	if stub.retrieveCalls != 0 {
+		t.Fatalf("MemoryEnabled=false 不得检索: calls = %d", stub.retrieveCalls)
+	}
+	if len(stub.distillSpecs) != 0 {
+		t.Fatalf("MemoryEnabled=false 不得蒸馏: %+v", stub.distillSpecs)
+	}
+}
+
+// P3:回复成功后异步入队蒸馏,spec 携带 session/model/用户消息与单目标双消息
+func TestSSEChatEnqueueDistillationAfterReply(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model", MemoryEnabled: true},
+		},
+		streamFull: "金丹妙不可言",
+	}
+
+	w := performSSEChat(t, stub, sessionUID)
+	if !strings.Contains(w.Body.String(), "event: done") {
+		t.Fatalf("SSE body = %q, want done", w.Body.String())
+	}
+	if len(stub.distillSpecs) != 1 {
+		t.Fatalf("蒸馏 spec 数 = %d, want 1", len(stub.distillSpecs))
+	}
+	spec := stub.distillSpecs[0]
+	if spec.SessionUUID != sessionUID.String() || spec.Model != "test-model" || spec.UserMessage != "hello" {
+		t.Fatalf("spec = %+v, want session/model/userMessage 匹配", spec)
+	}
+	if len(spec.Targets) != 1 {
+		t.Fatalf("Targets = %d, want 1", len(spec.Targets))
+	}
+	tgt := spec.Targets[0]
+	if tgt.AgentID != agentID {
+		t.Fatalf("Target.AgentID = %d, want %d", tgt.AgentID, agentID)
+	}
+	if len(tgt.Messages) != 2 || tgt.Messages[0].Role != "user" || tgt.Messages[0].Content != "hello" ||
+		tgt.Messages[1].Role != "assistant" || tgt.Messages[1].Content != "金丹妙不可言" {
+		t.Fatalf("Target.Messages = %+v, want [user/hello, assistant/金丹妙不可言]", tgt.Messages)
 	}
 }
