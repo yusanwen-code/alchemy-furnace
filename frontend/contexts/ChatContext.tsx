@@ -386,7 +386,7 @@ interface ChatContextType {
   // 异步操作
   fetchSessions: () => Promise<void>
   createSession: (agentId: string, title?: string) => Promise<ChatSession>
-  createGroupSession: (memberAgentIds: string[]) => Promise<ChatSession>
+  createGroupSession: (memberAgentIds: string[], title?: string) => Promise<ChatSession>
   renameSession: (sessionId: string, title: string) => Promise<ChatSession | null>
   inviteMembers: (sessionId: string, agentIds: string[]) => Promise<void>
   kickMember: (sessionId: string, agentId: string) => Promise<void>
@@ -482,10 +482,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [markSessionMutation])
 
-  /** 建群(≥2 位道人;首问答自动命名) */
-  const createGroupSession = useCallback(async (memberAgentIds: string[]): Promise<ChatSession> => {
+  /** 建群(≥2 位道人;可选主题) */
+  const createGroupSession = useCallback(async (memberAgentIds: string[], title?: string): Promise<ChatSession> => {
     try {
-      const session = await chatService.createGroupSession(memberAgentIds)
+      const session = await chatService.createGroupSession(memberAgentIds, title)
       markSessionMutation(session.id)
       currentSessionRef.current = session
       dispatch({ type: 'ADD_SESSION', payload: session })

@@ -197,7 +197,7 @@ describe('useChatLaunchFlow', () => {
     const { result } = renderHook(() => useChatLaunchFlow(), { wrapper })
 
     await act(async () => {
-      expect(await result.current.launchGroup(selectedAgentIds)).toBe(false)
+      expect(await result.current.launchGroup(selectedAgentIds, ' 丹道夜话 ')).toBe(false)
     })
     selectedAgentIds.push('agent-3')
 
@@ -212,8 +212,8 @@ describe('useChatLaunchFlow', () => {
       expect(await result.current.retry()).toBe(true)
     })
 
-    expect(createGroupSession).toHaveBeenNthCalledWith(1, ['agent-1', 'agent-2'])
-    expect(createGroupSession).toHaveBeenNthCalledWith(2, ['agent-1', 'agent-2'])
+    expect(createGroupSession).toHaveBeenNthCalledWith(1, ['agent-1', 'agent-2'], ' 丹道夜话 ')
+    expect(createGroupSession).toHaveBeenNthCalledWith(2, ['agent-1', 'agent-2'], ' 丹道夜话 ')
     expect(push).toHaveBeenCalledOnce()
     expect(push).toHaveBeenCalledWith('/chat?session=22222222-2222-4222-8222-222222222222')
   })

@@ -460,6 +460,81 @@ describe('chat launch surfaces', () => {
     expect(testDoubles.push).toHaveBeenCalledWith('/chat?session=11111111-1111-4111-8111-111111111111')
   })
 
+  it('sends the group topic along with the members on confirm', async () => {
+    const user = userEvent.setup()
+    testDoubles.createGroupSession.mockResolvedValueOnce(groupSession)
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'newSession' }))
+    await user.click(screen.getByRole('button', { name: 'mode.group' }))
+    await user.type(screen.getByPlaceholderText('mode.topicPlaceholder'), '丹道夜话')
+    await user.click(screen.getByRole('button', { name: /Agent One/ }))
+    await user.click(screen.getByRole('button', { name: /Agent Two/ }))
+    await user.click(screen.getByRole('button', { name: 'mode.confirm (2)' }))
+
+    await waitFor(() => {
+      expect(testDoubles.createGroupSession).toHaveBeenCalledWith(['agent-1', 'agent-2'], '丹道夜话')
+    })
+    expect(testDoubles.push).toHaveBeenCalledWith('/chat?session=22222222-2222-4222-8222-222222222222')
+  })
+
+  it('preserves the typed topic across a failed group launch and its retry', async () => {
+    const user = userEvent.setup()
+    testDoubles.createGroupSession
+      .mockRejectedValueOnce(new Error('group launch failed'))
+      .mockResolvedValueOnce(groupSession)
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'newSession' }))
+    await user.click(screen.getByRole('button', { name: 'mode.group' }))
+    await user.type(screen.getByPlaceholderText('mode.topicPlaceholder'), '丹道夜话')
+    await user.click(screen.getByRole('button', { name: /Agent One/ }))
+    await user.click(screen.getByRole('button', { name: /Agent Two/ }))
+    await user.click(screen.getByRole('button', { name: 'mode.confirm (2)' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('group launch failed')
+    expect(screen.getByPlaceholderText('mode.topicPlaceholder')).toHaveValue('丹道夜话')
+
+    await user.click(screen.getByRole('button', { name: 'launch.retry' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+    expect(testDoubles.createGroupSession).toHaveBeenNthCalledWith(1, ['agent-1', 'agent-2'], '丹道夜话')
+    expect(testDoubles.createGroupSession).toHaveBeenNthCalledWith(2, ['agent-1', 'agent-2'], '丹道夜话')
+  })
+
+  it('blocks a group topic longer than 200 characters with zero API calls', async () => {
+    const user = userEvent.setup()
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'newSession' }))
+    await user.click(screen.getByRole('button', { name: 'mode.group' }))
+    await user.type(screen.getByPlaceholderText('mode.topicPlaceholder'), '丹'.repeat(201))
+    await user.click(screen.getByRole('button', { name: /Agent One/ }))
+    await user.click(screen.getByRole('button', { name: /Agent Two/ }))
+    await user.click(screen.getByRole('button', { name: 'mode.confirm (2)' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('mode.topicTooLong')
+    expect(testDoubles.createGroupSession).not.toHaveBeenCalled()
+  })
+
+  it('creates a group with an empty topic as undefined', async () => {
+    const user = userEvent.setup()
+    testDoubles.createGroupSession.mockResolvedValueOnce(groupSession)
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'newSession' }))
+    await user.click(screen.getByRole('button', { name: 'mode.group' }))
+    await user.click(screen.getByRole('button', { name: /Agent One/ }))
+    await user.click(screen.getByRole('button', { name: /Agent Two/ }))
+    await user.click(screen.getByRole('button', { name: 'mode.confirm (2)' }))
+
+    await waitFor(() => {
+      expect(testDoubles.createGroupSession).toHaveBeenCalledWith(['agent-1', 'agent-2'], undefined)
+    })
+  })
+
   it('shows the shared launch failure and retry on agent detail', async () => {
     const user = userEvent.setup()
     testDoubles.createSession.mockRejectedValueOnce(new ApiError(

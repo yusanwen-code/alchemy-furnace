@@ -15,14 +15,14 @@ export type LaunchState =
 export interface ChatLaunchFlow {
   state: LaunchState
   launchSingle(agentId: string): Promise<boolean>
-  launchGroup(agentIds: string[]): Promise<boolean>
+  launchGroup(agentIds: string[], title?: string): Promise<boolean>
   retry(): Promise<boolean>
   reset(): void
 }
 
 type LaunchRequest =
   | { type: 'single'; agentId: string }
-  | { type: 'group'; agentIds: string[] }
+  | { type: 'group'; agentIds: string[]; title?: string }
 
 function errorState(error: unknown): LaunchState {
   const message = error instanceof Error ? error.message : '创建会话失败'
@@ -47,7 +47,7 @@ export function useChatLaunchFlow(): ChatLaunchFlow {
     try {
       const session = request.type === 'single'
         ? await createSession(request.agentId)
-        : await createGroupSession(request.agentIds)
+        : await createGroupSession(request.agentIds, request.title)
       lastFailedRequestRef.current = null
       setState({ status: 'idle' })
       router.push(chatSessionHref(session.id))
@@ -67,7 +67,7 @@ export function useChatLaunchFlow(): ChatLaunchFlow {
   )
 
   const launchGroup = useCallback(
-    (agentIds: string[]) => launch({ type: 'group', agentIds: [...agentIds] }),
+    (agentIds: string[], title?: string) => launch({ type: 'group', agentIds: [...agentIds], title }),
     [launch],
   )
 

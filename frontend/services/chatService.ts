@@ -53,10 +53,14 @@ export function getMessages(sessionId: string, params: ListParams = {}): Promise
 }
 
 /**
- * 建群(≥2 位道人;首问答自动命名,无 title 入参)
+ * 建群(≥2 位道人;可选主题,首问答自动命名)
  */
-export function createGroupSession(memberAgentIds: string[]): Promise<ChatSession> {
-  return post<ChatSession>('/chat/sessions', { type: 'group', member_agent_ids: memberAgentIds })
+export function createGroupSession(memberAgentIds: string[], title?: string): Promise<ChatSession> {
+  return post<ChatSession>('/chat/sessions', {
+    type: 'group',
+    member_agent_ids: memberAgentIds,
+    title: title?.trim() || undefined,
+  })
 }
 
 /**

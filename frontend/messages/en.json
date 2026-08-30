@@ -887,7 +887,11 @@
       "confirm": "Open",
       "backToList": "Back",
       "agentNotReady": "Needs a formal model",
-      "groupUnavailable": "At least two ready agents are required for a group discussion"
+      "groupUnavailable": "At least two ready agents are required for a group discussion",
+      "topicLabel": "Discussion topic",
+      "topicPlaceholder": "Give this discussion a topic (optional)",
+      "topicHint": "Leave empty to auto-name after the first exchange. Max 200 characters.",
+      "topicTooLong": "Topic must be at most 200 characters"
     },
     "gate": {
       "noAgentsTitle": "No agents available yet",

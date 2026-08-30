@@ -240,8 +240,8 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
     return launched
   }
 
-  const handleCreateGroupSession = async (memberAgentIds: string[]) => {
-    const launched = await launchFlow.launchGroup(memberAgentIds)
+  const handleCreateGroupSession = async (memberAgentIds: string[], title?: string) => {
+    const launched = await launchFlow.launchGroup(memberAgentIds, title)
     if (launched) {
       setShowAgentSelect(false)
     }
@@ -820,7 +820,7 @@ function AgentSelectModal({
   launchState: LaunchState
   onClose: () => void
   onSelectSingle: (agentId: string) => Promise<boolean>
-  onSelectGroup: (agentIds: string[]) => Promise<boolean>
+  onSelectGroup: (agentIds: string[], title?: string) => Promise<boolean>
   onRetry: () => Promise<boolean>
   onRetryAgents: () => void | Promise<void>
   onRetryReadiness: () => void | Promise<void>
@@ -829,6 +829,8 @@ function AgentSelectModal({
   const t = useTranslations('chatView')
   const [mode, setMode] = useState<ChatMode>('single')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [topic, setTopic] = useState('')
+  const [topicError, setTopicError] = useState<string | null>(null)
   const submitting = launchState.status === 'submitting'
   /** 后端权威就绪名单;loading/error 时为 null → 所有道人不可发起 */
   const readyIds = readiness.status === 'ready' ? new Set(readiness.readiness.ready_agent_ids) : null
@@ -845,12 +847,24 @@ function AgentSelectModal({
     })
   }
 
+  // 改主题即视为新的发起意图:先清除旧的失败请求与错误,防止误重试旧主题
+  const handleTopicChange = (value: string) => {
+    onSelectionChange()
+    setTopicError(null)
+    setTopic(value)
+  }
+
   const handleConfirm = async () => {
     if (mode === 'single') {
       const id = [...selected][0]
       if (id) await onSelectSingle(id)
     } else {
-      if (selected.size >= 2) await onSelectGroup([...selected])
+      const trimmedTopic = topic.trim()
+      if (Array.from(trimmedTopic).length > 200) {
+        setTopicError(t('mode.topicTooLong'))
+        return
+      }
+      if (selected.size >= 2) await onSelectGroup([...selected], trimmedTopic || undefined)
     }
   }
 
@@ -931,6 +945,27 @@ function AgentSelectModal({
         </p>
         {!canCreateGroup && (
           <p className="text-[10px] text-gold/80 mb-2">{t('mode.groupUnavailable')}</p>
+        )}
+
+        {/* 群模式:主题输入(仅 group 显示;提交时按 200 Unicode 字符校验) */}
+        {mode === 'group' && (
+          <div className="mb-3">
+            <label htmlFor="group-topic" className="block text-[10px] font-medium text-muted-foreground mb-1">
+              {t('mode.topicLabel')}
+            </label>
+            <input
+              id="group-topic"
+              type="text"
+              value={topic}
+              onChange={e => handleTopicChange(e.target.value)}
+              placeholder={t('mode.topicPlaceholder')}
+              className="dao-input w-full"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">{t('mode.topicHint')}</p>
+            {topicError && (
+              <p role="alert" className="text-[10px] text-primary mt-1">{topicError}</p>
+            )}
+          </div>
         )}
 
         {/* readiness 加载失败: 不遮蔽道人列表,但所有发起禁用,可重试 */}

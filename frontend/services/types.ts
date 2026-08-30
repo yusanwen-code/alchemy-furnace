@@ -389,7 +389,7 @@ export interface UpdateAgentPillRequest {
 /** 创建会话请求 */
 //   - single: agent_id 必填
 //   - group: type="group" + member_agent_ids ≥2
-//   - title 字段忽略(自动命名)
+//   - title: single 忽略;group 接受可选主题(空值/空白自动命名)
 export interface CreateSessionRequest {
   agent_id?: string
   type?: 'single' | 'group'

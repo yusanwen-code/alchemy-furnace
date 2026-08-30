@@ -246,7 +246,7 @@ describe('packaged session navigation contract', () => {
     await user.click(screen.getByRole('button', { name: /mode.confirm/ }))
 
     expect(boundaries.createGroupSession).toHaveBeenCalledOnce()
-    expect(boundaries.createGroupSession).toHaveBeenCalledWith(['agent-1', 'agent-2'])
+    expect(boundaries.createGroupSession).toHaveBeenCalledWith(['agent-1', 'agent-2'], undefined)
     expect(boundaries.push).toHaveBeenCalledOnce()
     expect(boundaries.push).toHaveBeenCalledWith(`/chat?session=${GROUP_ID}`)
     expect(boundaries.getSession).not.toHaveBeenCalled()

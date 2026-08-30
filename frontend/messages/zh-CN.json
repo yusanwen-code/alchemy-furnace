@@ -886,7 +886,11 @@
       "confirm": "开坛",
       "backToList": "返回",
       "agentNotReady": "需配置正式模型",
-      "groupUnavailable": "至少需要两位可用道人才能围炉论道"
+      "groupUnavailable": "至少需要两位可用道人才能围炉论道",
+      "topicLabel": "围炉主题",
+      "topicPlaceholder": "为这场围炉起个主题(可选)",
+      "topicHint": "留空则由首问答自动命名,最长 200 字",
+      "topicTooLong": "主题最长 200 字"
     },
     "gate": {
       "noAgentsTitle": "道人府尚无可用道人",
