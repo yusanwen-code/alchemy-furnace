@@ -20,6 +20,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/configuration"
 	"github.com/alchemy-furnace/server/internal/configuration/loader"
 	"github.com/alchemy-furnace/server/internal/dao"
+	"github.com/alchemy-furnace/server/internal/desktopidentity"
 	"github.com/alchemy-furnace/server/internal/engineproc"
 	"github.com/alchemy-furnace/server/internal/logger"
 	"github.com/alchemy-furnace/server/internal/paths"
@@ -129,7 +130,7 @@ func main() {
 
 	app := NewApp()
 	err = wails.Run(&options.App{
-		Title:    "炼丹炉",
+		Title:    desktopidentity.DisplayName,
 		Width:    width,
 		Height:   height,
 		MinWidth: 960, MinHeight: 640,
@@ -138,7 +139,7 @@ func main() {
 		// mac: 通顶内容,红绿灯 inset 悬浮(任务 T2)
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
-			About:    &mac.AboutInfo{Title: "炼丹炉", Message: "Alchemy Furnace"},
+			About:    &mac.AboutInfo{Title: desktopidentity.DisplayName, Message: "Alchemy Furnace"},
 			// T5a 毛玻璃前提: webview 透明才能透出桌面
 			WebviewIsTransparent: true,
 		},
@@ -157,7 +158,7 @@ func main() {
 				func() (bool, error) { readyMu.Lock(); defer readyMu.Unlock(); return readyOK, readyErr },
 			),
 		},
-		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "com.alchemyfurnace.desktop"},
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: desktopidentity.BundleID},
 		Bind:               []interface{}{app},
 		OnStartup:          app.startup,
 		OnShutdown: func(ctx context.Context) {

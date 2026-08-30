@@ -1,11 +1,17 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "AlchemyFurnace",
+  "name": "炼丹炉",
   "outputfilename": "AlchemyFurnace",
   "frontend:dir": "build/stub",
   "frontend:install": "",
   "frontend:build": "",
   "author": {
     "name": "alchemy-furnace"
+  },
+  "info": {
+    "companyName": "炼丹炉",
+    "productName": "炼丹炉",
+    "copyright": "炼丹炉",
+    "comments": "炼丹炉桌面应用"
   }
 }
