@@ -110,7 +110,7 @@
     "language": {
       "pageTitle": "Interface Language",
       "pageSubtitle": "Switching language reloads the current page",
-      "sectionTitle": "Interface Language",
+      "sectionTitle": "Switch language",
       "description": "Alchemy Furnace ships with Simplified Chinese and English. Your choice is remembered across sessions.",
       "hint": "Click to pick a language"
     }
