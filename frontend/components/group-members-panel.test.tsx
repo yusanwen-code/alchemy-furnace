@@ -103,3 +103,42 @@ describe('GroupMembersPanel avatar handling', () => {
     expect(screen.getByText('C')).toBeInTheDocument()
   })
 })
+
+// 踢人流程:应用内确认对话框(Wails 桌面 WKWebView 不实现 window.confirm,
+// 静默返回 false 导致"移除成员不生效";此处断言弹的是应用内 alertdialog)
+describe('GroupMembersPanel kick flow', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    doubles.fetchAgents.mockResolvedValue(undefined)
+    doubles.kickMember.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => cleanup())
+
+  const kickButtons = () => screen.getAllByRole('button', { name: 'kick' })
+
+  it('shows an in-app confirm dialog before removing a member', async () => {
+    const user = userEvent.setup()
+    render(<GroupMembersPanel session={groupSession} open onClose={() => {}} />)
+    await user.click(kickButtons()[0])
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByText('kickConfirm')).toBeInTheDocument()
+  })
+
+  it('removes the member when the dialog is confirmed', async () => {
+    const user = userEvent.setup()
+    render(<GroupMembersPanel session={groupSession} open onClose={() => {}} />)
+    await user.click(kickButtons()[0])
+    await user.click(screen.getByRole('button', { name: 'kickConfirmCta' }))
+    expect(doubles.kickMember).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222', 'agent-a')
+  })
+
+  it('keeps the member when the dialog is cancelled', async () => {
+    const user = userEvent.setup()
+    render(<GroupMembersPanel session={groupSession} open onClose={() => {}} />)
+    await user.click(kickButtons()[0])
+    await user.click(screen.getByRole('button', { name: 'cancel' }))
+    expect(doubles.kickMember).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+})

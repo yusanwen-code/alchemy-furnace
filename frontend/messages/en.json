@@ -820,6 +820,7 @@
     "invite": "Invite",
     "kick": "Remove",
     "kickConfirm": "Remove {name} from the group?",
+    "kickConfirmCta": "Remove Member",
     "untitledGroup": "New Group",
     "untitledSession": "New Chat",
     "userLabel": "User",

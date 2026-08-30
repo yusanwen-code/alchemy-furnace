@@ -12,6 +12,7 @@ import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
 import { ProfilePopover } from '@/components/profile-popover'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import type { Agent, ChatSession, GroupMember } from '@/services/types'
 
 export function GroupMembersPanel({
@@ -28,6 +29,8 @@ export function GroupMembersPanel({
   const { inviteMembers, kickMember } = useChat()
   const [showInvite, setShowInvite] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // 待踢出成员(WKWebView 不实现 window.confirm,用应用内确认框)
+  const [kickTarget, setKickTarget] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -45,9 +48,7 @@ export function GroupMembersPanel({
   )
 
   const handleKick = (agentId: string, name: string) => {
-    if (window.confirm(t('kickConfirm', { name }))) {
-      kickMember(session.id, agentId)
-    }
+    setKickTarget({ id: agentId, name })
   }
 
   const toggleSelect = (agentId: string) => {
@@ -190,6 +191,21 @@ export function GroupMembersPanel({
           )}
         </div>
       </div>
+
+      {/* 踢出确认(应用内对话框,web/桌面行为一致) */}
+      {kickTarget && (
+        <ConfirmDialog
+          description={t('kickConfirm', { name: kickTarget.name })}
+          confirmLabel={t('kickConfirmCta')}
+          cancelLabel={t('cancel')}
+          destructive
+          onConfirm={() => {
+            kickMember(session.id, kickTarget.id)
+            setKickTarget(null)
+          }}
+          onCancel={() => setKickTarget(null)}
+        />
+      )}
     </>
   )
 }

@@ -819,6 +819,7 @@
     "invite": "邀请",
     "kick": "移出",
     "kickConfirm": "确定将 {name} 移出群聊?",
+    "kickConfirmCta": "确认移出",
     "untitledGroup": "新群聊",
     "untitledSession": "新的论道",
     "userLabel": "用户",
