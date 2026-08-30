@@ -92,6 +92,36 @@ name, SHA256, result, screenshots and logs for every acceptance item.
 the matrix is accepted.** Missing or failing any platform keeps the Release a
 draft.
 
+### Tray background lifecycle acceptance
+
+Close-to-tray must be accepted by hand on every platform before the RC is
+promoted. Record the same PASS / 未执行-with-reason discipline as the matrix
+above, and attach screenshots (Windows notification area, macOS menu bar in
+light and dark mode).
+
+Windows 10/11, in order:
+
+| Step | Expected |
+|------|----------|
+| Launch (shortcut) | Main window appears; only one furnace icon in the notification area |
+| Minimize | Goes to the taskbar (native behavior, not hidden) |
+| Restore | Window comes back |
+| Close window | Window hides to the tray — app stays running (no black console, no second process) |
+| Tray → 打开炼丹炉 | Same window reappears (Unminimise + Show) |
+| Close window again | Hides again; tray icon still there |
+| Launch again via shortcut | Second instance activates the existing one; no second Go/Python process set (`Get-Process AlchemyFurnace,python \| Measure-Object`) |
+| Tray → 退出炼丹炉 | App fully exits; tray icon gone; no `python.exe` left behind |
+
+macOS arm64 and amd64 both run the same sequence, plus: toggle the menu bar
+between light and dark — the furnace template icon must invert automatically
+with no white box background; after sleep/wake the tray menu still opens.
+
+Tray failure fallback: build a local package with `ALCHEMY_TRAY_DISABLE=1`
+and close the window — the app must quit completely and leave no Python
+process (release builds never set this variable; it only exercises the
+degradation path). Explorer restart (or Finder relaunch) must restore the
+tray icon — exactly one — without relaunching the app.
+
 ### Console-free Windows acceptance
 
 Windows builds must never show a console window (black flash). The PE

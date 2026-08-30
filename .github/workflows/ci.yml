@@ -49,6 +49,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go/go.mod
+          cache-dependency-path: backend/go/go.sum
+
+      # 平台无关的 controller/assets 测试在 Linux go job 跑; 本步只在 Windows
+      # 编译并运行 tray_windows_test.go(Shell_NotifyIconW 消息循环/菜单/任务栏重建)
+      - name: Run Windows tray tests
+        working-directory: backend/go
+        run: go test ./internal/desktoptray -count=1
+
       # verify-windows-package.ps1 的 Pester 测试只能在 Windows runner 跑(PE 头解析);
       # windows-2022 镜像缺 Pester 5 时就地安装;真实包契约由 release workflow 的
       # ci-assemble 调用覆盖,本 job 负责回归单测
@@ -89,6 +100,10 @@ jobs:
         run: go vet ./...
 
       - name: go test
+        # 平台无关测试全部由 ./... 覆盖: desktoptray controller/assets(无 build tag)
+        # + cmd/desktop 生命周期状态机。平台相关测试按 build tag 分流:
+        # tray_windows_test.go → windows-contract job; tray_darwin_test.go(cgo 桥)
+        # → release-desktop 的 macOS matrix
         run: go test ./... -count=1
 
   # ───────────────────── 2. Python smoke test ─────────────────────

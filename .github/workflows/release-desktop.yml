@@ -149,6 +149,14 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
 
+      # 两个 macOS 架构矩阵都要过托盘桥测试: darwin-only 测试含 cgo 编译
+      # (tray_darwin.go + tray_darwin.m + Cocoa 链接), fake native 驱动断言
+      # 回调转发/幂等/模板图标; 不创建真实 NSStatusItem(菜单栏观感走人工验收)
+      - name: Run macOS tray bridge tests
+        if: runner.os == 'macOS'
+        working-directory: backend/go
+        run: go test ./internal/desktoptray -count=1
+
       - name: Install NSIS
         if: runner.os == 'Windows'
         shell: pwsh
