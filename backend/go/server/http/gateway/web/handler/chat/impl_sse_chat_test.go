@@ -9,10 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alchemy-furnace/server/internal/behavior"
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	chatservice "github.com/alchemy-furnace/server/internal/service/chat_service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
+	"github.com/alchemy-furnace/server/internal/synthesis"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -22,6 +24,7 @@ type sseChatStub struct {
 	service.Chat
 	session        *model.ChatSession
 	sessionErr     errors.Error
+	pattern        *model.LanguagePattern
 	patternErr     errors.Error
 	saveErr        errors.Error
 	saveErrors     map[string]errors.Error
@@ -34,6 +37,8 @@ type sseChatStub struct {
 	streamChunks   []string
 	streamFull     string
 	streamErr      error
+	lastMessages   []map[string]string
+	lastOptions    service.GenerationOptions
 	members        []*model.SessionMember
 }
 
@@ -45,6 +50,9 @@ func (s *sseChatStub) GetOrBuildPattern(context.Context, uint) (*model.LanguageP
 	s.patternCalls++
 	if s.patternErr != nil {
 		return nil, s.patternErr
+	}
+	if s.pattern != nil {
+		return s.pattern, nil
 	}
 	return &model.LanguagePattern{SystemPrompt: "test system prompt"}, nil
 }
@@ -89,8 +97,10 @@ func (s *sseChatStub) ResolveCredentials(context.Context, string) (*credential.M
 	return &credential.ModelCredentials{Model: "test-model", APIKey: "must-not-leak"}, nil
 }
 
-func (s *sseChatStub) StreamChat(_ context.Context, _ []map[string]string, _ *credential.ModelCredentials, _ service.GenerationOptions, onChunk func(string)) (string, bool, error) {
+func (s *sseChatStub) StreamChat(_ context.Context, messages []map[string]string, _ *credential.ModelCredentials, options service.GenerationOptions, onChunk func(string)) (string, bool, error) {
 	s.engineCalls++
+	s.lastMessages = messages
+	s.lastOptions = options
 	for _, chunk := range s.streamChunks {
 		onChunk(chunk)
 	}
@@ -347,6 +357,105 @@ func TestSSEChatRetryDoesNotPersistDuplicateUserMessage(t *testing.T) {
 		if role == "user" {
 			t.Fatalf("SaveMessage roles = %v, retry duplicated persisted user", stub.savedRoles)
 		}
+	}
+}
+
+// 普通单聊:系统消息必须含四个动态分区(§11),且带行为档案时激活丹性规则
+func TestSSEChatSystemMessageIncludesDynamicSections(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	profileJSON, err := behavior.ProfileToJSONMap(behavior.CompileProfile("沉稳", []synthesis.PillInput{{
+		ID: "p1", Name: "古琴丹", Weight: 2.0, SortOrder: 0,
+		SkillSchema: model.JSONMap{
+			"description": "以古琴之道应答",
+			"mental_models": []any{map[string]any{
+				"name": "知音", "one_liner": "先问对方所好再谈琴",
+			}},
+		},
+	}}))
+	if err != nil {
+		t.Fatalf("ProfileToJSONMap() error = %v", err)
+	}
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model", Proactivity: 60},
+		},
+		pattern:   &model.LanguagePattern{SystemPrompt: "cached static prompt", BehaviorProfile: profileJSON},
+		streamFull: "ok",
+	}
+
+	w := performSSEChatBody(t, stub, sessionUID, `{"content":"聊点音乐"} `)
+	body := w.Body.String()
+	if !strings.Contains(body, "event: done") {
+		t.Fatalf("SSE body = %q, want done", body)
+	}
+	if stub.engineCalls != 1 || len(stub.lastMessages) == 0 {
+		t.Fatalf("engine calls = %d, messages = %d", stub.engineCalls, len(stub.lastMessages))
+	}
+	sys := stub.lastMessages[0]
+	if sys["role"] != "system" {
+		t.Fatalf("首条应为 system: %+v", sys)
+	}
+	for _, title := range []string{"本轮激活丹性", "本地记忆事实", "用户当轮要求", "回答与群聊预算"} {
+		if !strings.Contains(sys["content"], "【"+title+"】") {
+			t.Fatalf("系统消息缺少动态分区 %q:\n%s", title, sys["content"])
+		}
+	}
+	if !strings.Contains(sys["content"], "古琴丹") {
+		t.Fatalf("系统消息应含激活丹性规则:\n%s", sys["content"])
+	}
+}
+
+// 用户明确停止:引擎 0 调用,直接 done
+func TestSSEChatStopRequestSkipsEngine(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model"},
+		},
+	}
+
+	w := performSSEChatBody(t, stub, sessionUID, `{"content":"够了，别说了"}`)
+	body := w.Body.String()
+	if !strings.Contains(body, "event: done") {
+		t.Fatalf("SSE body = %q, want done for stop request", body)
+	}
+	if strings.Contains(body, "event: chunk") {
+		t.Fatalf("SSE body = %q, stop must not stream chunks", body)
+	}
+	if stub.engineCalls != 0 {
+		t.Fatalf("StreamChat calls = %d, stop must not call engine", stub.engineCalls)
+	}
+	if stub.titleCalls != 0 {
+		t.Fatalf("GenerateSessionTitle calls = %d, stop must not generate title", stub.titleCalls)
+	}
+	if strings.Join(stub.savedRoles, ",") != "user" {
+		t.Fatalf("saved roles = %v, want user only", stub.savedRoles)
+	}
+}
+
+// TurnPlan.MaxTokens 必须经 GenerationOptions 传向引擎
+func TestSSEChatPassesMaxTokensFromPlan(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model"},
+		},
+		streamFull: "详细回答",
+	}
+
+	w := performSSEChatBody(t, stub, sessionUID, `{"content":"详细讲讲这个方案"}`)
+	if !strings.Contains(w.Body.String(), "event: done") {
+		t.Fatalf("SSE body = %q, want done", w.Body.String())
+	}
+	// 单聊详细:MaxTokens = max(policy, 2048) → 2048
+	if stub.lastOptions.MaxTokens != 2048 {
+		t.Fatalf("lastOptions = %+v, want MaxTokens=2048", stub.lastOptions)
 	}
 }
 

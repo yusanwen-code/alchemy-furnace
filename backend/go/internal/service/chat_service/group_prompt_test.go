@@ -65,6 +65,20 @@ func TestBuildGroupSystemPrompt(t *testing.T) {
 	}
 }
 
+// Task 8:传入已含动态分区(§11)的 basePrompt 时,群规则补丁必须完整保留
+func TestBuildGroupSystemPromptPreservesDynamicBase(t *testing.T) {
+	base := "【本轮激活丹性】\n〔金丹:古琴丹〕\n【本地记忆事实】\n(无)\n【用户当轮要求】\n- 用户要求简短直接。\n【回答与群聊预算】\n- 回答不超过 2 句。\n【道人身份】\n你是太上老君。"
+	p := BuildGroupSystemPrompt(base, "太上老君", 25, []string{"太上老君", "孙悟空"}, false)
+	for _, want := range []string{
+		"【本轮激活丹性】", "【本地记忆事实】", "【用户当轮要求】", "【回答与群聊预算】",
+		"【群聊规则】", "成员:", "[PASS]", "@用户", "长度与排版",
+	} {
+		if !strings.Contains(p, want) {
+			t.Fatalf("输出缺少 %q:\n%s", want, p)
+		}
+	}
+}
+
 func TestBuildGroupMessages(t *testing.T) {
 	agentID := uint(7)
 	history := []*model.ChatMessage{

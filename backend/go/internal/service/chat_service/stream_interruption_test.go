@@ -3,6 +3,7 @@ package chat_service
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -49,5 +50,40 @@ func TestStreamChatPrematureEOFReturnsSafeTypedInterruption(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "EOF") || strings.Contains(err.Error(), "secret") {
 		t.Fatalf("error leaked transport or credentials: %q", err.Error())
+	}
+}
+
+// Task 7/8:GenerationOptions.MaxTokens 必须出现在引擎请求体(spec §7.2)
+func TestStreamChatPassesMaxTokensToEngine(t *testing.T) {
+	var body string
+	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/chat/completions/stream" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		raw, _ := io.ReadAll(r.Body)
+		body = string(raw)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"content\":\"ok\"}\n\ndata: [DONE]\n\n")
+	}))
+	t.Cleanup(engine.Close)
+
+	svc := New(nil, nil, nil, nil, engine.URL)
+	full, _, err := svc.StreamChat(
+		context.Background(),
+		[]map[string]string{{"role": "user", "content": "question"}},
+		&credential.ModelCredentials{Model: "test-model", APIKey: "secret"},
+		service.GenerationOptions{MaxTokens: 384},
+		nil,
+	)
+	if err != nil || full != "ok" {
+		t.Fatalf("StreamChat() = %q, %v", full, err)
+	}
+	if !strings.Contains(body, `"max_tokens":384`) {
+		t.Fatalf("引擎请求体缺 max_tokens: %s", body)
+	}
+	// 0 表示不限制:不得出现在请求体(回退 Python 默认)
+	svc.StreamChat(context.Background(), []map[string]string{{"role": "user", "content": "q"}}, nil, service.GenerationOptions{}, nil)
+	if strings.Contains(body, "max_tokens") {
+		t.Fatalf("MaxTokens=0 不应携带 max_tokens: %s", body)
 	}
 }

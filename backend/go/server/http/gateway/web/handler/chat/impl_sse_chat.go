@@ -3,14 +3,17 @@ package chat
 import (
 	"context"
 	stderrors "errors"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/alchemy-furnace/server/internal/behavior"
 	"github.com/alchemy-furnace/server/internal/context/contextutil"
 	ierr "github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	chatservice "github.com/alchemy-furnace/server/internal/service/chat_service"
+	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/server/http/request"
 	"github.com/alchemy-furnace/server/server/http/response"
 	"github.com/gin-gonic/gin"
@@ -106,6 +109,17 @@ func (cls *Chat) SSEChat(c *gin.Context) {
 		return
 	}
 
+	// 行为档案(JSONMap)→ 结构化 profile;缺失/损坏则 nil,退化=只有静态分区
+	var profile *behavior.DaoistBehaviorProfile
+	if len(pattern.BehaviorProfile) > 0 {
+		if raw, merr := json.Marshal(pattern.BehaviorProfile); merr == nil {
+			var p behavior.DaoistBehaviorProfile
+			if uerr := json.Unmarshal(raw, &p); uerr == nil {
+				profile = &p
+			}
+		}
+	}
+
 	var recentMessages []*model.ChatMessage
 	if body.Retry {
 		// 重试复用最近一次同内容用户消息，避免前端重发导致本地与数据库各多一行。
@@ -140,17 +154,33 @@ func (cls *Chat) SSEChat(c *gin.Context) {
 		return
 	}
 
-	// 构建消息列表(OpenAI 格式,首条为合成后的系统提示词)
-	messages := []map[string]string{{"role": "system", "content": pattern.SystemPrompt}}
+	// 构建消息列表(OpenAI 格式,首条为动态分区合成的系统提示词)
+	// 用户当轮约束 → TurnPlan → 动态分区提示词(spec §8/§11)
+	constraints := turnpolicy.ExtractUserTurnConstraints(content)
+	plan := turnpolicy.BuildTurnPlan(constraints, turnpolicy.PolicyForProactivity(session.Agent.Proactivity), 1, nil)
+	if profile != nil {
+		plan.ActivatedRules = behavior.ActivatePillRules(content, profile)
+	}
+	systemPrompt := behavior.ComposeSystemPrompt(profile, session.Agent.Name, plan)
+	if systemPrompt == "" {
+		systemPrompt = pattern.SystemPrompt // 防御:profile 缺失时用缓存提示词
+	}
+	messages := []map[string]string{{"role": "system", "content": systemPrompt}}
 	for _, m := range recentMessages {
 		messages = append(messages, map[string]string{"role": m.Role, "content": m.Content})
+	}
+
+	// 停止语义:accepted 已发,直接 done,引擎 0 调用(spec §8.2)
+	if plan.Stop {
+		sseWriteEvent(w, flusher, "done", ssePayload{})
+		return
 	}
 
 	// 请求级生命周期: 客户端中断 -> ctx 取消 -> 上游 LLM 流中断
 	chunkCh := make(chan string)
 	resultCh := make(chan streamResult, 1)
 	go func() {
-		full, canceled, streamErr := cls.chat.StreamChat(ctx, messages, creds, service.GenerationOptions{MaxTokens: 0}, func(chunk string) {
+		full, canceled, streamErr := cls.chat.StreamChat(ctx, messages, creds, service.GenerationOptions{MaxTokens: plan.MaxTokens}, func(chunk string) {
 			select {
 			case chunkCh <- chunk:
 			case <-ctx.Done():
