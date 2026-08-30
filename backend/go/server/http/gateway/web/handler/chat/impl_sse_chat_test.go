@@ -449,6 +449,48 @@ func TestSessionResponseIncludesStatusesAndCurrentMembers(t *testing.T) {
 	}
 }
 
+// 单聊响应必须携带道人真实身份(名称/头像/状态),不能只有 UUID
+func TestSessionResponseIncludesSingleAgentIdentity(t *testing.T) {
+	agentID := uint(7)
+	agentUID := uuid.New()
+	session := &model.ChatSession{
+		UUID: uuid.New(), Type: model.SessionTypeSingle, AgentID: &agentID,
+		Agent: model.DaoAgent{UUID: agentUID, Name: "太上老君", Avatar: "https://example.com/laojun.png", Status: "inactive"},
+	}
+	response := toSessionResponse(session)
+	if response.AgentID != agentUID.String() || response.AgentName != "太上老君" {
+		t.Fatalf("identity = %+v", response)
+	}
+	if response.AgentAvatar != "https://example.com/laojun.png" || response.AgentStatus != "inactive" {
+		t.Fatalf("avatar/status = %+v", response)
+	}
+}
+
+// 群聊三个单聊身份字段必须为空或省略,成员身份只来自 members
+// 真实群聊的 AgentID 为 NULL(单聊外键),带残留预加载也不得输出身份
+func TestSessionResponseOmitsSingleAgentIdentityForGroup(t *testing.T) {
+	session := &model.ChatSession{
+		UUID: uuid.New(), Type: model.SessionTypeGroup,
+		Agent: model.DaoAgent{UUID: uuid.New(), Name: "太上老君", Avatar: "https://example.com/laojun.png", Status: "inactive"},
+	}
+	data, err := json.Marshal(toSessionResponse(session))
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var response struct {
+		AgentID     string `json:"agent_id"`
+		AgentName   string `json:"agent_name"`
+		AgentAvatar string `json:"agent_avatar"`
+		AgentStatus string `json:"agent_status"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if response.AgentID != "" || response.AgentName != "" || response.AgentAvatar != "" || response.AgentStatus != "" {
+		t.Fatalf("group identity fields must be empty: %+v", response)
+	}
+}
+
 func TestGetSessionReturnsDirectGroupMetadata(t *testing.T) {
 	sessionUID := uuid.New()
 	stub := &sseChatStub{

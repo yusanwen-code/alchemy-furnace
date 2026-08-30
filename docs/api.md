@@ -329,6 +329,29 @@ POST /api/v1/chat/sessions
 }
 ```
 
+响应:
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "id": "5c2dfdec-2df1-4d7c-8a05-1232715957a9",
+    "type": "single",
+    "agent_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "agent_name": "太上老君",
+    "agent_avatar": "https://example.com/laojun.png",
+    "agent_status": "active",
+    "title": "",
+    "created_at": "2026-08-07T10:00:00Z",
+    "updated_at": "2026-08-07T10:00:00Z"
+  }
+}
+```
+
+> 会话 `id` 与 `agent_id` 均为字符串 UUID（不暴露数字主键）。单聊响应携带
+> `agent_name`/`agent_avatar`/`agent_status` 道人真实身份；群聊响应中这三个
+> 字段为空或省略，成员身份来自 `members` 数组（`type` 为 `group` 时存在）。
+
 ### 获取会话列表
 
 ```

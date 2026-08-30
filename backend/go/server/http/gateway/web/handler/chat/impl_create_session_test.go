@@ -31,6 +31,48 @@ func (s *createGroupStub) CreateGroupSession(_ context.Context, uids []uuid.UUID
 	return s.session, s.err
 }
 
+// createSingleStub 只覆盖 CreateSession(单聊创建)
+type createSingleStub struct {
+	service.Chat
+	session *model.ChatSession
+	err     errors.Error
+	gotUID  uuid.UUID
+}
+
+func (s *createSingleStub) CreateSession(_ context.Context, agentUID uuid.UUID) (*model.ChatSession, errors.Error) {
+	s.gotUID = agentUID
+	return s.session, s.err
+}
+
+// 单聊创建: 201 响应必须携带道人真实身份(名称/头像/状态), 前端无需再按 agent_id 查名录
+func TestCreateSingleSessionResponseCarriesDaoistIdentity(t *testing.T) {
+	agentUID := uuid.New()
+	agentID := uint(1)
+	session := &model.ChatSession{UUID: uuid.New(), Type: model.SessionTypeSingle, AgentID: &agentID}
+	session.Agent = model.DaoAgent{UUID: agentUID, Name: "太上老君", Avatar: "https://example.com/laojun.png", Status: "active"}
+	stub := &createSingleStub{session: session}
+
+	body := fmt.Sprintf(`{"type":"single","agent_id":%q}`, agentUID)
+	status, envelope := performCreateSession(t, New(stub), body)
+
+	if status != http.StatusCreated {
+		t.Fatalf("期望 HTTP 201, 实际 %d, body: %v", status, envelope)
+	}
+	if stub.gotUID != agentUID {
+		t.Fatalf("handler 应转发 agent uuid, got = %v", stub.gotUID)
+	}
+	data, ok := envelope["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("data 字段缺失: %v", envelope)
+	}
+	if data["agent_name"] != "太上老君" || data["agent_avatar"] != "https://example.com/laojun.png" {
+		t.Fatalf("创建响应未携带道人身份: %v", data)
+	}
+	if data["agent_status"] != "active" {
+		t.Fatalf("创建响应 agent_status = %v, want active", data["agent_status"])
+	}
+}
+
 func performCreateSession(t *testing.T, h *Chat, body string) (int, map[string]interface{}) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

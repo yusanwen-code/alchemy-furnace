@@ -30,10 +30,13 @@ func New(chat service.Chat) *Chat {
 // ---------- 响应 DTO ----------
 
 // SessionResponse 会话响应 DTO:id/agent_id 输出 UUID 字符串,不泄露数字主键
+// 单聊身份:agent_id/agent_name/agent_avatar/agent_status 只对单聊输出,群聊为空或省略
 type SessionResponse struct {
 	ID          string            `json:"id"`
 	Type        string            `json:"type"` // single | group
 	AgentID     string            `json:"agent_id"`
+	AgentName   string            `json:"agent_name,omitempty"`
+	AgentAvatar string            `json:"agent_avatar,omitempty"`
 	AgentStatus string            `json:"agent_status,omitempty"`
 	Title       string            `json:"title"`
 	Members     []*MemberResponse `json:"members,omitempty"`
@@ -62,24 +65,24 @@ type MessageResponse struct {
 }
 
 // toSessionResponse 内部模型 -> 对外 DTO(agent 需预加载以取 UUID)
-// 群聊 AgentID 可能为 nil(单聊字段未使用),需空值安全
+// 单聊才输出 agent_id/agent_name/agent_avatar/agent_status;群聊身份仅经 members
 func toSessionResponse(s *model.ChatSession) *SessionResponse {
-	agentID := ""
-	if s.AgentID != nil {
-		agentID = s.Agent.UUID.String()
-	}
 	typeStr := s.Type
 	if typeStr == "" {
 		typeStr = model.SessionTypeSingle
 	}
 	response := &SessionResponse{
-		ID:          s.UUID.String(),
-		Type:        typeStr,
-		AgentID:     agentID,
-		AgentStatus: s.Agent.Status,
-		Title:       s.Title,
-		CreatedAt:   s.CreatedAt,
-		UpdatedAt:   s.UpdatedAt,
+		ID:        s.UUID.String(),
+		Type:      typeStr,
+		Title:     s.Title,
+		CreatedAt: s.CreatedAt,
+		UpdatedAt: s.UpdatedAt,
+	}
+	if s.AgentID != nil {
+		response.AgentID = s.Agent.UUID.String()
+		response.AgentName = s.Agent.Name
+		response.AgentAvatar = s.Agent.Avatar
+		response.AgentStatus = s.Agent.Status
 	}
 	if len(s.Members) > 0 {
 		members := make([]*model.SessionMember, 0, len(s.Members))
