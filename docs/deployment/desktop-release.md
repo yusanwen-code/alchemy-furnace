@@ -111,6 +111,15 @@ RC is promoted. Diagnostics go to log files, never to a console: adding
 `-windowsconsole` to the Wails build is forbidden (asserted in
 `scripts/tests/desktop-name-contract-test.sh`).
 
+Each Windows build also runs an automatic launch smoke test
+(`ci-assemble.sh` passes `-LaunchSmoke`): `ALCHEMY_SMOKE=1` starts the real
+`AlchemyFurnace.exe` with `AppData` redirected to a temporary directory,
+asserts the process survives with a `python.exe` child, and asserts both
+`MainWindowHandle`s are `0` — any non-zero handle (black console flash) fails
+the package job. The smoke test is not a substitute for the manual table
+above: CI has no visible desktop, so the four entries are still accepted by
+hand on Windows 10 and 11.
+
 ## Automatic release
 
 Create and push a semantic-version tag:

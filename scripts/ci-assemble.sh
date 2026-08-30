@@ -161,7 +161,8 @@ case "$PLATFORM" in
     "$PS_RUNNER" -NoProfile -ExecutionPolicy Bypass -File "$ROOT/scripts/verify-windows-package.ps1" \
       -PackageDir "$PACKAGE_DIR" \
       -Installer "$INSTALLER" \
-      -ExpectedVersion "$VERSION"
+      -ExpectedVersion "$VERSION" \
+      -LaunchSmoke
     ;;
 
   *) fail "未知平台: $PLATFORM" ;;

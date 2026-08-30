@@ -13,7 +13,9 @@
 #   pwsh scripts/verify-windows-package.ps1 `
 #     -PackageDir backend/go/build/package/windows `
 #     -Installer backend/go/build/dist/AlchemyFurnace-Setup.exe `
-#     -ExpectedVersion v0.1.1
+#     -ExpectedVersion v0.1.1 `
+#     [-LaunchSmoke]      # 真实启动烟测: ALCHEMY_SMOKE=1 + 临时数据目录,
+#                         # 确认主进程存活 + python.exe 子进程 + 无窗口句柄(无黑框)
 #
 # 退出码: 0=通过 1=校验失败 2=参数错误
 # 测试: scripts/tests/verify-windows-package.Tests.ps1(Pester v5, Windows runner)
@@ -23,7 +25,8 @@
 param(
   [string]$PackageDir = '',
   [string]$Installer = '',
-  [string]$ExpectedVersion = ''
+  [string]$ExpectedVersion = '',
+  [switch]$LaunchSmoke
 )
 
 # ─── 内部函数(允许 Pester dot-source 后单测) ───
@@ -83,6 +86,28 @@ function Get-PeMachine {
     return $br.ReadUInt16()
   } finally {
     $fs.Dispose()
+  }
+}
+
+# 读取 PE Optional Header Subsystem 字段: 2=Windows GUI, 3=Console
+# Optional Header 起点 = PE 头 + COFF 头(24 字节); Subsystem 在 PE32+/PE32 的 +0x44
+function Get-PeSubsystem {
+  param([Parameter(Mandatory)][string]$Path)
+  $stream = [IO.File]::OpenRead((Get-AbsolutePath $Path))
+  $reader = [IO.BinaryReader]::new($stream)
+  try {
+    $stream.Position = 0x3C
+    $peOffset = $reader.ReadInt32()
+    $stream.Position = $peOffset
+    if ($reader.ReadUInt32() -ne 0x00004550) { throw "PE signature invalid" }
+    $stream.Position = $peOffset + 24
+    $magic = $reader.ReadUInt16()
+    if ($magic -ne 0x10B -and $magic -ne 0x20B) { throw "optional header magic invalid" }
+    $stream.Position = $peOffset + 24 + 0x44
+    return $reader.ReadUInt16()
+  } finally {
+    $reader.Dispose()
+    $stream.Dispose()
   }
 }
 
@@ -150,12 +175,71 @@ function Invoke-PythonContractCheck {
   return [pscustomobject]@{ Success = $ok; Output = $out; ExitCode = $exitCode }
 }
 
+# ─── 启动烟测(仅 -LaunchSmoke 启用) ───
+# ALCHEMY_SMOKE=1 启动主 exe(只起 HTTP 不开窗),AppData 重定向到临时目录避免
+# 触碰真实用户数据;等待进程存活并出现 python.exe 直接子进程;主进程与 python
+# 的 MainWindowHandle 必须均为 0(任何非零句柄=黑框/窗口泄漏);Stop-Process 清理。
+# 返回: [string] '' = 通过 / 错误描述
+function Invoke-LaunchSmoke {
+  param([Parameter(Mandatory)][string]$PackageDir)
+  $exe = Join-Path (Get-AbsolutePath $PackageDir) 'AlchemyFurnace.exe'
+  if (-not (Test-Path -LiteralPath $exe)) {
+    return "烟测失败: 未找到主程序 $exe"
+  }
+  $smokeHome = Join-Path ([System.IO.Path]::GetTempPath()) ('af-smoke-' + [Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
+  $oldAppData = $env:AppData
+  $oldSmoke = $env:ALCHEMY_SMOKE
+  $proc = $null
+  $py = $null
+  try {
+    # PS 5.1 无 Start-Process -Environment,用环境变量继承传递
+    $env:AppData = $smokeHome
+    $env:ALCHEMY_SMOKE = '1'
+    $proc = Start-Process -FilePath $exe -PassThru
+
+    # 等待: 主进程存活 且 出现 python.exe 直接子进程(最多 20s)
+    $deadline = (Get-Date).AddSeconds(20)
+    while ($true) {
+      $p = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+      if (-not $p -or $p.HasExited) {
+        return "烟测失败: 主进程提前退出(数据目录=$smokeHome)"
+      }
+      $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($proc.Id)" -ErrorAction SilentlyContinue)
+      $py = $children | Where-Object { $_.Name -ieq 'python.exe' } | Select-Object -First 1
+      if ($py) { break }
+      if ((Get-Date) -gt $deadline) {
+        return '烟测失败: 20s 内未发现 python.exe 子进程'
+      }
+      Start-Sleep -Milliseconds 500
+    }
+
+    # 无窗口句柄契约: smoke 模式主进程不开主窗;任何非零句柄=出现黑框/console
+    $hMain = (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue).MainWindowHandle
+    $hPy = (Get-Process -Id $py.ProcessId -ErrorAction SilentlyContinue).MainWindowHandle
+    if ($null -ne $hMain -and $hMain -ne 0) {
+      return "烟测失败: 主进程出现窗口句柄 $hMain (PID $($proc.Id))"
+    }
+    if ($null -ne $hPy -and $hPy -ne 0) {
+      return "烟测失败: python 出现窗口句柄 $hPy (PID $($py.ProcessId))"
+    }
+    return ''
+  } finally {
+    if ($null -ne $proc) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+    if ($null -ne $py) { Stop-Process -Id $py.ProcessId -Force -ErrorAction SilentlyContinue }
+    $env:AppData = $oldAppData
+    $env:ALCHEMY_SMOKE = $oldSmoke
+    Remove-Item -Recurse -Force $smokeHome -ErrorAction SilentlyContinue
+  }
+}
+
 # 主校验流程, 返回退出码(0 通过 / 1 失败)
 function Invoke-VerifyWindowsPackage {
   param(
     [string]$PackageDir,
     [string]$Installer,
-    [string]$ExpectedVersion
+    [string]$ExpectedVersion,
+    [switch]$LaunchSmoke
   )
   $failures = [System.Collections.Generic.List[string]]::new()
   $pkg = Get-AbsolutePath $PackageDir
@@ -167,7 +251,7 @@ function Invoke-VerifyWindowsPackage {
 
   Write-Host "[verify-windows] 校验 Windows x64 包: $pkg (期望版本 $ExpectedVersion)"
 
-  # 1. 应用: 存在 + PE Machine 0x8664
+  # 1. 应用: 存在 + PE Machine 0x8664 + Subsystem 2 (Windows GUI)
   if (-not (Test-Path -LiteralPath $app)) {
     $failures.Add("未找到应用: $app")
   } elseif ((Get-Item -LiteralPath $app).Length -eq 0) {
@@ -178,6 +262,14 @@ function Invoke-VerifyWindowsPackage {
       $failures.Add(('应用架构错误(期望 0x8664, 实际 0x{0:X4}): {1}' -f $appMachine, $app))
     } else {
       Write-Host "[verify-windows] OK 应用架构 x64 (0x8664): $app"
+    }
+    # GUI Subsystem 契约: 主 exe 必须是 2(Windows GUI), 否则启动闪黑框
+    # (runtime/python.exe 允许 Console(3), 由启动参数 CREATE_NO_WINDOW 隐藏)
+    try { $subsystem = Get-PeSubsystem $app } catch { $subsystem = -1 }
+    if ($subsystem -ne 2) {
+      $failures.Add("应用 PE Subsystem=$subsystem，期望 2 (Windows GUI): $app")
+    } else {
+      Write-Host "[verify-windows] OK Windows GUI subsystem (2): $app"
     }
   }
 
@@ -227,6 +319,16 @@ function Invoke-VerifyWindowsPackage {
     Write-Host "[verify-windows] OK 版本一致 ($ExpectedVersion): $app"
   }
 
+  # 5. 可选启动烟测: ALCHEMY_SMOKE=1 真实拉起, 验证无黑框(默认关闭, release 启用)
+  if ($LaunchSmoke) {
+    $smokeErr = Invoke-LaunchSmoke -PackageDir $pkg
+    if ($smokeErr) {
+      $failures.Add($smokeErr)
+    } else {
+      Write-Host '[verify-windows] OK 启动烟测: 主进程存活 + python.exe 子进程 + 无窗口句柄'
+    }
+  }
+
   if ($failures.Count -gt 0) {
     Write-Host '[verify-windows] ❌ Windows x64 包验证失败:'
     foreach ($f in $failures) { Write-Host "  - $f" }
@@ -241,8 +343,8 @@ if ($MyInvocation.InvocationName -ne '.') {
   Set-StrictMode -Version Latest
   $ErrorActionPreference = 'Stop'
   if (-not $PackageDir -or -not $Installer -or -not $ExpectedVersion) {
-    Write-Host '用法: verify-windows-package.ps1 -PackageDir <dir> -Installer <setup.exe> -ExpectedVersion <vX.Y.Z>'
+    Write-Host '用法: verify-windows-package.ps1 -PackageDir <dir> -Installer <setup.exe> -ExpectedVersion <vX.Y.Z> [-LaunchSmoke]'
     exit 2
   }
-  exit (Invoke-VerifyWindowsPackage -PackageDir $PackageDir -Installer $Installer -ExpectedVersion $ExpectedVersion)
+  exit (Invoke-VerifyWindowsPackage -PackageDir $PackageDir -Installer $Installer -ExpectedVersion $ExpectedVersion -LaunchSmoke:$LaunchSmoke)
 }
