@@ -35,6 +35,38 @@ function Get-AbsolutePath {
   return [System.IO.Path]::GetFullPath($Path)
 }
 
+# 命名契约(双层命名): 安装器源文件必须显式 UTF-8 编码 + 中文显示名 + 中文开始菜单目录
+# 返回布尔; 由 Pester 单测与真实安装验收共同守护
+function Test-DesktopDisplayNameContract {
+  param([string]$InstallerScript)
+  $text = [IO.File]::ReadAllText($InstallerScript, [Text.Encoding]::UTF8)
+  return $text.StartsWith("# -*- coding: utf-8 -*-") -and
+    $text.Contains('!define PRODUCT_DISPLAY_NAME "炼丹炉"') -and
+    $text.Contains('$SMPROGRAMS\${PRODUCT_DISPLAY_NAME}')
+}
+
+# 真实安装后的用户可见名称验收(Windows 人工/自动验收环境):
+# 注册表 Uninstall DisplayName、开始菜单中文目录快捷方式、桌面快捷方式,
+# 三处必须逐字符等于"炼丹炉"。返回 [pscustomobject]@{ All; RegName; StartMenu; Desktop }
+function Test-InstalledDisplayNames {
+  param()
+  $okReg = $okStart = $okDesktop = $false
+  $regName = ''
+  try {
+    $key = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\AlchemyFurnace' -ErrorAction Stop
+    $regName = [string]$key.DisplayName
+    $okReg = ($regName -eq '炼丹炉')
+  } catch { $regName = '' }
+
+  $startLnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\炼丹炉\炼丹炉.lnk'
+  $okStart = (Test-Path -LiteralPath $startLnk)
+  $desktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) '炼丹炉.lnk'
+  $okDesktop = (Test-Path -LiteralPath $desktopLnk)
+
+  $all = $okReg -and $okStart -and $okDesktop
+  return [pscustomobject]@{ All = $all; RegName = $regName; StartMenu = $okStart; Desktop = $okDesktop }
+}
+
 # 读取 PE 头 Machine 字段: 0x8664=AMD64(x64), 0x014C=I386(32 位), 0xAA64=ARM64
 function Get-PeMachine {
   param([string]$FilePath)

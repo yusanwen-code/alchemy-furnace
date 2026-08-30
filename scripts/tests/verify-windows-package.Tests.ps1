@@ -53,6 +53,9 @@ BeforeAll {
 
   # dot-source 脚本以暴露内部函数(脚本主入口有 dot-source 保护,不会自动执行)
   . $script:Verifier
+
+  # 命名契约: 指向真实 installer.nsi(UTF-8 显式编码 + 中文显示名)
+  $script:InstallerScript = (Resolve-Path (Join-Path $PSScriptRoot '..\..\backend\go\build\windows\installer.nsi')).Path
 }
 
 AfterAll {
@@ -135,6 +138,18 @@ Describe 'verify-windows-package.ps1 负例' {
     $out = (& $script:Verifier -PackageDir $pkg -Installer $inst -ExpectedVersion 'v0.1.1' 2>&1 6>&1 | Out-String)
     $LASTEXITCODE | Should -Be 1
     $out | Should -Match '版本不一致'
+  }
+}
+
+Describe 'verify-windows-package.ps1 命名契约(双层命名)' {
+  It '真实 installer.nsi 必须显式 UTF-8 编码 + 中文显示名 + 中文开始菜单目录' {
+    Test-DesktopDisplayNameContract -InstallerScript $script:InstallerScript | Should -BeTrue
+  }
+
+  It '缺少 UTF-8 编码声明的 NSIS 文件必须被拒绝' {
+    $bad = Join-Path $script:FixtureRoot 'bad.nsi'
+    Set-Content -Path $bad -Value '; no encoding declaration' -Encoding ASCII
+    Test-DesktopDisplayNameContract -InstallerScript $bad | Should -BeFalse
   }
 }
 
