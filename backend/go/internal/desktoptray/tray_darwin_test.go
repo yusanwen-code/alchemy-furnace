@@ -73,12 +73,12 @@ func TestDarwinStartFailure(t *testing.T) {
 	require.Contains(t, err.Error(), "macOS status item start failed")
 }
 
-// 传给 native 的是嵌入的 Template 图标字节
-func TestDarwinPassesTemplateIcon(t *testing.T) {
+// NSImage 会把资源设置为 22pt；Retina 屏必须传 44px 的 @2x 图，不能放大 22px 图。
+func TestDarwinPassesRetinaTemplateIcon(t *testing.T) {
 	f := &fakeDarwinNative{}
 	b := newDarwinBackend(f)
 	require.NoError(t, b.Start(Callbacks{}))
-	require.Equal(t, macTemplateIcon, f.lastIcon)
+	require.Equal(t, macTemplateIcon2x, f.lastIcon)
 	require.NoError(t, b.Stop())
 }
 

@@ -80,7 +80,9 @@ func (b *darwinBackend) Start(cb Callbacks) error {
 		cbMu.Lock()
 		openCb, quitCb = cb.Open, cb.Quit
 		cbMu.Unlock()
-		if rc := b.native.start(macTemplateIcon, len(macTemplateIcon)); rc != 0 {
+		// AppKit 中该 NSImage 的逻辑尺寸会设为 22pt。传入 44px 的 @2x 资源，
+		// Retina 菜单栏可一一映射到物理像素；若传 22px，系统会放大并产生模糊边缘。
+		if rc := b.native.start(macTemplateIcon2x, len(macTemplateIcon2x)); rc != 0 {
 			b.startErr = errors.New("desktoptray: macOS status item start failed")
 		}
 	})
