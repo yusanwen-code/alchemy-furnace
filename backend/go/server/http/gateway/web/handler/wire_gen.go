@@ -43,7 +43,11 @@ func NewAgent() *agent.Agent {
 	daoPill := service.ProvidePillDao()
 	model := service.ProvideModelDao()
 	agent_serviceAgent := agent_service.New(daoAgent, daoPill, model)
-	agentAgent := agent.New(agent_serviceAgent)
+	memory := service.ProvideMemoryDao()
+	modelResolver := credential.NewResolver()
+	provider := service.NewEngineBaseURL()
+	serviceMemory := service.ProvideMemoryService(memory, modelResolver, provider)
+	agentAgent := agent.New(agent_serviceAgent, serviceMemory)
 	return agentAgent
 }
 

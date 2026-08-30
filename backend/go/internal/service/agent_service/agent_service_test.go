@@ -265,7 +265,7 @@ func TestUpdateAgentRejectsInvalidStatus(t *testing.T) {
 	svc, db := setupServiceTestDB(t)
 	agent, _ := seedAgentAndPills(t, db, 0)
 	bogus := "bogus"
-	_, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, &bogus, nil)
+	_, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, &bogus, nil, nil)
 	assertErrType(t, err, errors.ErrorTypeInvalidRequest, "非法 status")
 }
 
@@ -278,7 +278,7 @@ func TestUpdateAgentActivatingWithUnavailableFinalModelFails(t *testing.T) {
 	}
 	active := "active"
 	// 不传 model_name,仅激活;最终模型仍是不可用的 ghost-model → 拒绝
-	_, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, &active, nil)
+	_, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, &active, nil, nil)
 	assertErrType(t, err, errors.ErrorTypeInvalidRequest, "激活但模型不可用")
 	var reload model.DaoAgent
 	db.First(&reload, agent.ID)
@@ -295,7 +295,7 @@ func TestUpdateAgentActiveAgentWithUnavailableExistingModelFails(t *testing.T) {
 		t.Fatalf("建道人失败: %v", err)
 	}
 	name := "改名"
-	_, err := svc.UpdateAgent(context.Background(), agent.UUID, &name, nil, nil, nil, nil, nil)
+	_, err := svc.UpdateAgent(context.Background(), agent.UUID, &name, nil, nil, nil, nil, nil, nil)
 	assertErrType(t, err, errors.ErrorTypeInvalidRequest, "active 道人模型不可用(未改 model_name)")
 }
 
@@ -307,12 +307,59 @@ func TestUpdateAgentActivatingWithAvailableModelSucceeds(t *testing.T) {
 		t.Fatalf("建道人失败: %v", err)
 	}
 	active := "active"
-	updated, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, &active, nil)
+	updated, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, &active, nil, nil)
 	if err != nil {
 		t.Fatalf("激活可用模型报错: %v", err)
 	}
 	if updated.Status != "active" {
 		t.Fatalf("状态 = %s, 期望 active", updated.Status)
+	}
+}
+
+func TestUpdateAgentMemoryEnabled(t *testing.T) {
+	svc, db := setupServiceTestDB(t)
+	seedEnabledModel(t, db, "real-model")
+	agent := &model.DaoAgent{UUID: uuid.New(), Name: "记忆道人", ModelName: "real-model", Status: "active"}
+	if err := db.Create(agent).Error; err != nil {
+		t.Fatalf("建道人失败: %v", err)
+	}
+
+	// 默认启用(true)
+	got, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("首次更新报错: %v", err)
+	}
+	if !got.MemoryEnabled {
+		t.Fatal("默认 MemoryEnabled 应为 true")
+	}
+
+	// 显式关闭 → 落库
+	disabled := false
+	updated, err := svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, nil, nil, &disabled)
+	if err != nil {
+		t.Fatalf("关闭记忆报错: %v", err)
+	}
+	if updated.MemoryEnabled {
+		t.Fatal("关闭后响应 MemoryEnabled 应为 false")
+	}
+	var reload model.DaoAgent
+	db.First(&reload, agent.ID)
+	if reload.MemoryEnabled {
+		t.Fatal("关闭后落库 MemoryEnabled 应为 false")
+	}
+
+	// 显式开启 → 落库
+	enabled := true
+	updated, err = svc.UpdateAgent(context.Background(), agent.UUID, nil, nil, nil, nil, nil, nil, &enabled)
+	if err != nil {
+		t.Fatalf("开启记忆报错: %v", err)
+	}
+	if !updated.MemoryEnabled {
+		t.Fatal("开启后响应 MemoryEnabled 应为 true")
+	}
+	db.First(&reload, agent.ID)
+	if !reload.MemoryEnabled {
+		t.Fatal("开启后落库 MemoryEnabled 应为 true")
 	}
 }
 

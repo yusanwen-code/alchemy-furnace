@@ -28,8 +28,8 @@ type Agent interface {
 	CreateAgent(ctx context.Context, name string, avatar string, personality string, modelName string, proactivity *int) (*model.DaoAgent, errors.Error)
 
 	// UpdateAgent 按 UUID 部分更新道人(nil 字段不更新);性格变化时失效语言模式缓存
-	// proactivity 合法区间 0-100;nil=不更新
-	UpdateAgent(ctx context.Context, uid uuid.UUID, name *string, avatar *string, personality *string, modelName *string, status *string, proactivity *int) (*model.DaoAgent, errors.Error)
+	// proactivity 合法区间 0-100;nil=不更新;memoryEnabled nil=不更新
+	UpdateAgent(ctx context.Context, uid uuid.UUID, name *string, avatar *string, personality *string, modelName *string, status *string, proactivity *int, memoryEnabled *bool) (*model.DaoAgent, errors.Error)
 
 	// DeleteAgent 按 UUID 删除道人
 	DeleteAgent(ctx context.Context, uid uuid.UUID) errors.Error

@@ -56,6 +56,16 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 		agents.PUT("/:uuid/pills/:pill_uuid", router.Wrapper(agentHandler.UpdateAgentPill))
 		agents.DELETE("/:uuid/pills/:pill_uuid", router.Wrapper(agentHandler.UnbindPill))
 		agents.GET("/:uuid/pills", router.Wrapper(agentHandler.ListPills))
+
+		// 道人本地记忆(UUID 对外标识;kind 筛选 + active 状态筛选)
+		memories := agents.Group("/:uuid/memories")
+		{
+			memories.GET("", router.Wrapper(agentHandler.ListMemories))
+			memories.POST("", router.Wrapper(agentHandler.CreateMemory))
+			memories.PATCH("/:memory_uuid", router.Wrapper(agentHandler.UpdateMemory))
+			memories.DELETE("/:memory_uuid", router.Wrapper(agentHandler.DeleteMemory))
+			memories.DELETE("", router.Wrapper(agentHandler.ClearMemories))
+		}
 	}
 
 	// 系统接口(健康检查/配置;无 service 层,内联构造)

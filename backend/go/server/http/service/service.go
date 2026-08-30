@@ -14,6 +14,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/service/distillation_service"
 	"github.com/alchemy-furnace/server/internal/service/fusion_service"
 	"github.com/alchemy-furnace/server/internal/service/language_pattern_service"
+	"github.com/alchemy-furnace/server/internal/service/memory_service"
 	"github.com/alchemy-furnace/server/internal/service/model_service"
 	"github.com/alchemy-furnace/server/internal/service/pill_service"
 	"github.com/alchemy-furnace/server/internal/service/provider_service"
@@ -50,6 +51,16 @@ func ProvideModelDao() idao.Model {
 	return dao.NewModelDao()
 }
 
+// ProvideMemoryDao 记忆 DAO
+func ProvideMemoryDao() idao.Memory {
+	return dao.NewMemoryDao()
+}
+
+// ProvideMemoryService 记忆服务(检索/CRUD/蒸馏队列)
+func ProvideMemoryService(memoryDAO idao.Memory, creds credential.Resolver, engineURL engineendpoint.Provider) iservice.Memory {
+	return memory_service.NewMemoryService(memoryDAO, creds, engineURL)
+}
+
 // ==================== 域装配集 ====================
 
 // PillService 金丹域装配集
@@ -58,11 +69,15 @@ var PillService = wire.NewSet(
 	pill_service.New, wire.Bind(new(iservice.Pill), new(*pill_service.Pill)),
 )
 
-// AgentService 道人域装配集(依赖金丹 DAO 与模型查询 DAO)
+// AgentService 道人域装配集(依赖金丹 DAO、模型查询 DAO 与记忆服务)
 var AgentService = wire.NewSet(
 	ProvideAgentDao,
 	ProvidePillDao,
 	ProvideModelDao,
+	ProvideMemoryDao,
+	ProvideMemoryService,
+	credential.NewResolver, wire.Bind(new(credential.Resolver), new(*credential.ModelResolver)),
+	NewEngineBaseURL,
 	agent_service.New, wire.Bind(new(iservice.Agent), new(*agent_service.Agent)),
 )
 

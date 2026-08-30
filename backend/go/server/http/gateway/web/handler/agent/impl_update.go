@@ -9,12 +9,13 @@ import (
 
 // UpdateRequest 更新道人请求(指针字段区分「未传」与「置空」)
 type UpdateRequest struct {
-	Name        *string `json:"name" binding:"omitempty,max=100"`
-	Avatar      *string `json:"avatar"`
-	Personality *string `json:"personality"`
-	ModelName   *string `json:"model_name" binding:"omitempty,max=50"`
-	Status      *string `json:"status" binding:"omitempty,oneof=active inactive"`
-	Proactivity *int    `json:"proactivity" binding:"omitempty,gte=0,lte=100"`
+	Name          *string `json:"name" binding:"omitempty,max=100"`
+	Avatar        *string `json:"avatar"`
+	Personality   *string `json:"personality"`
+	ModelName     *string `json:"model_name" binding:"omitempty,max=50"`
+	Status        *string `json:"status" binding:"omitempty,oneof=active inactive"`
+	Proactivity   *int    `json:"proactivity" binding:"omitempty,gte=0,lte=100"`
+	MemoryEnabled *bool   `json:"memory_enabled"` // 本地记忆开关(nil=不更新)
 }
 
 // Update 更新道人
@@ -38,7 +39,7 @@ func (cls *Agent) Update(c *gin.Context) (response.Code, any, error) {
 	}
 
 	agent, serr := cls.agent.UpdateAgent(contextutil.NewContextWithGin(c), uid,
-		body.Name, body.Avatar, body.Personality, body.ModelName, body.Status, body.Proactivity)
+		body.Name, body.Avatar, body.Personality, body.ModelName, body.Status, body.Proactivity, body.MemoryEnabled)
 	if serr != nil {
 		return 0, nil, serr
 	}

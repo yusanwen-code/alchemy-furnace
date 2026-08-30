@@ -49,11 +49,12 @@ func setupAvatarDB(t *testing.T) *gorm.DB {
 }
 
 // setupAvatarRouter 装配创建/更新道人路由(真实 service + handler)
+// memory 参数本测试未涉及,传 nil
 func setupAvatarRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()))
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), nil)
 	r.POST("/api/v1/agents", router.Wrapper(h.Create))
 	r.PUT("/api/v1/agents/:uuid", router.Wrapper(h.Update))
 	return r

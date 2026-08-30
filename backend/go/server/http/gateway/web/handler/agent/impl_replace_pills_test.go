@@ -19,11 +19,12 @@ import (
 )
 
 // setupReplacePillsRouter 注册完整服丹编排路由(与既有逐项 POST 共存由 router.go 保证,此处只测本路由)
+// memory 参数本测试未涉及,传 nil
 func setupReplacePillsRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()))
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), nil)
 	r.PUT("/api/v1/agents/:uuid/pills", router.Wrapper(h.ReplacePills))
 	return r
 }

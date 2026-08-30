@@ -83,8 +83,8 @@ func (s *Agent) CreateAgent(ctx context.Context, name string, avatar string, per
 
 // UpdateAgent 部分更新道人;性格变化时失效语言模式缓存
 // proactivity 合法区间 0-100;nil=不更新;status 仅接受 active/inactive
-// 最终状态为 active 时,最终模型必须可用(即使本次未改 model_name)
-func (s *Agent) UpdateAgent(ctx context.Context, uid uuid.UUID, name *string, avatar *string, personality *string, modelName *string, status *string, proactivity *int) (*model.DaoAgent, errors.Error) {
+// memoryEnabled nil=不更新;最终状态为 active 时,最终模型必须可用(即使本次未改 model_name)
+func (s *Agent) UpdateAgent(ctx context.Context, uid uuid.UUID, name *string, avatar *string, personality *string, modelName *string, status *string, proactivity *int, memoryEnabled *bool) (*model.DaoAgent, errors.Error) {
 	if proactivity != nil && (*proactivity < 0 || *proactivity > 100) {
 		return nil, errors.New(errors.ErrorTypeInvalidRequest, "service.agent.update_proactivity", "主动性需在 0-100 之间")
 	}
@@ -137,6 +137,9 @@ func (s *Agent) UpdateAgent(ctx context.Context, uid uuid.UUID, name *string, av
 	}
 	if proactivity != nil {
 		updates["proactivity"] = *proactivity
+	}
+	if memoryEnabled != nil {
+		updates["memory_enabled"] = *memoryEnabled
 	}
 
 	if len(updates) > 0 {

@@ -49,12 +49,13 @@ func setupTestDB(t *testing.T) *gorm.DB {
 }
 
 // setupRouter 装配真实 service + handler 的测试路由(仅本测试关注的路径)
+// memory 参数本测试未涉及,传 nil
 func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
 
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()))
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), nil)
 	r.PUT("/api/v1/agents/:uuid/pills/:pill_uuid", router.Wrapper(h.UpdateAgentPill))
 	return r
 }
