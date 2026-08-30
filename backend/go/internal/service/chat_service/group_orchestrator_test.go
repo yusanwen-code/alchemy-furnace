@@ -564,16 +564,142 @@ func TestGroupTurnChainMention(t *testing.T) {
 	}
 }
 
-func TestGroupTurnMaxThreeRounds(t *testing.T) {
-	replies := []string{"甲1", "乙1", "甲2", "乙2", "甲3", "乙3"}
-	svc, _, engine, s := newGroupSvc(t, replies)
+// Task 9:普通讨论 MaxRounds=2(§8.2)→ 2 轮 × 2 人 = 4 次调用;更多 replies 受上限约束
+func TestGroupTurnMaxRoundsPerTurnPlan(t *testing.T) {
+	svc, _, engine, s := newGroupSvc(t, []string{"甲1", "乙1", "甲2", "乙2"})
 	log := &eventLog{}
 	svc.RunGroupTurn(context.Background(), s.UUID, "热烈讨论", log.emit)
-	if engine.calls != 6 {
-		t.Fatalf("3轮硬上限: 引擎应调6次, 实际%d", engine.calls)
+	if engine.calls != 4 {
+		t.Fatalf("普通讨论 MaxRounds=2: 引擎应调4次(2轮×2人), 实际%d", engine.calls)
 	}
-	if countEvent(log, "speaker_done") != 6 {
-		t.Fatalf("应有6条发言: %v", log.events)
+	if countEvent(log, "speaker_done") != 4 {
+		t.Fatalf("应有4条发言: %v", log.events)
+	}
+
+	svc2, _, engine2, s2 := newGroupSvc(t, []string{"甲1", "乙1", "甲2", "乙2", "甲3", "乙3"})
+	log2 := &eventLog{}
+	svc2.RunGroupTurn(context.Background(), s2.UUID, "热烈讨论", log2.emit)
+	if engine2.calls != 4 {
+		t.Fatalf("更多 replies 仍受 MaxRounds=2 上限约束: 引擎应只调4次, 实际%d", engine2.calls)
+	}
+	if countEvent(log2, "speaker_done") != 4 {
+		t.Fatalf("上限内应只有4条发言: %v", log2.events)
+	}
+}
+
+// Task 9:每人一句(OneEach)→ MaxSpeakers=memberCount=2、MaxRounds=1,发言人次不超名额
+func TestGroupTurnSpeakerCap(t *testing.T) {
+	svc, _, engine, s := newGroupSvc(t, []string{"老君一言", "悟空一言", "老君二言", "悟空二言"})
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "大家每人一句", log.emit)
+	if n := countEvent(log, "speaker_start"); n > 2 {
+		t.Fatalf("speaker_start=%d, 应 ≤ MaxSpeakers=2: %v", n, log.events)
+	}
+	if engine.calls != 2 {
+		t.Fatalf("每人一句只应 1 轮 × 2 人 = 2 次调用, 实际%d", engine.calls)
+	}
+	if countEvent(log, "speaker_done") != 2 {
+		t.Fatalf("应有2条发言: %v", log.events)
+	}
+}
+
+// Task 9:§9.2 去重——回复 ≥8 字符且与既有回复 bigram Jaccard ≥0.85 即收敛,
+// 丢弃该发言(不开气泡不落库)且整回合不再启动下一名发言人
+func TestGroupTurnSimilarityStopsNextSpeaker(t *testing.T) {
+	duplicate := "这是一个非常独特的回答内容"
+	svc, chats, engine, s := newGroupSvc(t, []string{duplicate, duplicate})
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "聊聊金丹", log.emit)
+
+	if countEvent(log, "speaker_done") != 1 {
+		t.Fatalf("重复回复应只保留首位: %v", log.events)
+	}
+	if countEvent(log, "speaker_start") != 1 {
+		t.Fatalf("去重后不应再开新发言人: %v", log.events)
+	}
+	// 重复判定发生在引擎调用之后(需 fullContent),第二位仍会被调用但被丢弃
+	if engine.calls != 2 {
+		t.Fatalf("引擎调用=%d, 期望2(首位发言+第二位判定去重后收敛)", engine.calls)
+	}
+	assistants := 0
+	for _, m := range chats.messages {
+		if m.Role == "assistant" {
+			assistants++
+		}
+	}
+	if assistants != 1 {
+		t.Fatalf("落库 assistant=%d, 应=1", assistants)
+	}
+	if countEvent(log, "turn_done") != 1 {
+		t.Fatal("去重收敛后仍应有 turn_done")
+	}
+}
+
+// Task 9:<8 字符不拦截(§9.2):两条短回复都正常开气泡
+func TestGroupTurnShortReplyNoDedup(t *testing.T) {
+	svc, _, engine, s := newGroupSvc(t, []string{"短回复", "短回复"})
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "大家每人一句", log.emit)
+	if countEvent(log, "speaker_done") != 2 {
+		t.Fatalf("短回复不应去重: %v", log.events)
+	}
+	if engine.calls != 2 {
+		t.Fatalf("每人一句=1轮×2人=2次调用, 实际%d", engine.calls)
+	}
+}
+
+// Task 9:§9.4 被点名者失败必须显示失败,不得静默换人补位
+func TestGroupTurnNamedSpeakerFailureShowsError(t *testing.T) {
+	svc, chats, _, s := newGroupSvc(t, nil)
+	engineCalls := 0
+	failEngine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		engineCalls++
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"error\":\"model overloaded\"}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(failEngine.Close)
+	svc.engineBaseURL = engineendpoint.Static(failEngine.URL)
+
+	var namedError GroupSpeakerPayload
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "@孙悟空 你怎么看?", func(event string, payload any) {
+		log.emit(event, payload)
+		if event == "error" {
+			data, _ := json.Marshal(payload)
+			_ = json.Unmarshal(data, &namedError)
+		}
+	})
+
+	want := chats.agentByID[2]
+	if namedError.AgentID != want.UUID.String() || namedError.AgentName != want.Name {
+		t.Fatalf("失败应带被点名者身份: %+v, want %s", namedError, want.Name)
+	}
+	if countEvent(log, "speaker_start") != 0 {
+		t.Fatalf("被点名者失败不得有其他成员补位: %v", log.events)
+	}
+	if engineCalls != 1 {
+		t.Fatalf("点名失败应即收束(不调其他成员), 引擎调用=%d", engineCalls)
+	}
+	if countEvent(log, "turn_done") != 1 {
+		t.Fatalf("非传输中断失败仍应 turn_done: %v", log.events)
+	}
+}
+
+// Task 9:表达欲桶(§7.1)按 会话|道人|用户消息|轮次 稳定哈希——同一输入两次结果一致
+func TestGroupTurnVolunteerBucketDeterministic(t *testing.T) {
+	replies := []string{"老君第一", "悟空第一", "老君第二", "悟空第二"}
+	run := func() (calls int, done int) {
+		svc, _, engine, s := newGroupSvc(t, replies)
+		log := &eventLog{}
+		svc.RunGroupTurn(context.Background(), s.UUID, "热烈讨论", log.emit)
+		return engine.calls, countEvent(log, "speaker_done")
+	}
+	firstCalls, firstDone := run()
+	secondCalls, secondDone := run()
+	if firstCalls != secondCalls || firstDone != secondDone {
+		t.Fatalf("同一输入两次运行的引擎调用/发言数不一致: %d/%d vs %d/%d",
+			firstCalls, firstDone, secondCalls, secondDone)
 	}
 }
 
