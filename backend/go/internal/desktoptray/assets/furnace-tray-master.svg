@@ -1,11 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <path fill="#000" fill-rule="evenodd" d="
-    M27 6h10a3 3 0 0 1 0 6H27a3 3 0 0 1 0-6Z
-    M20 13h24l5 6H15l5-6Z
-    M8 20h8v7H8a3.5 3.5 0 0 1 0-7Z
-    M48 20h8a3.5 3.5 0 0 1 0 7h-8v-7Z
-    M14 22h36v15c0 8-6 14-14 15v6h-7v-6c-8-1-15-7-15-15V22Z
-    M25 33a7 7 0 0 0 14 0H25Z
-    M16 47h8l-4 11h-7l3-11Z
-    M40 47h8l3 11h-7l-4-11Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="炼丹炉">
+  <!--
+    用户提供 Logo 的小尺寸矢量母版。
+    结构只保留悬丹、上扬炉口、椭圆炉沿、圆腹和双足；平台位图必须由此文件独立渲染。
+  -->
+  <g fill="#000" stroke="#000" stroke-linejoin="round">
+    <circle cx="32" cy="7" r="3.6" stroke="none"/>
+
+    <!-- 两端上扬的炉口与外侧椭圆炉沿保持为一笔，避免 16px 下碎裂。 -->
+    <path
+      d="M20.5 6.5
+         C26 12.5 19 14.5 13 17
+         C4.5 20.5 4.5 27 13 31.5
+         C23 37 43 37 53 31
+         C61.5 26 59 19.5 51 16.5
+         C44 14 39 12 43.5 7"
+      fill="none"
+      stroke-width="3.4"
+      stroke-linecap="round"/>
+
+    <!-- 炉口内沿：保留原 Logo 由左向右收尖的书法式弧线。 -->
+    <path
+      d="M13 26.5 C19 19.5 39 18.5 51 23.5 C39 21.5 22 21.5 15.5 28"
+      stroke="none"/>
+
+    <!-- 圆腹保持大面积留白，侧壁与炉口分开，缩小后不会成为黑块。 -->
+    <path
+      d="M11.5 33
+         C8.5 43 15 51.5 30.5 54
+         C46 56.5 56 46 52.5 33"
+      fill="none"
+      stroke-width="3.6"
+      stroke-linecap="butt"/>
+
+    <!-- 双足沿用原 Logo 向内卷曲的轮廓。 -->
+    <path d="M16 51.5 C21.5 55.5 21 58.5 18 61 H13 C17 57.5 17.5 55 15 51 Z" stroke="none"/>
+    <path d="M48 51.5 C42.5 55.5 43 58.5 46 61 H51 C47 57.5 46.5 55 49 51 Z" stroke="none"/>
+  </g>
 </svg>
