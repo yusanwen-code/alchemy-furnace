@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import type { ChatSession } from '@/services/types'
@@ -28,23 +28,24 @@ export function ConversationDirectory({ sessions, currentSessionId, onSelect }: 
   const t = useTranslations('chatView.directory')
   const [activeTab, setActiveTab] = useState<'single' | 'group'>('single')
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
-  // 只追踪 currentSessionId 变化，sessions 刷新不得重置用户手动选择的 Tab
-  const syncedSessionId = useRef<string | undefined>(undefined)
-
-  useEffect(() => {
-    if (syncedSessionId.current === currentSessionId) return
-    syncedSessionId.current = currentSessionId
+  // 只追踪 currentSessionId 变化，sessions 刷新不得重置用户手动选择的 Tab。
+  // 渲染期状态调整（React 官方 adjust-state-during-render 模式）：用 prev-state 比较
+  // 作为 guard，currentSessionId 变化时同步 Tab 并展开所在道人父级，React 立即用新状态
+  // 重渲染；不读 ref（react-hooks/refs），不在 effect 里同步 setState（set-state-in-effect）。
+  const [syncedSessionId, setSyncedSessionId] = useState<string | undefined>(undefined)
+  if (syncedSessionId !== currentSessionId) {
+    setSyncedSessionId(currentSessionId)
     const session = sessions.find(s => s.id === currentSessionId)
     if (!session) {
       setActiveTab('single')
-      return
+    } else {
+      const kind = sessionKind(session)
+      setActiveTab(kind)
+      if (kind === 'single') {
+        setExpandedAgents(prev => new Set(prev).add(session.agent_id))
+      }
     }
-    const kind = sessionKind(session)
-    setActiveTab(kind)
-    if (kind === 'single') {
-      setExpandedAgents(prev => new Set(prev).add(session.agent_id))
-    }
-  }, [currentSessionId, sessions])
+  }
 
   const singleGroups = useMemo(() => groupSingleSessions(sessions), [sessions])
   const groupSessions = useMemo(() => sessions.filter(s => sessionKind(s) === 'group'), [sessions])
