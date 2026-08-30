@@ -1,331 +1,122 @@
 # 炼丹炉 · Alchemy Furnace
 
-[English](./README_EN.md) · 中文
+> 面向桌面端的语言模式工程工作台：把可复用的表达方式炼成金丹，让道人在对谈与围炉论道中稳定呈现自己的风格。
 
-> **以火为引，以药为基。** 观灵气流转、察丹药自成——万物皆可炼为金丹。
+[English README](README_EN.md) · [项目仓库](https://github.com/yusanwen-code/alchemy-furnace)
 
-炼丹炉是一个面向 AI Agent 的"语言模式工程"实验场。在这里，**金丹**是把人格特质和表达方式封装好的结构化技能包，**道人**是服用金丹的 AI Agent——一旦服用，道人的言谈举止就被这颗金丹的"丹性"所化，呈现焕然一新的语言风格。
+## 项目定位
 
-底层是 Go 网关 + Python 合成引擎 + Next.js 前端的三段式架构，支持 OpenAI 兼容的多家模型供应商。
+炼丹炉是一个 **Wails 桌面应用**。它在本机运行 Go 网关、Python 语言引擎和 Next.js 静态界面，数据默认保存在用户配置目录下的 SQLite 文件中；模型调用使用你在设置中配置的 OpenAI 兼容接口。
 
----
+桌面安装包是正式产品形态。Web、`serve` 命令和 Docker Compose 仍保留用于开发、诊断和 CI，不承诺作为独立 Web 产品或移动 H5 产品交付。
 
-## 特性
+## 当前功能
 
-**核心能力**
-- **炼丹房** —— 结构化技能包编辑器：表达 DNA、心智模型、决策启发式、禁忌词、示例对话一应俱全
-- **道人府** —— 创建并管理多个 AI Agent，各自绑定大模型
-- **服用金丹** —— 一位道人可服用多颗金丹，支持权重与服用顺序
-- **金丹化性** —— 合成引擎把多颗金丹按权重合并，去重、检测冲突，LLM 涌现提炼统一丹性
-- **试丹预览** —— 不绑定道人，临时组合性格与金丹即可预览合成效果
-- **金丹融合** —— 任意 N 枚金丹（N ≥ 2）投入融合炉，随机抽取变异算子（Promptbreeder 风格），LLM 自由发挥炼出新丹；血统可追溯，预览满意才入库
-- **论道对答** —— SSE 流式对话，合成后的系统提示词全程生效
-
-**技术亮点**
-- **三段式架构** —— Go API 网关 + Python 合成引擎 + Next.js 前端，职责清晰
-- **响应式设计** —— 同一套代码兼容桌面 Web 与手机 H5
-- **模型协议化** —— 预置国内外常见 OpenAI 兼容供应商（DeepSeek / 通义千问 / 智谱 GLM / Kimi / 百川 / 文心一言 / Ollama），API Key 加密存储
-- **合成缓存** —— 道人当前合成提示词按需缓存，性格或金丹变化时自动重建
-
----
-
-## 架构
-
-```
-             浏览器 / H5
-                 │
-              Nginx
-                 │
-         ┌───────┴───────┐
-         │               │
-       Go API          Python
-     (Gin + GORM)    (FastAPI)
-         │               │
-         └───────┬───────┘
-                 │
-             PostgreSQL
-```
-
-| 服务 | 技术栈 | 职责 | 端口 |
-|------|--------|------|------|
-| Frontend | Next.js 16 + React 19 + Tailwind 4 | 用户界面（中文/英文/响应式） | 3000 |
-| Go API | Go 1.21+ + Gin + GORM | 业务网关、道人/金丹/会话持久化 | 8080 |
-| Python Engine | Python 3.11+ + FastAPI | 语言模式合成、LLM 调用 | 8000 |
-| PostgreSQL | 14+ | 业务数据 | 5432 |
-| Nginx | — | 反向代理、静态文件 | 80 |
-
----
-
-## 桌面端下载
-
-提供 macOS (arm64 / x64) 与 Windows (amd64) 单文件安装包，免 Python / 免 Node / 免 Docker。  
-前往 [Releases](https://github.com/yusanwen-code/alchemy-furnace/releases) 下载 `AlchemyFurnace-*` 文件。
-
-**macOS 安装**：双击 `.dmg`，把 `AlchemyFurnace` 拖入 `Applications`。首次启动需要绕行未签名：
-
-```bash
-# 方式一:右键 AlchemyFurnace → 打开 → "打开"
-# 方式二:清除隔离属性
-xattr -dr com.apple.quarantine /Applications/AlchemyFurnace.app
-```
-
-**Windows 安装**：双击 `AlchemyFurnace-Setup.exe` 走 NSIS 向导。首次启动 SmartScreen 拦截时点「更多信息」→「仍要运行」。
-
-**校验 SHA256**：`checksums.txt` 列出每个产物的校验和：
-
-```bash
-sha256sum -c checksums.txt
-```
-
-**更新**：关于页 → 「检查更新」→ 进度条 → 自动重启完成。dev 构建会提示「未启用更新」。
-
-维护者发布桌面版本时，推送 `vX.Y.Z` tag 会自动构建 macOS Apple Silicon、
-macOS Intel 和 Windows x64 三个平台，并发布到对应 GitHub Release。本地可复用同一链路：
-
-```bash
-make desktop-package PLATFORM=darwin-arm64 VERSION=v0.2.0
-```
-
-另外两个平台值为 `darwin-amd64` 与 `windows-amd64`；目标系统的原生工具链必须可用。
-
----
-
-## 快速开始
-
-### 一、Docker 一键部署
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/yusanwen-code/alchemy-furnace.git
-cd alchemy-furnace
-
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env：填入 OPENAI_API_KEY 与 MODEL_KEY_SECRET
-# MODEL_KEY_SECRET 用于加密存储的模型 API Key，可用 openssl rand -hex 32 生成
-
-# 3. 启动
-make deploy         # 等价于 make init && make build && make up
-make ps             # 查看容器状态
-make logs           # 查看日志
-```
-
-浏览器打开 http://localhost 即可。
-
-### 二、本地开发（无 Docker）
-
-本机需要：PostgreSQL 14+（推荐 [Postgres.app](https://postgresapp.com/)）、Go 1.21+、Python 3.11+、Node.js 20+。
-
-```bash
-# 1. 准备数据库
-createuser alchemy && createdb -O alchemy alchemy_db
-psql -c "ALTER USER alchemy PASSWORD 'alchemy123';"
-
-# 2. 配置 .env
-cp .env.example .env
-# 把 DB_HOST 改为 localhost，PYTHON_ENGINE_BASE_URL 改为 http://localhost:8000
-
-# 3. 分三个终端启动
-make dev-python     # Python 合成引擎 → http://localhost:8000
-make dev-go         # Go API 网关（自动建表 + 写入内置金丹）→ http://localhost:8080
-make dev-front      # Next.js 前端 → http://localhost:3000
-```
-
-也可以用 `bash scripts/dev.sh` 一键拉起三个服务（自动处理 Docker postgres 与 Postgres.app 的端口冲突）。
-
-## 首次使用
-
-1. **炼制金丹** —— 进入「炼丹房」创建金丹：填写表达 DNA（句式长度、正式程度、常用词、禁忌词）、心智模型、示例对话
-2. **孕育道人** —— 进入「道人府」收徒，配置基础性格与选用的大模型
-3. **服用金丹** —— 打开道人详情页，选择金丹让道人服用，调整权重与顺序
-4. **试丹预览** —— 进入「试丹」页临时组合性格与金丹，无需绑定道人即可预览效果
-5. **开炉论道** —— 进入「论道」选一位道人开始对话，SSE 流式输出
-
----
+- **金丹阁**：管理语言模式技能包；页面只保留「全部金丹」与「融合金丹」两个入口。支持手工创建、编辑、试丹，以及通过「女娲智能蒸馏」从材料生成候选草稿后确认入库。
+- **道人府**：管理 AI 道人列表、道号、简介、头像、基础性格、模型和服丹关系；金丹以权重与顺序影响合成结果。
+- **论道**：在「对谈」和「围炉论道」两个 Tab 中聊天。单聊会话按道人归档；围炉论道支持设置主题名称，便于快速定位历史讨论。
+- **论道旧录**：首页的最近会话和完整会话目录使用真实的道人名称展示，不向用户展示道人 UUID。
+- **设置**：配置个人简介与头像、模型提供商、默认模型及桌面应用选项。
+- **金丹化性**：Go 负责业务编排与缓存，Python 引擎负责结构化合成和 OpenAI 兼容模型调用；相同来源指纹会复用有效的语言模式缓存。
 
 ## 核心概念
 
-### 金丹（Elixir Pill）
+| 概念 | 说明 |
+| --- | --- |
+| 金丹（Elixir Pill） | 描述一种语言模式、技能或表达倾向的结构化技能包（`skill_schema`）。 |
+| 道人（Dao Agent） | 具备基础性格、道号、模型和服丹记录的 AI 对话角色。 |
+| 服丹（Binding） | 将金丹绑定到道人，并设置 `weight`（0–10）与 `sort_order`。 |
+| 合成（Synthesis） | 将基础性格与已服金丹合并，生成可供对话使用的系统提示词与规则。 |
+| 融合金丹（Fusion） | 把多枚金丹提炼为新的金丹，保留来源和版本信息。 |
 
-结构化技能包，定义一种语言风格与人格。每颗金丹包含：
+## 架构
 
-| 字段 | 说明 |
-|------|------|
-| `identity_card` | 身份卡：金丹所化人格的自我认知 |
-| `expression_dna` | 表达 DNA：句式长度、正式程度、常用词、禁忌词 |
-| `mental_models` | 心智模型：看待问题的思维框架 |
-| `decision_heuristics` | 决策启发式：特定情境下的表达策略 |
-| `values` / `anti_patterns` | 价值取向与反模式 |
-| `honest_limits` | 诚实边界：能力局限的坦诚声明 |
-| `example_dialogues` | 示例对话：风格的具体示范 |
+```text
+Wails 桌面壳（Next.js 静态 UI）
+              │ HTTP / WebSocket
+              ▼
+       Go API 网关与业务层
+          │              │
+          │              └── SQLite（桌面默认单文件）
+          ▼
+     Python 语言引擎
+  合成 / 蒸馏 / LLM 对话
+```
 
-### 道人（Dao Agent）
+桌面启动时会准备本地数据目录、迁移数据库并拉起随包提供的 Python runtime。自部署或开发模式可切换 PostgreSQL/MySQL，并通过 Docker Compose 编排服务。
 
-AI Agent 实体。拥有基础性格、选用的模型、被授予的金丹。其回复风格由"基础性格 + 合成后的丹性"统一塑造。
+## 安装与使用
 
-### 服用（Bind Pill）
+从 [GitHub Releases](https://github.com/yusanwen-code/alchemy-furnace/releases) 下载对应平台安装包：
 
-把金丹与道人绑定，配置**权重**（weight）与**服用顺序**（sort_order）。一位道人可同时服用多颗金丹。
+- macOS Apple Silicon（`darwin-arm64`）
+- macOS Intel（`darwin-amd64`）
+- Windows x64（`windows-amd64`）
 
-### 化性（Language Pattern Synthesis）
+启动后依次完成：
 
-把多颗金丹按权重合并、去重、检测冲突，再由 LLM 涌现提炼成统一的系统提示词。过程对应炼丹五步：
+1. 在「设置」中配置模型提供商、API Key、Base URL 和默认模型；
+2. 在「金丹阁」创建或蒸馏金丹；
+3. 在「道人府」创建道人并服用金丹；
+4. 进入「论道」开始对谈或围炉论道。
 
-| 炼丹 | 合成 | 说明 |
-|------|------|------|
-| 采药 | 取性 | 读取道人基础性格与所服金丹 |
-| 配比 | 结构化合并 | 按权重 blending，去重、检测冲突 |
-| 入炉 | 涌现推导 | LLM 提炼融合后的丹性与涌现规则 |
-| 温养 | 缓存 | 合成提示词缓存于道人，变化时自动重建 |
-| 开炉取丹 | 论道 | 以合成提示词调用 LLM 流式回复 |
+API Key 会加密保存在本地数据库中。请勿把 `.env`、导出的配置或日志提交到仓库。
 
-### 融合（Pill Fusion）
+## 本地开发
 
-任意 N 枚金丹（N ≥ 2）投入融合炉，由大模型自由发挥炼成一枚全新金丹。
+### 环境要求
 
-**流程**：选丹 → 开炉（动画）→ 预览（含算子与血统）→ 换一炉 / 编辑 / 保存入库。
+- Go（见 `backend/go/go.mod`）
+- Python 3.11+ 与 `pip`
+- Node.js 20+、`pnpm`
+- Docker Desktop（仅在使用 PostgreSQL 或完整 Compose 开发栈时需要）
 
-**随机性来自**每次随机抽取 7 个融合算子之一（temperature 1.0）：
-
-| 算子 | 效果 |
-|---|---|
-| 夸张突变 | 特质推向极端，风格浓度翻倍 |
-| 蒸馏提炼 | 只留最深层共同点 |
-| 对立调和 | 矛盾成为新人格的张力引擎 |
-| 角色反转 | 反转核心立场，熟悉的陌生人 |
-| 血统稀释 | 一丹主导，其余点缀 |
-| 基因重组 | 字段级杂交 |
-| 涌现变异 | 产出原料们的「下一代」 |
-
-新金丹的 `skill_schema.fusion_lineage` 记录父代、算子与时间，详情页可溯血统。
-
-**技术参考**：[Promptbreeder](https://arxiv.org/abs/2309.16797)（LLM 作为变异算子执行器）、[Blended Skill Talk](https://arxiv.org/abs/2004.08449)（多技能融合为单一人格）、[EvoPrompt](https://arxiv.org/abs/2309.08532)（LLM 驱动的 prompt crossover）。
-
----
-
-## API 速查
+### 快速开始
 
 ```bash
-# 创建金丹
-curl -X POST http://localhost:8080/api/v1/pills \
-  -H "Content-Type: application/json" \
-  -d '{"name": "文言文金丹", "description": "令道人开口便是之乎者也", "skill_schema": {...}, "tags": ["文言文"], "author": "system", "version": "1.0.0"}'
-
-# 创建道人
-curl -X POST http://localhost:8080/api/v1/agents \
-  -H "Content-Type: application/json" \
-  -d '{"name": "太上老君", "personality": "道家始祖，言谈充满无上智慧", "model_name": "gpt-4o"}'
-
-# 服用金丹
-curl -X POST http://localhost:8080/api/v1/agents/{agent_uuid}/pills \
-  -H "Content-Type: application/json" \
-  -d '{"pill_id": "{pill_uuid}", "weight": 1.0, "sort_order": 0}'
-
-# SSE 流式对话
-curl -N -X POST http://localhost:8080/api/v1/chat/sse/{session_uuid} \
-  -H "Content-Type: application/json" \
-  -d '{"content": "何为道"}'
-
-# 金丹融合预览（N ≥ 2 枚金丹 → 新丹，不落库）
-curl -X POST http://localhost:8080/api/v1/fusion/fuse \
-  -H "Content-Type: application/json" \
-  -d '{"pill_uuids": ["<uuid1>", "<uuid2>"]}'
+make init                 # 创建 .env（仅开发/自部署配置）
+make dev                  # 启动前端、Go、Python，并检查数据库
 ```
 
-完整接口见 [docs/api.md](docs/api.md)。
-
----
-
-## 文档
-
-| 文档 | 说明 |
-|------|------|
-| [docs/architecture.md](docs/architecture.md) | 系统架构详解 |
-| [docs/api.md](docs/api.md) | 完整 API 接口文档 |
-| [docs/frontend.md](docs/frontend.md) | 前端开发指南 |
-
----
-
-## 贡献者必读（Pre-commit Hook）
-
-仓库自带 **pre-commit 钩子**，在 `git commit` 时自动跑两层扫描：
-
-- **gitleaks** —— 拦截常见 secret（API key / 私钥 / 账号凭据等 100+ 模式）
-- **sensitive-word** —— 拦截本项目 specific 敏感字串（账号 ID、registry 域名）
-
-### 安装（clone 后一次）
+也可以分别启动服务：
 
 ```bash
-# 1. 装 gitleaks（macOS）
-brew install gitleaks
-
-# 2. 让 git 用本仓库的 hooks 目录
-git config core.hooksPath .githooks
+make dev-front
+make dev-go
+make dev-python
 ```
 
-跳过机制（应急用，**不推荐**）：
+### 测试、格式化与桌面打包
 
 ```bash
-SKIP_GITLEAKS=1 git commit -m "..."   # 只跳过 gitleaks
-SKIP_SENSITIVE=1 git commit -m "..."  # 只跳过 sensitive-word
-SKIP_PRE_COMMIT=1 git commit -m "..." # 跳过整个钩子
+make test
+make format
+make desktop-package PLATFORM=darwin-arm64 VERSION=v0.1.0
+# PLATFORM 可选：darwin-arm64、darwin-amd64、windows-amd64
 ```
 
----
+`make build/up/down` 面向 Docker Compose 开发环境；它们不是桌面用户的安装方式。
 
-## 项目结构
+## 目录结构
 
-```
-alchemy-furnace/
-├── README.md                    # 本文件
-├── README_EN.md                 # English
-├── Makefile                     # 常用命令
-├── docker-compose.yml
-├── .env.example
-├── docs/                        # 维护文档
-├── backend/
-│   ├── go/                      # Go API 网关（Gin + GORM）
-│   │   ├── cmd/                 # 入口
-│   │   ├── internal/            # handler / service / dao
-│   │   └── Dockerfile
-│   └── python/                  # Python 合成引擎（FastAPI）
-│       ├── app/
-│       │   ├── api/             # 路由
-│       │   ├── core/            # 配置 / 运行时
-│       │   ├── models/          # 数据模型
-│       │   └── services/        # 合成 / provider
-│       └── Dockerfile
-└── frontend/                    # Next.js 前端
-    ├── app/                     # App Router（[locale] + (main)）
-    ├── components/              # 业务组件
-    ├── contexts/                # React Context
-    ├── lib/                     # 工具
-    ├── messages/                # i18n 字典
-    ├── public/                  # 静态资源
-    └── Dockerfile
+```text
+backend/go/       Go API 网关、Wails 入口、数据访问与业务服务
+backend/python/   FastAPI 语言引擎、蒸馏与 LLM 调用
+frontend/         Next.js + React + Tailwind 桌面界面
+scripts/          开发、runtime 构建、桌面打包与产物校验
+docs/             架构、部署、运维与设计文档
+specs/            功能规格与数据契约
 ```
 
----
+## 进一步阅读
 
-## 技术栈
-
-**前端** · Next.js 16 · React 19 · Tailwind 4 · next-intl · pnpm
-**网关** · Go 1.21+ · Gin · GORM
-**引擎** · Python 3.11+ · FastAPI · OpenAI SDK
-**存储** · PostgreSQL 14+
-**部署** · Docker Compose · Nginx
-
----
+- [系统架构](docs/architecture.md)
+- [桌面发布流程](docs/deployment/desktop-release.md)
+- [前端说明](docs/frontend.md)
+- [英文 README](README_EN.md)
 
 ## 许可证
 
-本项目采用自定义许可证，详见 [LICENSE](LICENSE)。
+本项目使用仓库中的 [自定义许可证](LICENSE)。默认允许个人、学习和非商业使用；商业使用需事先获得项目作者书面授权。
 
-**简要**
-- 个人使用、学习研究：可自由使用、修改、分发
-- 商业使用：必须保留项目名称「炼丹炉 (Alchemy Furnace)」与开发者署名「yusanwen-code」，并联系作者获取商业授权
-
----
-
-<p align="center"><i>道法自然 · 炼丹铸智</i></p>
-<p align="center">Made with ☯️ by <a href="https://github.com/yusanwen-code">yusanwen-code</a></p>
+© yusanwen-code · Alchemy Furnace
