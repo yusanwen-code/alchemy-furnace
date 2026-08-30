@@ -100,7 +100,6 @@ export default function HomePage() {
 
   const spotlight = pills[0]
   const recentPills = pills.slice(0, 4)
-  const sessions = chatState.sessions
 
   return (
     <div className="pb-24">
