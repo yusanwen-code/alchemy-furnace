@@ -443,7 +443,7 @@
     "filter": {
       "label": "状态筛选",
       "active": "活跃",
-      "inactive": "已停用",
+      "inactive": "沉睡",
       "all": "全部"
     },
     "modal": {
@@ -477,9 +477,9 @@
     "deleteCta": "删除道人",
     "deleteConfirmCta": "再点一次确认删除",
     "deleteFailed": "删除失败，请重试",
-    "deleteHistoryHint": "此道人有 {count} 段会话历史，只能停用不能删除",
-    "deactivateCta": "停用道人",
-    "deactivateFailed": "停用失败，请重试",
+    "deleteHistoryHint": "此道人有 {count} 段会话历史，只能沉睡不能删除",
+    "deactivateCta": "沉睡道人",
+    "deactivateFailed": "沉睡失败，请重试",
     "saveCta": "保存",
     "saving": "正在保存...",
     "saveFailed": "保存失败，请重试",
@@ -487,7 +487,7 @@
     "restoreCta": "恢复服务端版本",
     "unsavedConfirm": "有未保存的修改，确定要离开吗？",
     "startChatCta": "开始论道",
-    "inactiveChatHint": "已停用的道人不能发起会话，可在编辑中恢复为活跃",
+    "inactiveChatHint": "沉睡中的道人不能发起会话，可在编辑中唤醒为活跃",
     "modelInvalidBadge": "模型失效",
     "modelInvalidWarning": "当前模型已停用或被删除，仅作保留展示；请在编辑中更换为可用模型",
     "chatSessionTitle": "与{name}的论道",
@@ -656,7 +656,7 @@
     "viewCta": "观其详情",
     "chatCta": "论道",
     "chatTitle": "与{name}发起论道",
-    "inactiveChatHint": "已停用，不能发起会话；可进入详情恢复为活跃",
+    "inactiveChatHint": "沉睡中，不能发起会话；可进入详情唤醒为活跃",
     "status": {
       "active": "活跃",
       "inactive": "沉睡"
@@ -889,8 +889,8 @@
       "backToLobby": "返回论道大厅"
     },
     "readOnly": {
-      "single": "该道人已停用。历史消息仍可查看，但无法继续发送新消息。",
-      "group": "当前群成员中有道人已停用。历史消息仍可查看，但无法继续发送新消息。"
+      "single": "该道人已沉睡。历史消息仍可查看，但无法继续发送新消息。",
+      "group": "当前群成员中有道人已沉睡。历史消息仍可查看，但无法继续发送新消息。"
     },
     "stream": {
       "retry": "重试",

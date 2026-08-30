@@ -385,7 +385,7 @@ describe('AgentDetailPage', () => {
       renderPage()
       const chat = screen.getByRole('button', { name: '开始论道' })
       expect(chat).toBeDisabled()
-      expect(chat).toHaveAttribute('title', expect.stringContaining('停用'))
+      expect(chat).toHaveAttribute('title', expect.stringContaining('沉睡'))
     })
 
     it('详情头部:有效头像显示图片,加载失败回退首字', () => {
@@ -655,7 +655,7 @@ describe('AgentDetailPage', () => {
     })
   })
 
-  describe('删除与停用', () => {
+  describe('删除与沉睡', () => {
     it('删除需二次确认:第一次点击不发起请求', async () => {
       setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
@@ -679,13 +679,13 @@ describe('AgentDetailPage', () => {
       expect(td.dispatchCalls.some(a => a.type === 'REMOVE_AGENT' && a.payload === AGENT_ID)).toBe(true)
     })
 
-    it('有历史:409 冲突后显示会话数与停用动作,不再显示永久删除确认', async () => {
+    it('有历史:409 冲突后显示会话数与沉睡动作,不再显示永久删除确认', async () => {
       setDetailState({ agent: baseAgent })
       td.deleteAgent.mockRejectedValue(
-        new ApiError('道人有 3 段会话历史，只能停用不能删除', 409, {
+        new ApiError('道人有 3 段会话历史，只能沉睡不能删除', 409, {
           code: 409,
           error_code: 'service.agent.delete_has_history',
-          message: '道人有 3 段会话历史，只能停用不能删除',
+          message: '道人有 3 段会话历史，只能沉睡不能删除',
           data: { session_count: 3 },
         }),
       )
@@ -696,12 +696,12 @@ describe('AgentDetailPage', () => {
       await user.click(screen.getByRole('button', { name: '再点一次确认删除' }))
 
       expect(await screen.findByText(/3 段会话历史/)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '停用道人' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '沉睡道人' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '再点一次确认删除' })).toBeNull()
       expect(td.push).not.toHaveBeenCalled()
     })
 
-    it('停用动作:调用 updateAgent 置 inactive 并回读详情', async () => {
+    it('沉睡动作:调用 updateAgent 置 inactive 并回读详情', async () => {
       setDetailState({ agent: baseAgent })
       td.deleteAgent.mockRejectedValue(
         new ApiError('有历史', 409, {
@@ -717,7 +717,7 @@ describe('AgentDetailPage', () => {
 
       await user.click(screen.getByRole('button', { name: '删除道人' }))
       await user.click(screen.getByRole('button', { name: '再点一次确认删除' }))
-      await user.click(await screen.findByRole('button', { name: '停用道人' }))
+      await user.click(await screen.findByRole('button', { name: '沉睡道人' }))
 
       await waitFor(() =>
         expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, { status: 'inactive' }),

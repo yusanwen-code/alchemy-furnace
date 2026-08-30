@@ -443,7 +443,7 @@
     "filter": {
       "label": "Status filter",
       "active": "Active",
-      "inactive": "Deactivated",
+      "inactive": "Dormant",
       "all": "All"
     },
     "modal": {
@@ -477,9 +477,9 @@
     "deleteCta": "Delete daoist",
     "deleteConfirmCta": "Click again to confirm deletion",
     "deleteFailed": "Delete failed. Please retry",
-    "deleteHistoryHint": "This daoist has {count} chat session(s) in history and can only be deactivated, not deleted",
-    "deactivateCta": "Deactivate daoist",
-    "deactivateFailed": "Deactivation failed. Please retry",
+    "deleteHistoryHint": "This daoist has {count} chat session(s) in history and can only be set dormant, not deleted",
+    "deactivateCta": "Set daoist dormant",
+    "deactivateFailed": "Failed to set dormant. Please retry",
     "saveCta": "Save",
     "saving": "Saving...",
     "saveFailed": "Save failed. Please retry",
@@ -487,7 +487,7 @@
     "restoreCta": "Restore server version",
     "unsavedConfirm": "You have unsaved changes. Leave anyway?",
     "startChatCta": "Start discourse",
-    "inactiveChatHint": "A deactivated daoist cannot start new chats; reactivate it in editing",
+    "inactiveChatHint": "A dormant daoist cannot start new chats; reawaken it in editing",
     "modelInvalidBadge": "Model unavailable",
     "modelInvalidWarning": "The current model is disabled or removed and kept for display only; switch to an available model in editing",
     "chatSessionTitle": "Discourse with {name}",
@@ -656,7 +656,7 @@
     "viewCta": "View details",
     "chatCta": "Discourse",
     "chatTitle": "Start discourse with {name}",
-    "inactiveChatHint": "Deactivated; cannot start chats. Open details to reactivate",
+    "inactiveChatHint": "Dormant; cannot start chats. Open details to reawaken",
     "status": {
       "active": "Active",
       "inactive": "Dormant"

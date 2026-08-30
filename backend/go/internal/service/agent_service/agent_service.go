@@ -162,14 +162,14 @@ func (s *Agent) UpdateAgent(ctx context.Context, uid uuid.UUID, name *string, av
 }
 
 // DeleteAgent 删除道人
-// 有会话历史(单聊/群聊)时禁止硬删除,返回 409 并携带 session_count,引导前端改停用
+// 有会话历史(单聊/群聊)时禁止硬删除,返回 409 并携带 session_count,引导前端改沉睡
 func (s *Agent) DeleteAgent(ctx context.Context, uid uuid.UUID) errors.Error {
 	agent, err := s.agent.TakeAgentByUUID(ctx, uid)
 	if err != nil {
 		return err.Relation(errors.ErrorRecordNotFound("service.agent.delete_take"))
 	}
 
-	// 历史感知: 有会话历史只能停用不能删
+	// 历史感知: 有会话历史只能沉睡不能删
 	sessionCount, err := s.agent.CountSessionsByAgentID(ctx, agent.ID)
 	if err != nil {
 		return err.Relation(errors.ErrorServerInternalError("service.agent.delete_count_sessions"))
@@ -178,7 +178,7 @@ func (s *Agent) DeleteAgent(ctx context.Context, uid uuid.UUID) errors.Error {
 		return errors.ErrorConflictWithData(
 			"service.agent.delete_has_history",
 			map[string]any{"session_count": sessionCount},
-			"道人有 %d 段会话历史，只能停用不能删除", sessionCount)
+			"道人有 %d 段会话历史，只能沉睡不能删除", sessionCount)
 	}
 
 	if err := s.agent.DeleteAgent(ctx, agent); err != nil {

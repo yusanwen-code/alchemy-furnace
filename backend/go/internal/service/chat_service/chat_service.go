@@ -99,7 +99,7 @@ func (s *Chat) validateChatAgentAccess(ctx context.Context, agentUID uuid.UUID) 
 		return nil, nil, err.Relation(ierr.ErrorServerInternalError("service.chat.create_take_agent"))
 	}
 	if agent.Status != "active" {
-		return nil, nil, ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.agent_inactive", "道人已停用")
+		return nil, nil, ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.agent_inactive", "道人已沉睡")
 	}
 	if s.creds == nil {
 		return nil, nil, ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.model_unavailable", "道人使用的模型不可用")
@@ -575,7 +575,7 @@ func (s *Chat) AddMembers(ctx context.Context, sessionUID uuid.UUID, agentUIDs [
 	for _, u := range agentUIDs {
 		a, aerr := s.agent.TakeAgentByUUID(ctx, u)
 		if aerr != nil || a.Status != "active" {
-			return ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.invite_member_invalid", "邀请的道人不存在或已停用")
+			return ierr.New(ierr.ErrorTypeInvalidRequest, "service.chat.invite_member_invalid", "邀请的道人不存在或已沉睡")
 		}
 		if inGroup[a.ID] {
 			continue

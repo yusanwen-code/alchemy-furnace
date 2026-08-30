@@ -129,14 +129,14 @@ describe('AgentCard', () => {
     expect(td.push).not.toHaveBeenCalled()
   })
 
-  it('inactive 卡片:显示已停用徽记,论道按钮禁用并带原因提示,整卡仍可进详情', async () => {
+  it('inactive 卡片:显示沉睡徽记,论道按钮禁用并带原因提示,整卡仍可进详情', async () => {
     const user = userEvent.setup()
     render(<AgentCard agent={inactiveAgent} />)
 
     expect(screen.getByText('沉睡')).toBeInTheDocument()
     const chatBtn = screen.getByRole('button', { name: /论道/ })
     expect(chatBtn).toBeDisabled()
-    expect(chatBtn).toHaveAttribute('title', expect.stringContaining('停用'))
+    expect(chatBtn).toHaveAttribute('title', expect.stringContaining('沉睡'))
 
     await user.click(chatBtn)
     expect(td.launchSingle).not.toHaveBeenCalled()
@@ -146,11 +146,11 @@ describe('AgentCard', () => {
     expect(td.push).toHaveBeenCalledWith(`/agents/detail?id=${AGENT_2_ID}`)
   })
 
-  it('active 卡片不显示停用提示,论道按钮可用', () => {
+  it('active 卡片不显示沉睡提示,论道按钮可用', () => {
     render(<AgentCard agent={activeAgent} />)
     const chatBtn = screen.getByRole('button', { name: /论道/ })
     expect(chatBtn).toBeEnabled()
-    expect(chatBtn).not.toHaveAttribute('title', expect.stringContaining('停用'))
+    expect(chatBtn).not.toHaveAttribute('title', expect.stringContaining('沉睡'))
   })
 
   it('发起会话失败时在卡片上展示错误(不静默)', () => {

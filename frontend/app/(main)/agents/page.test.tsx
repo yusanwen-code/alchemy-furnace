@@ -106,12 +106,12 @@ describe('AgentsPage', () => {
     expect(td.listAgents).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'active' }))
   })
 
-  it('切换筛选即带参数重新请求:已停用 → inactive,全部 → 不带 status', async () => {
+  it('切换筛选即带参数重新请求:沉睡 → inactive,全部 → 不带 status', async () => {
     const user = userEvent.setup()
     renderPage()
     await waitFor(() => expect(td.listAgents).toHaveBeenCalled())
 
-    await user.click(screen.getByRole('button', { name: '已停用' }))
+    await user.click(screen.getByRole('button', { name: '沉睡' }))
     await waitFor(() =>
       expect(td.listAgents).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'inactive' })),
     )
@@ -151,7 +151,7 @@ describe('AgentsPage', () => {
     renderPage()
     await waitFor(() => expect(td.listAgents).toHaveBeenCalled())
 
-    await user.click(screen.getByRole('button', { name: '已停用' }))
+    await user.click(screen.getByRole('button', { name: '沉睡' }))
     expect(await screen.findByText('该状态下暂无道人')).toBeInTheDocument()
     expect(screen.queryByText('点击上方按钮招募你的第一位道人')).toBeNull()
   })
@@ -162,10 +162,10 @@ describe('AgentsPage', () => {
     renderPage()
     expect(await screen.findByText('道人列表加载失败')).toBeInTheDocument()
 
-    // 切到已停用后再重试
+    // 切到沉睡后再重试
     td.listAgents.mockClear()
     td.listAgents.mockResolvedValue({ list: [inactiveAgent], total: 1, page: 1, page_size: 100 })
-    await user.click(screen.getByRole('button', { name: '已停用' }))
+    await user.click(screen.getByRole('button', { name: '沉睡' }))
     await screen.findByText('沉睡道人·inactive')
 
     td.listAgents.mockClear()
