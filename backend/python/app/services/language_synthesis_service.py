@@ -7,8 +7,8 @@
 融合策略：
 1. 结构化合并：表达 DNA 加权 blending、心智模型/启发式去重合并
 2. 冲突检测：跨表达 DNA 维度检测"丹性相冲"，输出 inner_tensions
-3. LLM 涌现推导：一次 LLM 调用提炼融合后的"丹性"与涌现规则，
-   生成最终系统提示词，避免简单拼接导致的风格撕裂
+3. LLM 涌现推导：一次 LLM 调用只提炼组合后产生的涌现规则；完整行为档案与
+   最终系统提示词由 Go 端行为引擎确定性编译渲染（Go 是唯一策略源）
 """
 import hashlib
 import json
@@ -125,14 +125,15 @@ class LanguageSynthesisService:
         )
 
         return {
-            "system_prompt": synthesis["system_prompt"],
             "emergence_rules": synthesis["emergence_rules"],
             "inner_tensions": inner_tensions,
             "fingerprint": fingerprint,
             "model": model,
             "usage": synthesis.get("usage", {}),
-            # degraded=True 时 Go 端不落库,避免兜底提示词污染语言模式缓存
+            # degraded=True 时 Go 端不落库,避免无涌现层结果污染语言模式缓存
             "degraded": synthesis.get("degraded", False),
+            # 降级原因错误码(no_credentials / llm_error),Go 端记录安全日志
+            "degraded_reason": synthesis.get("degraded_reason", ""),
         }
 
     # ==================== 指纹计算 ====================
@@ -443,11 +444,11 @@ class LanguageSynthesisService:
         base_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        LLM 涌现推导 - 丹性融合
+        LLM 涌现推导 - 只产出组合后的涌现规则
 
-        将结构化合并结果交给 LLM，一次性提炼出：
-        - 融合后的系统提示词
-        - 涌现规则（多金丹组合时显式要求 2-3 条）
+        完整行为档案与系统提示词由 Go 端确定性编译渲染;本方法只提炼这些金丹
+        【组合之后】才产生的新行为准则。LLM 不可用/失败时降级为空涌现层
+        (degraded=True + 安全错误码),绝不代替档案生成兜底提示词(spec §6.1/§12)。
         """
         eff_key, eff_url, is_override = self._resolve_credentials(api_key, base_url)
         # 调用级覆盖：提供了 api_key 或 base_url 即视为可用；否则沿用环境校验
@@ -455,12 +456,12 @@ class LanguageSynthesisService:
             bool(eff_key or eff_url) if is_override else settings.openai_api_key_valid
         )
         if not credentials_usable:
-            logger.warning("OPENAI_API_KEY 未配置，跳过涌现推导，使用结构化合并降级提示词")
+            logger.warning("OPENAI_API_KEY 未配置，跳过涌现推导(degraded=no_credentials)")
             return {
-                "system_prompt": self._fallback_prompt(personality, merged),
                 "emergence_rules": [],
                 "usage": {},
                 "degraded": True,
+                "degraded_reason": "no_credentials",
             }
 
         temp_client: Optional[OpenAI] = None
@@ -486,29 +487,27 @@ class LanguageSynthesisService:
         emergence_hint = ""
         if len(pills) >= 2:
             emergence_hint = (
-                f"4. emergence_rules 必须包含 2-3 条【涌现规则】：这些规则必须只有在"
-                f"这些金丹【组合之后】才会产生的新行为准则，体现金丹之间的化学反应"
-                f"（协同、折中或摇摆），【严禁】只是复述任何单颗金丹已有的特质或规则。"
-                f"每条规则应点明是哪几股丹性相互作用产生了它。"
+                "3. emergence_rules 必须包含 2-3 条【涌现规则】：每条规则应点明"
+                "是哪几股丹性相互作用产生了它。"
             )
             if inner_tensions:
                 emergence_hint += (
-                    f"\n5. 上述检测到的内在冲突不可回避：emergence_rules 中至少有 1 条"
-                    f"必须说明融合后的丹性如何在回复中调和或呈现这些张力"
-                    f"（例如分场景切换、按比例折中、或有意制造摇摆感）。"
+                    "\n4. 上述检测到的内在冲突不可回避：emergence_rules 中至少有 1 条"
+                    "必须说明融合后的丹性如何在回复中调和或呈现这些张力"
+                    "（例如分场景切换、按比例折中、或有意制造摇摆感）。"
                 )
         else:
-            emergence_hint = "4. emergence_rules 可包含 0-2 条该丹性下最重要的表达规则。"
+            emergence_hint = "3. emergence_rules 可包含 0-2 条该丹性下最重要的表达规则。"
 
         tension_text = ""
         if inner_tensions:
             tension_text = (
                 "\n已检测到的内在冲突（丹性相冲）：\n"
                 + json.dumps(inner_tensions, ensure_ascii=False, indent=2)
-                + "\n请在系统提示词中显式说明如何在回复中调和或呈现这些内在张力。"
+                + "\n涌现规则中至少 1 条必须说明如何在回复中调和或呈现这些内在张力。"
             )
 
-        user_prompt = f"""你是一位"人格融合大师"。请将下面的道人基础性格与已服用的金丹（语言模式/人格特质技能包）融合为一个统一、自洽的系统提示词。
+        user_prompt = f"""你是一位"人格融合大师"。请分析下面的道人基础性格与已服用的金丹（语言模式/人格特质技能包），只提炼这些金丹【组合之后】才会产生的涌现规则。你不需要生成完整的系统提示词——完整档案由确定性引擎编译渲染，你只负责涌现层。
 
 ## 道人基础性格
 {personality or "（未指定，按金丹特质为主）"}
@@ -523,14 +522,12 @@ class LanguageSynthesisService:
 ## 任务
 请输出一个 JSON 对象（不要输出其他内容），格式如下：
 {{
-  "system_prompt": "融合后的完整系统提示词，用第二人称指导模型如何说话与思考",
   "emergence_rules": ["规则1", "规则2"]
 }}
 
 要求：
-1. system_prompt 必须是一个连贯的整体，而不是各金丹规则的拼接列表。
-2. 必须体现表达 DNA 的数值化倾向（如正式程度、句式长度）。
-3. 必须尊重 honest_limits 与 anti_patterns。
+1. emergence_rules 只包含这些金丹【组合之后】才会产生的新行为准则，体现金丹之间的化学反应（协同、折中或摇摆），【严禁】只是复述任何单颗金丹已有的特质或规则。
+2. 必须尊重 honest_limits 与 anti_patterns。
 {emergence_hint}
 """
 
@@ -556,30 +553,24 @@ class LanguageSynthesisService:
                 "total_tokens": response.usage.total_tokens,
             } if response.usage else {}
 
-            system_prompt = parsed.get("system_prompt", "").strip()
             emergence_rules = parsed.get("emergence_rules") or []
             if not isinstance(emergence_rules, list):
-                emergence_rules = [str(emergence_rules)]
-
-            degraded = False
-            if not system_prompt:
-                system_prompt = self._fallback_prompt(personality, merged)
-                degraded = True
+                emergence_rules = [emergence_rules]
 
             return {
-                "system_prompt": system_prompt,
                 "emergence_rules": [str(r) for r in emergence_rules],
                 "usage": usage,
-                "degraded": degraded,
+                "degraded": False,
+                "degraded_reason": "",
             }
 
         except Exception as e:
-            logger.error(f"涌现推导失败，使用降级提示词: {e}")
+            logger.error(f"涌现推导失败，本次降级为空涌现层: {e}")
             return {
-                "system_prompt": self._fallback_prompt(personality, merged),
                 "emergence_rules": [],
                 "usage": {},
                 "degraded": True,
+                "degraded_reason": "llm_error",
             }
         finally:
             if temp_client is not None:
@@ -587,24 +578,3 @@ class LanguageSynthesisService:
                     temp_client.close()
                 except Exception:
                     logger.debug("关闭临时 OpenAI 客户端异常", exc_info=True)
-
-    # ==================== 降级提示词 ====================
-
-    @staticmethod
-    def _fallback_prompt(personality: str, merged: Dict[str, Any]) -> str:
-        """当 LLM 涌现推导失败时，用结构化合并结果拼一个保底系统提示词"""
-        dna = merged.get("expression_dna", {})
-        parts = ["你是一位 AI 道人。"]
-        if personality:
-            parts.append(f"你的基础性格：{personality}")
-        if dna.get("formality") is not None:
-            parts.append(f"你的语言正式程度约为 {dna['formality']}（0-1）。")
-        if dna.get("sentence_length"):
-            parts.append(f"你偏好 {dna['sentence_length']} 句式。")
-        if dna.get("vocabulary"):
-            parts.append("你常用的词汇包括：" + "、".join(dna["vocabulary"][:10]))
-        if dna.get("taboo_words"):
-            parts.append("你绝不说：" + "、".join(dna["taboo_words"][:10]))
-        if merged.get("honest_limits"):
-            parts.append("诚实边界：" + "；".join(merged["honest_limits"][:5]))
-        return "\n".join(parts)

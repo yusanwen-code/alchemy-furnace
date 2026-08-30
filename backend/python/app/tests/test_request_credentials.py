@@ -353,7 +353,7 @@ class TestChatStreamCredentials:
 class TestSynthesisCredentials:
     def _llm_json_create(self, **kwargs):
         content = json.dumps(
-            {"system_prompt": "你是融合后的 AI 道人。", "emergence_rules": []},
+            {"emergence_rules": ["涌现规则甲"]},
             ensure_ascii=False,
         )
         return _fake_llm_response(content=content)
@@ -373,8 +373,9 @@ class TestSynthesisCredentials:
             base_url="https://api.deepseek.com/v1",
         )
 
-        # LLM 路径被使用（非降级提示词）
-        assert result["system_prompt"] == "你是融合后的 AI 道人。"
+        # LLM 路径被使用（非降级）
+        assert result["emergence_rules"] == ["涌现规则甲"]
+        assert result["degraded"] is False
         assert len(factory.calls) == 1
         call = factory.calls[0]
         assert call["api_key"] == "sk-request-key"
@@ -392,11 +393,12 @@ class TestSynthesisCredentials:
 
         result = svc.combine(personality="沉稳内敛", pills=[], model="gpt-4o-mini")
 
-        assert result["system_prompt"] == "你是融合后的 AI 道人。"
+        assert result["emergence_rules"] == ["涌现规则甲"]
+        assert result["degraded"] is False
         assert factory.calls == []
 
-    def test_no_credentials_anywhere_falls_back(self, monkeypatch):
-        """请求与环境均无凭证 -> 走结构化合并降级路径，不构造客户端"""
+    def test_no_credentials_anywhere_degrades(self, monkeypatch):
+        """请求与环境均无凭证 -> 降级(空涌现层),不构造客户端"""
         monkeypatch.setattr(settings, "openai_api_key", "")
         svc = LanguageSynthesisService(api_key="", base_url="")
         factory = _SyncClientFactory(create=self._llm_json_create)
@@ -404,8 +406,10 @@ class TestSynthesisCredentials:
 
         result = svc.combine(personality="沉稳内敛", pills=[])
 
-        assert "沉稳内敛" in result["system_prompt"]  # 降级提示词
+        assert result["degraded"] is True
+        assert result["degraded_reason"] == "no_credentials"
         assert result["emergence_rules"] == []
+        assert "system_prompt" not in result
         assert factory.calls == []
 
 

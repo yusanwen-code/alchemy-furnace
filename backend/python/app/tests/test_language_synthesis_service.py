@@ -124,7 +124,6 @@ def llm_service(monkeypatch):
         captured["kwargs"] = kwargs
         content = json.dumps(
             {
-                "system_prompt": "你是一位文白相间、雅俗共赏的 AI 道人，正式场合用文言，闲聊时来段 flow。",
                 "emergence_rules": [
                     "文言丹性与嘻哈丹性相互作用：按场景正式度切换文白比例",
                     "双丹合璧：押韵时可化用典故，掉书袋时须带节奏感",
@@ -147,16 +146,16 @@ def llm_service(monkeypatch):
 
 
 class TestSinglePill:
-    def test_fallback_prompt_contains_personality_and_dna(self, service):
+    def test_no_credentials_degrades_without_prompt(self, service):
+        """无凭证时降级: 不产出 system_prompt(提示词由 Go 端确定性渲染),标记 degraded"""
         result = service.combine(
             personality="沉稳内敛，喜好引经据典",
             pills=[_wenyan_pill()],
         )
-        prompt = result["system_prompt"]
-        assert "沉稳内敛，喜好引经据典" in prompt
-        # formality=0.9 加权平均即 0.9
-        assert "0.9" in prompt
-        assert "long" in prompt  # 句式偏好写入降级提示词
+        assert result["degraded"] is True
+        assert result["degraded_reason"] == "no_credentials"
+        assert result["emergence_rules"] == []
+        assert "system_prompt" not in result
 
     def test_self_consistent_pill_has_no_inner_tensions(self, service):
         result = service.combine(
@@ -240,14 +239,18 @@ class TestTwoConflictingPills:
         # 合并后的加权 formality 0.55 与冲突信息进入提示词
         assert "0.55" in user_prompt
         assert "内在冲突" in user_prompt
-        # 响应字段按契约返回
-        assert "雅俗共赏" in result["system_prompt"]
-        assert len(result["emergence_rules"]) == 2
+        # 响应只含涌现层,不再有 system_prompt
+        assert "system_prompt" not in result
+        assert result["emergence_rules"] == [
+            "文言丹性与嘻哈丹性相互作用：按场景正式度切换文白比例",
+            "双丹合璧：押韵时可化用典故，掉书袋时须带节奏感",
+        ]
+        assert result["degraded"] is False
         assert result["usage"]["total_tokens"] == 1000
         assert result["model"] == "gpt-4o-mini"
 
-    def test_emergence_llm_failure_falls_back(self, service, monkeypatch):
-        """LLM 抛异常时降级为结构化提示词且不抛出"""
+    def test_emergence_llm_failure_degrades(self, service, monkeypatch):
+        """LLM 抛异常(超时/网络错误)时降级为空涌现层且不抛出;冲突检测不受影响"""
         monkeypatch.setattr(settings, "openai_api_key", "sk-test-key")
 
         def boom(**kwargs):
@@ -258,9 +261,32 @@ class TestTwoConflictingPills:
             personality="沉稳内敛",
             pills=[_wenyan_pill(), _hiphop_pill()],
         )
-        assert "沉稳内敛" in result["system_prompt"]
+        assert result["degraded"] is True
+        assert result["degraded_reason"] == "llm_error"
         assert result["emergence_rules"] == []
+        assert "system_prompt" not in result
         assert result["inner_tensions"]  # 冲突检测不受 LLM 失败影响
+
+    def test_emergence_empty_json_not_degraded(self, service, monkeypatch):
+        """LLM 返回合法但无规则的 JSON({}): 不算降级,emergence_rules 为空"""
+        monkeypatch.setattr(settings, "openai_api_key", "sk-test-key")
+        import json as _json
+        from types import SimpleNamespace
+
+        def fake_create(**kwargs):
+            content = _json.dumps({}, ensure_ascii=False)
+            message = SimpleNamespace(content=content)
+            choice = SimpleNamespace(message=message)
+            return SimpleNamespace(choices=[choice], usage=None)
+
+        monkeypatch.setattr(service.client.chat.completions, "create", fake_create)
+        result = service.combine(
+            personality="沉稳内敛",
+            pills=[_wenyan_pill(), _hiphop_pill()],
+        )
+        assert result["degraded"] is False
+        assert result["emergence_rules"] == []
+        assert "system_prompt" not in result
 
 
 # ==================== 3. 指纹稳定性 ====================
@@ -335,16 +361,20 @@ class TestFingerprint:
 
 
 class TestEdgeCases:
-    def test_empty_pills_returns_personality_only_prompt(self, service):
+    def test_empty_pills_degrades(self, service):
+        """空金丹列表: 无凭证降级且不产出 system_prompt"""
         result = service.combine(personality="沉稳内敛，喜好引经据典", pills=[])
-        assert "沉稳内敛，喜好引经据典" in result["system_prompt"]
-        assert "正式程度" not in result["system_prompt"]
+        assert result["degraded"] is True
+        assert result["emergence_rules"] == []
         assert result["inner_tensions"] == []
+        assert "system_prompt" not in result
         assert result["fingerprint"].startswith("sha256:")
 
     def test_none_pills_treated_as_empty(self, service):
         result = service.combine(personality="沉稳内敛", pills=None)
-        assert "沉稳内敛" in result["system_prompt"]
+        assert result["degraded"] is True
+        assert result["emergence_rules"] == []
+        assert "system_prompt" not in result
 
     def test_mental_models_capped_at_20(self, service):
         pill = _wenyan_pill()

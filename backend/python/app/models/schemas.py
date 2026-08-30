@@ -84,24 +84,25 @@ class InnerTension(BaseModel):
 
 class CombineResponse(BaseModel):
     """
-    语言模式合成响应 - 丹性已成
+    语言模式合成响应 - 涌现层
 
     Attributes:
-        system_prompt: 合成后的系统提示词
-        emergence_rules: 涌现规则列表
+        emergence_rules: 涌现规则列表(LLM 只产出组合后新行为准则;完整档案与
+            系统提示词由 Go 端行为引擎确定性编译渲染)
         inner_tensions: 检测到的内在冲突
         fingerprint: 来源指纹（SHA256）
         model: 使用的合成模型
         usage: token 用量
-        degraded: 是否走了结构化合并兜底(LLM 不可用/失败);True 时 Go 端不落库
+        degraded: 是否降级(涌现层不可用);True 时 Go 端不落库
+        degraded_reason: 降级原因错误码(no_credentials / llm_error)
     """
-    system_prompt: str = Field(..., description="合成后的系统提示词")
     emergence_rules: List[Any] = Field(default_factory=list, description="涌现规则列表")
     inner_tensions: List[InnerTension] = Field(default_factory=list, description="内在冲突")
     fingerprint: str = Field(..., description="来源指纹 SHA256")
     model: str = Field(default="", description="使用的合成模型")
     usage: Dict[str, int] = Field(default_factory=dict, description="token 用量")
-    degraded: bool = Field(default=False, description="是否走了兜底提示词(LLM 不可用/失败)")
+    degraded: bool = Field(default=False, description="是否降级(涌现层不可用)")
+    degraded_reason: str = Field(default="", description="降级原因错误码")
 
 
 # ==================== 女娲蒸馏 ====================
