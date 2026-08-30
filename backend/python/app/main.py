@@ -14,7 +14,6 @@ API 文档:
 ================================================================================
 """
 import logging
-import sys
 
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,16 +21,11 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
+from app.logging_config import configure_logging
 
 # ==================== 日志配置 ====================
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format=settings.log_format,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+configure_logging(settings.log_level, settings.log_format)
 logger = logging.getLogger("alchemy-furnace")
 
 
