@@ -40,11 +40,27 @@ func TestAutoMigrateSQLite(t *testing.T) {
 	wantTables := []string{
 		"elixir_pills", "dao_agents", "agent_pills", "language_patterns",
 		"chat_sessions", "chat_messages", "session_members", "llm_providers", "llm_models",
+		"user_profile",
 	}
 	for _, table := range wantTables {
 		if !db.Migrator().HasTable(table) {
 			t.Errorf("缺失业务表: %s", table)
 		}
+	}
+
+	// 关键约束:user_profile.avatar 列必须为 text(data:image URI ≤1.5M 字符,VARCHAR 不够存)
+	cols, err := db.Migrator().ColumnTypes(&model.UserProfile{})
+	if err != nil {
+		t.Fatalf("读取 user_profile 列类型失败: %v", err)
+	}
+	avatarType := ""
+	for _, col := range cols {
+		if col.Name() == "avatar" {
+			avatarType = strings.ToLower(col.DatabaseTypeName())
+		}
+	}
+	if avatarType != "text" {
+		t.Errorf("user_profile.avatar 数据库类型 = %q, want text", avatarType)
 	}
 
 	// 关键约束:部分唯一索引(is_default 全表至多一个 true)

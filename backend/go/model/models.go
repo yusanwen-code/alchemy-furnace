@@ -565,7 +565,7 @@ type UserProfile struct {
 	ID          uint      `json:"-" gorm:"primaryKey;autoIncrement;comment:固定为 1"`
 	DisplayName string    `json:"display_name" gorm:"size:64;not null;default:'用户';comment:显示名"`
 	Bio         string    `json:"bio" gorm:"type:text;comment:简介(支持多行,最多 500 字)"`
-	Avatar      string    `json:"avatar" gorm:"size:500;default:'';comment:头像 URL 或 data URI"`
+	Avatar      string    `json:"avatar" gorm:"type:text;default:'';comment:头像 URL 或 data URI"`
 	UpdatedAt   time.Time `json:"updated_at" gorm:"autoUpdateTime;comment:最近更新时间"`
 }
 

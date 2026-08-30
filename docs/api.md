@@ -433,6 +433,51 @@ WS /api/v1/chat/ws/:session_id
 {"type": "error", "message": "错误描述"}
 ```
 
+## 用户档案 (Profile)
+
+### 获取当前用户档案
+
+```
+GET /api/v1/user/profile
+```
+
+首次调用自动创建默认行(display_name=用户)。响应:
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "display_name": "用户",
+    "bio": "",
+    "avatar": "",
+    "updated_at": "2026-08-30T10:00:00Z"
+  }
+}
+```
+
+### 更新当前用户档案
+
+```
+PUT /api/v1/user/profile
+```
+
+请求体(均为可选字段,未传不更新):
+```json
+{
+  "display_name": "炉主",
+  "bio": "多行简介",
+  "avatar": "data:image/png;base64,iVBORw0KGgo..."
+}
+```
+
+`avatar` 规则(与道人头像一致,契约见 `internal/util/avatar`):
+- 空字符串清除头像(合法)。
+- 完整 http/https URL:长度 ≤2048 字符,不允许内嵌凭据(user:pass@)。
+- `data:image/(png|jpeg|webp|gif);base64,`:URI 总长 ≤1_500_000 字符,payload 仅 base64 字符。
+- 其余(相对路径 / `javascript:` / `vbscript:` / `blob:` / 其他 MIME / 超长)→ HTTP 400,
+  错误码 `handler.user.avatar_validate`,错误消息不携带头像值。
+- `display_name` trim 后 1-32 字;`bio` trim 后 ≤500 字。
+
 ## 系统接口 (System)
 
 ### 健康检查

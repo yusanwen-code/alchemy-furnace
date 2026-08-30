@@ -53,6 +53,8 @@ var columnTypeAlterations = []struct {
 }{
 	// 头像契约:允许 data:image 数据 URI(≤1.5M 字符),VARCHAR(255) 不够存
 	{"dao_agents", "avatar", "text"},
+	// 用户头像契约:与道人一致,允许 data:image 数据 URI
+	{"user_profile", "avatar", "text"},
 }
 
 // MigrateUp 同步全部业务表到当前模型定义(幂等,跨驱动)

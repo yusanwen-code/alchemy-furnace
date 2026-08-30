@@ -9,6 +9,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/context/contextutil"
 	ierr "github.com/alchemy-furnace/server/internal/errors"
+	"github.com/alchemy-furnace/server/internal/util/avatar"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/request"
 	"github.com/alchemy-furnace/server/server/http/response"
@@ -49,7 +50,7 @@ func (cls *User) Get(c *gin.Context) (response.Code, any, error) {
 type UpdateRequest struct {
 	DisplayName *string `json:"display_name" binding:"omitempty,max=64"`
 	Bio         *string `json:"bio"          binding:"omitempty,max=500"`
-	Avatar      *string `json:"avatar"       binding:"omitempty,max=500"`
+	Avatar      *string `json:"avatar"`
 }
 
 // Update 更新当前用户档案
@@ -85,7 +86,11 @@ func (cls *User) Update(c *gin.Context) (response.Code, any, error) {
 		updates["bio"] = bio
 	}
 	if body.Avatar != nil {
-		updates["avatar"] = strings.TrimSpace(*body.Avatar)
+		value := strings.TrimSpace(*body.Avatar)
+		if err := avatar.Validate(value); err != nil {
+			return response.InvalidParams, nil, ierr.New(ierr.ErrorTypeInvalidRequest, "handler.user.avatar_validate", err.Error())
+		}
+		updates["avatar"] = value
 	}
 
 	if len(updates) == 0 {
