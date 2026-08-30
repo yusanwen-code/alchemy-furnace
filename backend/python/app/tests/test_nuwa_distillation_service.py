@@ -77,6 +77,68 @@ VALID_PAYLOAD = {
 }
 
 
+def recording_openai(payload, finish_reason="stop", reasoning_content=None):
+    captured = {}
+    message = SimpleNamespace(
+        content=json.dumps(payload, ensure_ascii=False) if isinstance(payload, dict) else payload,
+        reasoning_content=reasoning_content,
+    )
+    completion = SimpleNamespace(
+        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)]
+    )
+
+    class _RecordingOpenAI:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
+
+        def _create(self, **kwargs):
+            captured["create"] = kwargs
+            return completion
+
+        def close(self):
+            pass
+
+    return _RecordingOpenAI, captured
+
+
+def test_deepseek_distillation_disables_thinking_and_requests_json(monkeypatch):
+    factory, captured = recording_openai(VALID_PAYLOAD)
+    monkeypatch.setattr(distillation_module, "OpenAI", factory)
+    service = NuwaDistillationService(FixedResearchProvider(standard_report()))
+
+    result = service.distill(
+        "人物",
+        "提炼决策方式",
+        model="deepseek-v4-flash",
+        api_key="sk-test",
+        base_url="https://api.deepseek.com/v1",
+    )
+
+    assert result["name"] == VALID_PAYLOAD["name"]
+    assert captured["create"]["max_tokens"] == 8192
+    assert captured["create"]["response_format"] == {"type": "json_object"}
+    assert captured["create"]["extra_body"] == {
+        "thinking": {"type": "disabled"}
+    }
+
+
+def test_openai_distillation_requests_json_without_vendor_extra_body(monkeypatch):
+    factory, captured = recording_openai(VALID_PAYLOAD)
+    monkeypatch.setattr(distillation_module, "OpenAI", factory)
+    service = NuwaDistillationService(FixedResearchProvider(standard_report()))
+
+    service.distill(
+        "人物", "提炼决策方式", model="gpt-4o-mini",
+        api_key="sk-test", base_url="https://api.openai.com/v1",
+    )
+
+    assert captured["create"]["response_format"] == {"type": "json_object"}
+    assert "extra_body" not in captured["create"]
+
+
 class FakeOpenAI:
     last_kwargs = None
 
@@ -171,3 +233,35 @@ def test_distill_requires_key_for_openai_cloud_emits_stable_code(monkeypatch):
     assert captured.value.code == "model_not_configured"
     assert captured.value.stage == "model"
     assert captured.value.retryable is False
+
+
+def test_length_finish_reason_is_reported_as_truncated(monkeypatch):
+    factory, _ = recording_openai("", finish_reason="length", reasoning_content="x" * 20)
+    monkeypatch.setattr(distillation_module, "OpenAI", factory)
+    service = NuwaDistillationService(FixedResearchProvider(standard_report()))
+
+    with pytest.raises(DistillationError) as captured:
+        service.distill(
+            "人物", "提炼决策方式", model="deepseek-v4-flash",
+            api_key="sk-test", base_url="https://api.deepseek.com/v1",
+        )
+
+    assert captured.value.code == "model_output_truncated"
+    assert captured.value.stage == "distill"
+    assert captured.value.retryable is True
+    assert captured.value.details == {"finish_reason": "length"}
+
+
+def test_empty_content_is_reported_without_exposing_reasoning(monkeypatch):
+    factory, _ = recording_openai("", finish_reason="stop", reasoning_content="private reasoning")
+    monkeypatch.setattr(distillation_module, "OpenAI", factory)
+    service = NuwaDistillationService(FixedResearchProvider(standard_report()))
+
+    with pytest.raises(DistillationError) as captured:
+        service.distill(
+            "人物", "提炼决策方式", model="deepseek-v4-flash",
+            api_key="sk-test", base_url="https://api.deepseek.com/v1",
+        )
+
+    assert captured.value.code == "model_empty_output"
+    assert "private reasoning" not in str(captured.value.details)

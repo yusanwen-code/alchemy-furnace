@@ -19,6 +19,7 @@ import re
 import time
 from dataclasses import asdict
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import httpx
 from openai import APIError, APIStatusError, APITimeoutError, OpenAI
@@ -33,6 +34,28 @@ from app.services.research_provider import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 结构化生成预算：思考模型把输出额度全耗在推理内容时，正文会被截断为空。
+# 已知端点用 JSON mode + 关闭思考，把额度全部留给正文；其余端点只提预算。
+DISTILLATION_MAX_TOKENS = 8192
+
+
+def _completion_request_options(base_url: str) -> dict[str, Any]:
+    """按解析后的 hostname 选择已知模型端点的结构化输出能力。
+
+    不按模型名猜厂商；未知端点不发厂商专有参数，保持文本 JSON 提示词。
+    """
+    host = (urlparse(base_url).hostname or "").lower()
+    options: dict[str, Any] = {
+        "temperature": 0.25,
+        "max_tokens": DISTILLATION_MAX_TOKENS,
+    }
+    if host == "api.openai.com" or host.endswith(".openai.com"):
+        options["response_format"] = {"type": "json_object"}
+    if host == "api.deepseek.com" or host.endswith(".deepseek.com"):
+        options["response_format"] = {"type": "json_object"}
+        options["extra_body"] = {"thinking": {"type": "disabled"}}
+    return options
 
 
 def _loggable_subject(subject: str) -> str:
@@ -146,8 +169,6 @@ class NuwaDistillationService:
             try:
                 response = client.chat.completions.create(
                     model=research_credentials.model,
-                    temperature=0.25,
-                    max_tokens=4096,
                     messages=[
                         {"role": "system", "content": self._system_prompt(locale)},
                         {
@@ -157,6 +178,7 @@ class NuwaDistillationService:
                             ),
                         },
                     ],
+                    **_completion_request_options(research_credentials.base_url),
                 )
             except APITimeoutError as exc:
                 self._log_completion(
@@ -192,7 +214,28 @@ class NuwaDistillationService:
                     True,
                 ) from exc
             model_seconds = time.monotonic() - model_started
-            content = response.choices[0].message.content or ""
+            # 先按响应协议分类，再解析 JSON：思考模型可能把输出额度全部
+            # 耗在推理内容上，最终 content 为空或截断——这类情况要给出
+            # 稳定可重试的错误，而不是笼统的解析失败。不读取 reasoning_content。
+            choice = response.choices[0]
+            finish_reason = getattr(choice, "finish_reason", None)
+            content = getattr(choice.message, "content", None) or ""
+            if finish_reason == "length":
+                raise DistillationError(
+                    "model_output_truncated",
+                    "distill",
+                    "模型输出达到长度上限，请重试或更换合成模型",
+                    True,
+                    {"finish_reason": "length"},
+                )
+            if not content.strip():
+                raise DistillationError(
+                    "model_empty_output",
+                    "distill",
+                    "模型未返回可用的结构化正文，请重试",
+                    True,
+                    {"finish_reason": finish_reason or "unknown"},
+                )
             try:
                 result = self._parse_json(content)
                 self._validate(result)
