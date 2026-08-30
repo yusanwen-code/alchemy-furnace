@@ -621,9 +621,9 @@
   "about": {
     "pageTitle": "About",
     "pageSubtitle": "Alchemy Furnace · Pill-Bound Persona System",
-    "sectionTitle": "About Alchemy Furnace",
+    "sectionTitle": "Product",
     "productName": "Alchemy Furnace",
-    "productBody1": "A pill-bound persona system inspired by Daoist alchemy.",
+    "productBody1": "Inspired by the aesthetics of Daoist alchemy.",
     "productBody2": "Pills are language-mode skill packs; daoists are AI agents. Bind a pill to transform a daoist's nature.",
     "githubRepo": "GitHub repository",
     "techStack": "Tech stack",
