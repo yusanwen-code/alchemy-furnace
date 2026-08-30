@@ -7,7 +7,7 @@
  *       失败保留草稿且 ActionFeedback 可重试;「恢复服务端版本」回到基线但保持编辑态
  * 删除: 有会话历史(409 delete_has_history)时引导停用;无历史才二次确认硬删除
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -15,12 +15,17 @@ import {
   AlertCircle,
   ArrowLeft,
   Ban,
+  Brain,
   Cpu,
+  ExternalLink,
   FlaskConical,
   Loader2,
   MessageSquare,
   Pencil,
   Pill as PillIcon,
+  Pin,
+  PinOff,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -34,6 +39,7 @@ import {
 import { useAgent } from '@/contexts/AgentContext'
 import { usePill } from '@/contexts/PillContext'
 import { avatarInputMaxLength } from '@/lib/avatar-validation'
+import { chatSessionHref } from '@/lib/chat-route'
 import { useAgentEditorFlow } from '@/hooks/use-agent-editor-flow'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
@@ -45,6 +51,7 @@ import { ApiError } from '@/services/api'
 import * as agentService from '@/services/agentService'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
+import type { AgentDetail, AgentMemory, CreateMemoryRequest, MemoryKind } from '@/services/types'
 import type { AgentStatus, TensionSeverity } from '@/services/types'
 import { formatDateTime } from '@/utils/format'
 
@@ -62,6 +69,502 @@ const SEVERITY_CLASS: Record<TensionSeverity, string> = {
   low: 'bg-sage/15 text-sage border-sage/30',
   medium: 'bg-gold/15 text-gold border-gold/30',
   high: 'bg-primary/10 text-primary border-primary/30',
+}
+
+// ========== 本地记忆管理 ==========
+
+/** 记忆类型枚举(与后端 spec §10.1 一致) */
+const MEMORY_KINDS: MemoryKind[] = ['user_fact', 'user_preference', 'relationship', 'open_loop', 'episode']
+
+/** kind → i18n 键映射(键名见 agent.memory.kind_*) */
+const MEMORY_KIND_LABEL_KEY: Record<MemoryKind, string> = {
+  user_fact: 'kind_fact',
+  user_preference: 'kind_preference',
+  relationship: 'kind_relationship',
+  open_loop: 'kind_open_loop',
+  episode: 'kind_episode',
+}
+
+/** 来源会话跳转地址;非法 UUID 防御性返回 null(chatSessionHref 对畸形 id 抛错) */
+function safeChatHref(sessionId: string): string | null {
+  try {
+    return chatSessionHref(sessionId)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 本地记忆管理区(只读态专属):
+ * 开关(memory_enabled)→更新道人;开启后加载列表;支持 kind 筛选/新建/编辑/置顶/删除/清空/跳转来源。
+ * 关闭或旧服务端未返回 memory_enabled 时,仅展示开关与提示文案,不发起列表请求。
+ */
+function LocalMemorySection({ agent }: { agent: AgentDetail }) {
+  const tMem = useTranslations('agent.memory')
+  const tCommon = useTranslations('common')
+
+  const [enabled, setEnabled] = useState(agent.memory_enabled ?? false)
+  const [memories, setMemories] = useState<AgentMemory[]>([])
+  const [kindFilter, setKindFilter] = useState<MemoryKind | ''>('')
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [formOpen, setFormOpen] = useState<AgentMemory | 'new' | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [formError, setFormError] = useState('')
+
+  /** kind 标签文案(键名映射见 MEMORY_KIND_LABEL_KEY) */
+  const kindLabel = (kind: MemoryKind): string => tMem(MEMORY_KIND_LABEL_KEY[kind])
+
+  const loadMemories = useCallback(
+    (kind: MemoryKind | '' = kindFilter) => {
+      setLoadState('loading')
+      agentService
+        .fetchAgentMemories(agent.id, kind || undefined)
+        .then(list => {
+          setMemories(list)
+          setLoadState('idle')
+        })
+        .catch(() => setLoadState('error'))
+    },
+    [agent.id, kindFilter]
+  )
+
+  useEffect(() => {
+    if (!enabled) return
+    loadMemories()
+  }, [enabled, loadMemories])
+
+  /** 开关:更新道人 memory_enabled;开启后立即加载列表,关闭时清空本地列表 */
+  const handleToggle = async (next: boolean) => {
+    setToggling(true)
+    setNotice('')
+    try {
+      await agentService.updateAgent(agent.id, {}, next)
+      setEnabled(next)
+      if (next) loadMemories()
+    } catch {
+      setNotice(tMem('op_failed'))
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  /** 置顶/取消置顶 */
+  const handlePin = async (memory: AgentMemory, pinned: boolean) => {
+    setNotice('')
+    try {
+      const updated = await agentService.updateAgentMemory(agent.id, memory.uuid, { pinned })
+      setMemories(prev => prev.map(m => (m.uuid === memory.uuid ? updated : m)))
+      setNotice(tMem('saved'))
+    } catch {
+      setNotice(tMem('op_failed'))
+    }
+  }
+
+  /** 删除单条(物理删除,二次确认) */
+  const handleDelete = async (memory: AgentMemory) => {
+    if (!window.confirm(tMem('delete_confirm'))) return
+    setNotice('')
+    try {
+      await agentService.deleteAgentMemory(agent.id, memory.uuid)
+      setMemories(prev => prev.filter(m => m.uuid !== memory.uuid))
+      setNotice(tMem('saved'))
+    } catch {
+      setNotice(tMem('op_failed'))
+    }
+  }
+
+  /** 清空全部(物理删除,二次确认) */
+  const handleClear = async () => {
+    if (!window.confirm(tMem('clear_confirm'))) return
+    setClearing(true)
+    setNotice('')
+    try {
+      await agentService.clearAgentMemories(agent.id)
+      setMemories([])
+      setNotice(tMem('saved'))
+    } catch {
+      setNotice(tMem('op_failed'))
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  /** 表单提交:新建或编辑后落库并更新列表 */
+  const handleFormSave = async (input: CreateMemoryRequest, editingMemory: AgentMemory | null) => {
+    setSaving(true)
+    setNotice('')
+    setFormError('')
+    try {
+      if (editingMemory) {
+        const updated = await agentService.updateAgentMemory(agent.id, editingMemory.uuid, input)
+        setMemories(prev => prev.map(m => (m.uuid === editingMemory.uuid ? updated : m)))
+      } else {
+        const created = await agentService.createAgentMemory(agent.id, input)
+        setMemories(prev => [created, ...prev])
+      }
+      setFormOpen(null)
+      setNotice(tMem('saved'))
+    } catch {
+      setFormError(tMem('op_failed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="dao-card mb-6 p-5">
+      <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+        <Brain className="h-4 w-4 shrink-0 text-sage" />
+        <h2 className="min-w-0 break-words font-serif text-base font-bold text-gold">
+          {tMem('title')}
+        </h2>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={tMem('enabled')}
+          onClick={() => void handleToggle(!enabled)}
+          disabled={toggling}
+          className="ml-auto inline-flex shrink-0 items-center gap-2"
+        >
+          <span
+            className={`flex h-5 w-9 shrink-0 items-center rounded-full border px-0.5 transition-colors ${
+              enabled ? 'border-sage/50 bg-sage/30' : 'border-border/70 bg-muted'
+            }`}
+          >
+            <span
+              className={`h-3.5 w-3.5 rounded-full transition-transform ${
+                enabled ? 'translate-x-4 bg-sage' : 'translate-x-0 bg-muted-foreground/60'
+              }`}
+            />
+          </span>
+          <span className="text-sm font-medium text-foreground">{tMem('enabled')}</span>
+        </button>
+      </div>
+
+      {!enabled ? (
+        <p className="text-sm text-muted-foreground">{tMem('disabled_hint')}</p>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-sage">{tMem('enabled_hint')}</p>
+
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            {/* kind 筛选 */}
+            <div className="flex flex-wrap gap-1.5">
+              {(['', ...MEMORY_KINDS] as Array<MemoryKind | ''>).map(filter => (
+                <button
+                  key={filter || 'all'}
+                  type="button"
+                  aria-pressed={kindFilter === filter}
+                  onClick={() => setKindFilter(filter)}
+                  className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                    kindFilter === filter
+                      ? 'border-gold/50 bg-gold/15 text-gold'
+                      : 'border-border/70 bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {filter === '' ? tMem('all') : kindLabel(filter)}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormError('')
+                  setFormOpen('new')
+                }}
+                className="dao-btn-primary whitespace-nowrap text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {tMem('create')}
+              </button>
+              {memories.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleClear()}
+                  disabled={clearing}
+                  className="dao-btn-ghost whitespace-nowrap text-xs text-primary hover:text-primary/80"
+                >
+                  {clearing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  {tMem('clear')}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loadState === 'loading' && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-gold" />
+              {tMem('loading')}
+            </p>
+          )}
+
+          {loadState === 'error' && (
+            <div className="mb-3">
+              <ActionFeedback
+                status="error"
+                message={tMem('error')}
+                onRetry={() => loadMemories()}
+                retryLabel={tCommon('retry')}
+              />
+            </div>
+          )}
+
+          {loadState === 'idle' &&
+            (memories.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{tMem('empty')}</p>
+            ) : (
+              <ul className="space-y-2">
+                {memories.map(memory => {
+                  const sourceHref = memory.source_session_id
+                    ? safeChatHref(memory.source_session_id)
+                    : null
+                  return (
+                    <li
+                      key={memory.uuid}
+                      className="rounded-lg border border-border/70 bg-muted px-3 py-2.5"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="shrink-0 whitespace-nowrap rounded-full border border-sage/30 bg-sage/15 px-2 py-0.5 text-[10px] text-sage">
+                          {kindLabel(memory.kind)}
+                        </span>
+                        {memory.pinned && (
+                          <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[10px] text-gold">
+                            <Pin className="h-2.5 w-2.5" />
+                            {tMem('pinned')}
+                          </span>
+                        )}
+                        <span className="ml-auto shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
+                          {tMem('importance')} {memory.importance} · {tMem('confidence')}{' '}
+                          {Math.round(memory.confidence * 100)}%
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-sm text-foreground/90">
+                        {memory.content}
+                      </p>
+                      {memory.keywords.length > 0 && (
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {memory.keywords.join(' · ')}
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handlePin(memory, !memory.pinned)}
+                          className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          {memory.pinned ? (
+                            <PinOff className="h-3 w-3" />
+                          ) : (
+                            <Pin className="h-3 w-3" />
+                          )}
+                          {memory.pinned ? tMem('unpin') : tMem('pin')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormError('')
+                            setFormOpen(memory)
+                          }}
+                          className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          {tMem('edit')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(memory)}
+                          className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-primary transition-colors hover:text-primary/80"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          {tMem('delete')}
+                        </button>
+                        {sourceHref && (
+                          <Link
+                            href={sourceHref}
+                            className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-gold transition-colors hover:text-gold/80"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            {tMem('source_jump')}
+                          </Link>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            ))}
+
+          {formOpen !== null && (
+            <MemoryForm
+              key={formOpen === 'new' ? 'new' : formOpen.uuid}
+              initial={formOpen === 'new' ? null : formOpen}
+              saving={saving}
+              error={formError}
+              onSave={input => void handleFormSave(input, formOpen === 'new' ? null : formOpen)}
+              onCancel={() => {
+                setFormOpen(null)
+                setFormError('')
+              }}
+            />
+          )}
+
+          {notice !== '' && (
+            <p role="status" className="mt-3 text-xs text-sage">
+              {notice}
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/** 记忆新建/编辑表单(kind 下拉、内容、关键词、重要性 1-5、置顶) */
+function MemoryForm({
+  initial,
+  saving,
+  error,
+  onSave,
+  onCancel,
+}: {
+  initial: AgentMemory | null
+  saving: boolean
+  error: string
+  onSave: (input: CreateMemoryRequest) => void
+  onCancel: () => void
+}) {
+  const tMem = useTranslations('agent.memory')
+  const [kind, setKind] = useState<MemoryKind>(initial?.kind ?? 'user_fact')
+  const [content, setContent] = useState(initial?.content ?? '')
+  const [keywords, setKeywords] = useState(initial?.keywords?.join(', ') ?? '')
+  const [importance, setImportance] = useState(initial?.importance ?? 3)
+  const [pinned, setPinned] = useState(initial?.pinned ?? false)
+  const [contentError, setContentError] = useState('')
+
+  const kindLabel = (k: MemoryKind): string => tMem(MEMORY_KIND_LABEL_KEY[k])
+
+  const submit = () => {
+    if (!content.trim()) {
+      setContentError(tMem('content_required'))
+      return
+    }
+    onSave({
+      kind,
+      content: content.trim(),
+      keywords: keywords
+        .split(/[,，]/)
+        .map(k => k.trim())
+        .filter(Boolean)
+        .slice(0, 12),
+      importance,
+      pinned,
+    })
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-border/70 bg-muted p-3">
+      <div className="space-y-3">
+        <div>
+          <label className="dao-label">{tMem('kind_label')}</label>
+          <select
+            aria-label={tMem('kind_label')}
+            value={kind}
+            onChange={e => setKind(e.target.value as MemoryKind)}
+            className="dao-input"
+          >
+            {MEMORY_KINDS.map(k => (
+              <option key={k} value={k}>
+                {kindLabel(k)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="dao-label">{tMem('content_label')}</label>
+          <textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            rows={3}
+            maxLength={500}
+            className="dao-textarea"
+            placeholder={tMem('content_label')}
+          />
+          {contentError !== '' && <p className="mt-1 text-xs text-primary">{contentError}</p>}
+        </div>
+
+        <div>
+          <label className="dao-label">{tMem('keywords')}</label>
+          <input
+            value={keywords}
+            onChange={e => setKeywords(e.target.value)}
+            className="dao-input py-1.5 text-sm"
+            placeholder={tMem('keywords_hint')}
+          />
+          <p className="mt-1 text-[10px] text-sage">{tMem('keywords_hint')}</p>
+        </div>
+
+        <div>
+          <label className="dao-label flex items-center gap-1.5">
+            {tMem('importance')}
+            <span className="ml-auto font-mono text-xs text-sage">{importance}/5</span>
+          </label>
+          <input
+            type="range"
+            min={1}
+            max={5}
+            step={1}
+            value={importance}
+            aria-label={tMem('importance')}
+            onChange={e => setImportance(Number(e.target.value))}
+            className="mt-1.5 w-full accent-gold"
+          />
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={pinned}
+            onChange={e => setPinned(e.target.checked)}
+            className="h-4 w-4 accent-gold"
+          />
+          {tMem('pinned')}
+        </label>
+
+        {error !== '' && <p className="text-xs text-primary">{error}</p>}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving}
+            className="dao-btn-primary whitespace-nowrap text-xs"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {tMem('create_btn')}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="dao-btn-ghost whitespace-nowrap text-xs"
+          >
+            <X className="h-3.5 w-3.5" />
+            {tMem('cancel_edit')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 interface AgentDetailPageProps {
@@ -514,6 +1017,9 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
             )}
           </div>
         )}
+
+        {/* 本地记忆管理(开关/筛选/增删改/置顶/清空/跳转来源) */}
+        <LocalMemorySection agent={agent} />
 
         {/* 服丹编排(只读:按服用顺序展示金丹名与剂量) */}
         <section className="dao-card p-5">

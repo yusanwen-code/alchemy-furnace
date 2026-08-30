@@ -186,6 +186,16 @@ export function put<T>(path: string, body?: unknown): Promise<T> {
 }
 
 /**
+ * PATCH 请求快捷方法
+ */
+export function patch<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+/**
  * DELETE 请求快捷方法
  */
 export function del<T>(path: string): Promise<T> {

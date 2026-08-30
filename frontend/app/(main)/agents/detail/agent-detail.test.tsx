@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentDetailPage from '@/app/(main)/agents/detail/agent-detail'
 import { ApiError } from '@/services/api'
-import type { AgentDetail, Pill } from '@/services/types'
+import type { AgentDetail, AgentMemory, Pill } from '@/services/types'
 
 // ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
 const td = vi.hoisted(() => {
@@ -16,6 +16,8 @@ const td = vi.hoisted(() => {
     PILL_C_ID: '55555555-5555-4555-8555-555555555555',
     AP_1_ID: '66666666-6666-4666-8666-666666666666',
     AP_2_ID: '77777777-7777-4777-8777-777777777777',
+    MEMORY_A_ID: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    SESSION_A_ID: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   }
   return {
     IDS,
@@ -26,6 +28,11 @@ const td = vi.hoisted(() => {
   updateAgent: vi.fn(),
   replacePills: vi.fn(),
   deleteAgent: vi.fn(),
+  fetchMemories: vi.fn(),
+  createMemory: vi.fn(),
+  updateMemory: vi.fn(),
+  deleteMemory: vi.fn(),
+  clearMemories: vi.fn(),
   listModelOptions: vi.fn(),
   launchSingle: vi.fn(),
   launchRetry: vi.fn(),
@@ -53,7 +60,17 @@ const td = vi.hoisted(() => {
   }
 })
 
-const { AGENT_ID, OTHER_AGENT_ID, PILL_A_ID, PILL_B_ID, PILL_C_ID, AP_1_ID, AP_2_ID } = td.IDS
+const {
+  AGENT_ID,
+  OTHER_AGENT_ID,
+  PILL_A_ID,
+  PILL_B_ID,
+  PILL_C_ID,
+  AP_1_ID,
+  AP_2_ID,
+  MEMORY_A_ID,
+  SESSION_A_ID,
+} = td.IDS
 
 type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
 
@@ -125,6 +142,11 @@ vi.mock('@/services/agentService', async (importOriginal) => {
     updateAgent: td.updateAgent,
     replacePills: td.replacePills,
     deleteAgent: td.deleteAgent,
+    fetchAgentMemories: td.fetchMemories,
+    createAgentMemory: td.createMemory,
+    updateAgentMemory: td.updateMemory,
+    deleteAgentMemory: td.deleteMemory,
+    clearAgentMemories: td.clearMemories,
   }
 })
 
@@ -185,6 +207,22 @@ const modelOptions = [
   { name: 'deepseek-chat', display_name: 'DeepSeek Chat', provider_name: 'deepseek', provider_display_name: 'DeepSeek', is_default: false },
 ]
 
+// 本地记忆 fixture(来源会话为合法 UUID 供 chatSessionHref 校验)
+const memoryA: AgentMemory = {
+  uuid: MEMORY_A_ID,
+  kind: 'user_fact',
+  content: '用户喜欢围棋',
+  keywords: ['围棋'],
+  importance: 4,
+  confidence: 0.9,
+  pinned: true,
+  status: 'active',
+  source_session_id: SESSION_A_ID,
+  source_message_id: '',
+  created_at: '2026-08-20T00:00:00Z',
+  updated_at: '2026-08-20T00:00:00Z',
+}
+
 /**
  * 设置详情页状态机(组件按 agentId prop + agentState.detailLoad 决策)。
  * 缺省:agent 就绪 + 对应 UUID;status 单独传可覆盖(loading/error/not-found)。
@@ -229,6 +267,11 @@ describe('AgentDetailPage', () => {
     td.fetchPills.mockResolvedValue(undefined)
     td.listModelOptions.mockResolvedValue(modelOptions)
     td.launchSingle.mockResolvedValue(true)
+    td.fetchMemories.mockResolvedValue([])
+    td.createMemory.mockResolvedValue(undefined)
+    td.updateMemory.mockResolvedValue(undefined)
+    td.deleteMemory.mockResolvedValue(undefined)
+    td.clearMemories.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -736,6 +779,124 @@ describe('AgentDetailPage', () => {
       await user.click(screen.getByRole('button', { name: 'Edit daoist' }))
       expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
       expect(screen.getByRole('button', { name: 'Restore server version' })).toBeInTheDocument()
+    })
+  })
+
+  describe('本地记忆管理区', () => {
+    it('未返回 memory_enabled(视为关闭):不请求列表,仅展示开关与提示', () => {
+      setDetailState({ agent: baseAgent })
+      renderPage()
+      expect(screen.getByRole('heading', { name: '本地记忆' })).toBeInTheDocument()
+      expect(td.fetchMemories).not.toHaveBeenCalled()
+      expect(
+        screen.getByText('本地记忆已关闭，道人不会在论道中检索或沉淀记忆')
+      ).toBeInTheDocument()
+    })
+
+    it('开启时加载列表:展示类型/内容/置顶徽标/重要性/置信度', async () => {
+      td.fetchMemories.mockResolvedValue([memoryA])
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      renderPage()
+      expect(await screen.findByText('用户喜欢围棋')).toBeInTheDocument()
+      expect(td.fetchMemories).toHaveBeenCalledWith(AGENT_ID, undefined)
+      // 类型标签同时出现在筛选 tab 与卡片徽标
+      expect(screen.getAllByText('用户事实').length).toBeGreaterThan(0)
+      expect(screen.getByText('置顶')).toBeInTheDocument()
+      expect(screen.getByText(/重要性 4 · 置信度 90%/)).toBeInTheDocument()
+      // 有来源会话时渲染跳转链接(规范地址 /chat?session=)
+      const link = screen.getByRole('link', { name: '跳转来源' })
+      expect(link).toHaveAttribute('href', `/chat?session=${SESSION_A_ID}`)
+    })
+
+    it('kind 筛选:点击类型标签后按类型重新请求', async () => {
+      td.fetchMemories.mockResolvedValue([])
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('暂无记忆，点击「新建记忆」录入第一条')
+      await user.click(screen.getByRole('button', { name: '用户偏好' }))
+      expect(td.fetchMemories).toHaveBeenLastCalledWith(AGENT_ID, 'user_preference')
+    })
+
+    it('开关切换:调用 updateAgent 携带 memory_enabled 并加载列表', async () => {
+      td.updateAgent.mockResolvedValue(baseAgent)
+      td.fetchMemories.mockResolvedValue([memoryA])
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(screen.getByRole('switch', { name: '启用本地记忆' }))
+      expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, {}, true)
+      await waitFor(() => expect(screen.getByText('用户喜欢围棋')).toBeInTheDocument())
+    })
+
+    it('新建记忆:提交表单后调用 createAgentMemory 并更新列表', async () => {
+      const created: AgentMemory = {
+        ...memoryA,
+        uuid: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        content: '用户喜欢喝茶',
+        keywords: ['茶'],
+        importance: 3,
+        pinned: false,
+      }
+      td.fetchMemories.mockResolvedValue([])
+      td.createMemory.mockResolvedValue(created)
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('暂无记忆，点击「新建记忆」录入第一条')
+      await user.click(screen.getByRole('button', { name: '新建记忆' }))
+      await user.type(screen.getByPlaceholderText('内容'), '用户喜欢喝茶')
+      await user.type(screen.getByPlaceholderText('多个关键词用逗号分隔，最多 12 个'), '茶')
+      await user.click(screen.getByRole('button', { name: '保存记忆' }))
+      expect(td.createMemory).toHaveBeenCalledWith(AGENT_ID, {
+        kind: 'user_fact',
+        content: '用户喜欢喝茶',
+        keywords: ['茶'],
+        importance: 3,
+        pinned: false,
+      })
+      expect(await screen.findByText('用户喜欢喝茶')).toBeInTheDocument()
+    })
+
+    it('置顶/取消置顶:调用 updateAgentMemory 仅携带 pinned', async () => {
+      td.fetchMemories.mockResolvedValue([memoryA])
+      td.updateMemory.mockResolvedValue({ ...memoryA, pinned: false })
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('用户喜欢围棋')
+      await user.click(screen.getByRole('button', { name: '取消置顶' }))
+      expect(td.updateMemory).toHaveBeenCalledWith(AGENT_ID, MEMORY_A_ID, { pinned: false })
+    })
+
+    it('删除:confirm 通过后调用 deleteAgentMemory 并从列表移除', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      td.fetchMemories.mockResolvedValue([memoryA])
+      td.deleteMemory.mockResolvedValue(undefined)
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('用户喜欢围棋')
+      await user.click(screen.getByRole('button', { name: '删除' }))
+      expect(confirmSpy).toHaveBeenCalledWith('确定删除这条记忆吗？删除后不可恢复。')
+      expect(td.deleteMemory).toHaveBeenCalledWith(AGENT_ID, MEMORY_A_ID)
+      await waitFor(() => expect(screen.queryByText('用户喜欢围棋')).toBeNull())
+      confirmSpy.mockRestore()
+    })
+
+    it('清空:confirm 通过后调用 clearAgentMemories 并清空列表', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      td.fetchMemories.mockResolvedValue([memoryA])
+      td.clearMemories.mockResolvedValue(undefined)
+      setDetailState({ agent: { ...baseAgent, memory_enabled: true } })
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('用户喜欢围棋')
+      await user.click(screen.getByRole('button', { name: '清空记忆' }))
+      expect(confirmSpy).toHaveBeenCalledWith('确定清空该道人的全部记忆吗？此操作不可逆。')
+      expect(td.clearMemories).toHaveBeenCalledWith(AGENT_ID)
+      await waitFor(() => expect(screen.queryByText('用户喜欢围棋')).toBeNull())
+      confirmSpy.mockRestore()
     })
   })
 })

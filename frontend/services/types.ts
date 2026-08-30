@@ -199,6 +199,8 @@ export interface Agent {
   status: AgentStatus
   /** 主动性/表达欲 0-100(群聊发言欲) */
   proactivity: number
+  /** 是否启用本地记忆(检索/蒸馏);旧服务端未返回该字段时按未启用处理 */
+  memory_enabled?: boolean
   created_at: string
   updated_at?: string
 }
@@ -261,6 +263,45 @@ export interface AgentEditorDraft {
   status: AgentStatus
   pills: AgentPillDraftItem[]
 }
+
+// ========== 本地记忆 ==========
+
+/** 记忆类型(spec §10.1) */
+export type MemoryKind = 'user_fact' | 'user_preference' | 'relationship' | 'open_loop' | 'episode'
+
+/** 记忆状态 */
+export type MemoryStatus = 'active' | 'superseded' | 'archived'
+
+/** 道人本地记忆(agent_memories) */
+export interface AgentMemory {
+  uuid: string
+  kind: MemoryKind
+  content: string
+  keywords: string[]
+  importance: number
+  confidence: number
+  pinned: boolean
+  status: MemoryStatus
+  /** 来源会话 UUID(为空串表示无来源,如手工录入) */
+  source_session_id: string
+  /** 来源消息 UUID */
+  source_message_id: string
+  created_at: string
+  updated_at: string
+}
+
+/** 创建记忆请求 */
+export interface CreateMemoryRequest {
+  kind: MemoryKind
+  content: string
+  keywords?: string[]
+  importance?: number
+  confidence?: number
+  pinned?: boolean
+}
+
+/** 更新记忆请求(PATCH 语义:仅传变更字段) */
+export type UpdateMemoryRequest = Partial<CreateMemoryRequest>
 
 // ========== 对话 ==========
 
@@ -359,6 +400,8 @@ export interface CreateAgentRequest {
 /** 更新道人请求 */
 export interface UpdateAgentRequest extends Partial<CreateAgentRequest> {
   status?: AgentStatus
+  /** 是否启用本地记忆(检索/蒸馏) */
+  memory_enabled?: boolean
 }
 
 /** 完整服丹编排单项（完整替换用） */
