@@ -5,6 +5,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/synthesis"
+	"github.com/alchemy-furnace/server/model"
 	"github.com/google/uuid"
 )
 
@@ -32,11 +33,23 @@ type TrialChatResponse struct {
 	Usage   map[string]interface{} `json:"usage"`   // token 用量
 }
 
+// TrialSynthesisResult 试丹-合成预览结果
+// 完整系统提示词由 Go 行为引擎确定性渲染(不再来自 Python combine),涌现层信息透传
+type TrialSynthesisResult struct {
+	SystemPrompt   string                   // 渲染后的完整系统提示词
+	EmergenceRules model.JSONList           // 涌现规则
+	InnerTensions  []synthesis.InnerTension // 内在冲突
+	Fingerprint    string                   // 来源指纹(合成响应透传)
+	Model          string                   // 合成模型
+	Degraded       bool                     // 是否降级(涌现层不可用)
+	DegradedReason string                   // 降级原因错误码
+}
+
 // Trial 试丹业务逻辑接口
 // 提供无需创建道人即可临时组合「基础性格 + 金丹」快速预览效果的接口
 type Trial interface {
-	// Synthesize 试丹-合成预览:不写入缓存,直接返回合成结果
-	Synthesize(ctx context.Context, personality string, pills []TrialPillInput, modelName string) (*synthesis.CombineResponse, errors.Error)
+	// Synthesize 试丹-合成预览:不写入缓存,返回行为引擎渲染结果
+	Synthesize(ctx context.Context, personality string, pills []TrialPillInput, modelName string) (*TrialSynthesisResult, errors.Error)
 
 	// Chat 试丹-临时对话:先合成系统提示词,再调用语言引擎非流式对话
 	Chat(ctx context.Context, req *TrialChatRequest) (*TrialChatResponse, errors.Error)

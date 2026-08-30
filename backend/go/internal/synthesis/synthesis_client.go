@@ -53,11 +53,10 @@ type InnerTension struct {
 
 // CombineResponse 合成响应
 type CombineResponse struct {
-	SystemPrompt   string         `json:"system_prompt"`
-	EmergenceRules model.JSONList `json:"emergence_rules"`
-	InnerTensions  []InnerTension `json:"inner_tensions"`
-	Fingerprint    string         `json:"fingerprint"`
-	Model          string         `json:"model"`
+	EmergenceRules model.JSONList   `json:"emergence_rules"`
+	InnerTensions  []InnerTension   `json:"inner_tensions"`
+	Fingerprint    string           `json:"fingerprint"`
+	Model          string           `json:"model"`
 	// Degraded 为 true 表示涌现层不可用(LLM 失败/无凭证),
 	// 调用方不应落库,避免无涌现层结果污染语言模式缓存
 	Degraded bool `json:"degraded"`

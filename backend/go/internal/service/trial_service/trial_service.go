@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/alchemy-furnace/server/internal/configuration"
+	"github.com/alchemy-furnace/server/internal/behavior"
 	"github.com/alchemy-furnace/server/internal/errors"
 	idao "github.com/alchemy-furnace/server/internal/interface/dao"
 	iservice "github.com/alchemy-furnace/server/internal/interface/service"
@@ -30,7 +31,12 @@ type Trial struct {
 	pill       idao.Pill
 	synthesis  synthesis.Client // 接口,便于单测 mock
 	credential credential.Resolver
-	httpClient *http.Client
+	httpClient httpDoer // 接口化: 生产为 *http.Client,测试可注入假实现
+}
+
+// httpDoer 可注入的 HTTP 客户端(http.Client 天然满足)
+type httpDoer interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // New 构造试丹业务实例
@@ -95,20 +101,46 @@ func (s *Trial) loadTrialPills(ctx context.Context, inputs []iservice.TrialPillI
 	return result, nil
 }
 
-// Synthesize 试丹-合成预览:不写入缓存,直接返回合成结果
+// Synthesize 试丹-合成预览:不写入缓存,返回行为引擎渲染结果
 // 指定了 modelName 时按该模型解析凭证,否则使用合成专用模型凭证
-func (s *Trial) Synthesize(ctx context.Context, personality string, pills []iservice.TrialPillInput, modelName string) (*synthesis.CombineResponse, errors.Error) {
+func (s *Trial) Synthesize(ctx context.Context, personality string, pills []iservice.TrialPillInput, modelName string) (*iservice.TrialSynthesisResult, errors.Error) {
 	loaded, err := s.loadTrialPills(ctx, pills)
 	if err != nil {
 		return nil, err
 	}
+	return s.renderTrialPrompt(ctx, personality, loaded, s.resolveTrialCredentials(ctx, modelName))
+}
 
-	creds := s.resolveTrialCredentials(ctx, modelName)
+// renderTrialPrompt 试丹公共渲染: 确定性编译 + 涌现合并 + 渲染完整提示词。
+// 合成失败/降级不返回错误: 返回无损确定性渲染(degraded=true),聊天不阻断(spec §12)
+func (s *Trial) renderTrialPrompt(ctx context.Context, personality string, loaded []synthesis.PillInput, creds *credential.ModelCredentials) (*iservice.TrialSynthesisResult, errors.Error) {
+	profile := behavior.CompileProfile(personality, loaded)
+
 	combined, e := s.synthesis.Combine(ctx, personality, loaded, creds)
 	if e != nil {
-		return nil, errors.New(errors.ErrorTypeServerInternalError, "service.trial.synthesize", engine.MapEngineError(e))
+		profile.WithEmergence(nil, nil, true, "combine_error")
+		return &iservice.TrialSynthesisResult{
+			SystemPrompt:   behavior.RenderSystemPrompt(profile, ""),
+			EmergenceRules: model.JSONList{},
+			Degraded:       true,
+			DegradedReason: "combine_error",
+		}, nil
 	}
-	return combined, nil
+	profile.WithEmergence(combined.EmergenceRules, combined.InnerTensions, combined.Degraded, combined.DegradedReason)
+
+	emergenceRules := combined.EmergenceRules
+	if emergenceRules == nil {
+		emergenceRules = model.JSONList{}
+	}
+	return &iservice.TrialSynthesisResult{
+		SystemPrompt:   behavior.RenderSystemPrompt(profile, ""),
+		EmergenceRules: emergenceRules,
+		InnerTensions:  combined.InnerTensions,
+		Fingerprint:    combined.Fingerprint,
+		Model:          combined.Model,
+		Degraded:       combined.Degraded,
+		DegradedReason: combined.DegradedReason,
+	}, nil
 }
 
 // Chat 试丹-临时对话:先合成系统提示词,再调用语言引擎非流式对话
@@ -118,15 +150,15 @@ func (s *Trial) Chat(ctx context.Context, req *iservice.TrialChatRequest) (*iser
 		return nil, err
 	}
 
-	// 合成系统提示词(凭证解析失败不阻塞,回退环境变量)
-	combined, e := s.synthesis.Combine(ctx, req.Personality, loaded, s.resolveTrialCredentials(ctx, ""))
+	// 合成系统提示词(失败/降级时返回无损确定性渲染,不阻塞试丹对话)
+	result, e := s.renderTrialPrompt(ctx, req.Personality, loaded, s.resolveTrialCredentials(ctx, ""))
 	if e != nil {
-		return nil, errors.New(errors.ErrorTypeServerInternalError, "service.trial.chat_synthesize", engine.MapEngineError(e))
+		return nil, e
 	}
 
-	// 组装消息:合成后的 system 提示词 + 用户提供的消息
+	// 组装消息:行为引擎渲染的 system 提示词 + 用户提供的消息
 	messages := make([]map[string]string, 0, len(req.Messages)+1)
-	messages = append(messages, map[string]string{"role": "system", "content": combined.SystemPrompt})
+	messages = append(messages, map[string]string{"role": "system", "content": result.SystemPrompt})
 	messages = append(messages, req.Messages...)
 
 	// 对话模型凭证:指定 model 时按名解析,否则用默认/合成凭证
