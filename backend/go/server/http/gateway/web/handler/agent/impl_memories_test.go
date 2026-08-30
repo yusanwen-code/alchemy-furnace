@@ -17,6 +17,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
+	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/middleware"
 	"github.com/alchemy-furnace/server/server/http/router"
@@ -132,8 +133,8 @@ func (s *stubMemory) ClearMemories(_ context.Context, _ uint) (int64, errors.Err
 	return n, nil
 }
 
-func (s *stubMemory) Retrieve(_ context.Context, _ uint, _ string) ([]service.MemorySnippet, errors.Error) {
-	return []service.MemorySnippet{{Kind: "user_fact", Content: "用户喜欢围棋"}}, nil
+func (s *stubMemory) Retrieve(_ context.Context, _ uint, _ string) ([]turnpolicy.MemorySnippet, errors.Error) {
+	return []turnpolicy.MemorySnippet{{Kind: "user_fact", Content: "用户喜欢围棋"}}, nil
 }
 
 func (s *stubMemory) EnqueueDistillation(_ context.Context, _ service.DistillationSpec) bool { return true }
