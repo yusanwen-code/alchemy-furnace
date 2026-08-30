@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, Flame, Menu, X } from 'lucide-react'
-import { navItems } from '@/components/layout/nav-config'
+import { navItems, isNavItemActive } from '@/components/layout/nav-config'
 import { NavDropdown } from '@/components/layout/nav-dropdown'
 import { cn } from '@/lib/utils'
 
@@ -34,9 +34,6 @@ export function Navbar() {
     return m ? (m[2] ? `/${p.slice(m[0].length)}` : '/') : p
   }
   const localPath = stripLocale(pathname)
-
-  const isActive = (path: string) =>
-    path === '/' ? localPath === '/' : localPath.startsWith(path)
 
   /* 滚动加深 */
   useEffect(() => {
@@ -90,7 +87,7 @@ export function Navbar() {
         {/* 桌面端导航（居左，无品牌区） */}
         <nav aria-label={t('ariaLabel')} className="hidden items-center gap-1 lg:flex">
           {navItems.map((item) => {
-            const active = isActive(item.path)
+            const active = isNavItemActive(item, localPath)
             const hasChildren = !!item.children?.length
             const expanded = open === item.labelKey
             return (
@@ -196,7 +193,7 @@ export function Navbar() {
         >
           <div className="space-y-1 px-4 py-3">
             {navItems.map((item) => {
-              const active = isActive(item.path)
+              const active = isNavItemActive(item, localPath)
               const Icon = item.icon
               return (
                 <div key={item.path}>

@@ -24,13 +24,9 @@
             "title": "All pills",
             "description": "Browse every pill forged so far — a thousand language modes"
           },
-          "new": {
-            "title": "Refine a new pill",
-            "description": "Strike the flint, forge a fresh language-mode pill"
-          },
-          "recipes": {
-            "title": "Recipe canon",
-            "description": "Consult the ancient recipes, learn the craft"
+          "fusion": {
+            "title": "Fuse pills",
+            "description": "Cast pills into the fire, and something new emerges"
           }
         }
       },
@@ -40,14 +36,6 @@
           "all": {
             "title": "All daoists",
             "description": "The roster — every agent in the hall"
-          },
-          "invite": {
-            "title": "Recruit a daoist",
-            "description": "Welcome a new agent into the hall and grant a pill"
-          },
-          "bind": {
-            "title": "Bestow a pill",
-            "description": "Bind a pill to a daoist, transform their nature"
           }
         }
       },
@@ -63,9 +51,6 @@
             "description": "Review past sessions, pick up an unfinished thread"
           }
         }
-      },
-      "fusion": {
-        "label": "Fusion"
       },
       "settings": {
         "label": "Settings"

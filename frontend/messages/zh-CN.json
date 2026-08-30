@@ -24,13 +24,9 @@
             "title": "全部金丹",
             "description": "浏览阁中已成之丹，观语言模式万千"
           },
-          "new": {
-            "title": "开炉炼制",
-            "description": "以火为引，炼一枚新的语言模式金丹"
-          },
-          "recipes": {
-            "title": "丹方典籍",
-            "description": "查阅历代丹方，悟炼制之理"
+          "fusion": {
+            "title": "融合金丹",
+            "description": "投丹入炉，合而新之"
           }
         }
       },
@@ -40,14 +36,6 @@
           "all": {
             "title": "全部道人",
             "description": "府中道人名录，各司其职"
-          },
-          "invite": {
-            "title": "延请道人",
-            "description": "新请一位道人入府，授其金丹"
-          },
-          "bind": {
-            "title": "服用金丹",
-            "description": "为道人绑定金丹，化性转型"
           }
         }
       },
@@ -63,9 +51,6 @@
             "description": "翻检历史会话，续当日未完之缘"
           }
         }
-      },
-      "fusion": {
-        "label": "融合"
       },
       "settings": {
         "label": "设置"

@@ -4,11 +4,7 @@ import {
   Users,
   MessageSquare,
   Settings,
-  Flame,
-  ScrollText,
-  UserPlus,
   History,
-  Sparkles,
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react'
@@ -35,7 +31,18 @@ export interface NavItem {
   labelKey: string
   path: string
   icon: LucideIcon
+  /** 额外视作本项激活的路径(如 /pills 下的子页面 /fusion) */
+  activePaths?: string[]
   children?: NavChild[]
+}
+
+/**
+ * 判断导航项是否激活：主路径或 activePaths 任一命中即激活。
+ * `/` 精确匹配，其余按前缀匹配（pathname 须为去 locale 后的本地路径）。
+ */
+export function isNavItemActive(item: NavItem, pathname: string): boolean {
+  const paths = [item.path, ...(item.activePaths ?? [])]
+  return paths.some(path => path === '/' ? pathname === '/' : pathname.startsWith(path))
 }
 
 /** 顶部导航配置（Dify 式 mega-dropdown，参考 reference/导航栏.png） */
@@ -45,6 +52,7 @@ export const navItems: NavItem[] = [
     labelKey: 'items.pills.label',
     path: '/pills',
     icon: CircleDot,
+    activePaths: ['/fusion'],
     children: [
       {
         titleKey: 'items.pills.children.all.title',
@@ -53,16 +61,10 @@ export const navItems: NavItem[] = [
         icon: CircleDot,
       },
       {
-        titleKey: 'items.pills.children.new.title',
-        descKey: 'items.pills.children.new.description',
-        path: '/pills?action=new',
-        icon: Flame,
-      },
-      {
-        titleKey: 'items.pills.children.recipes.title',
-        descKey: 'items.pills.children.recipes.description',
-        path: '/pills?view=recipes',
-        icon: ScrollText,
+        titleKey: 'items.pills.children.fusion.title',
+        descKey: 'items.pills.children.fusion.description',
+        path: '/fusion',
+        icon: FlaskConical,
       },
     ],
   },
@@ -76,18 +78,6 @@ export const navItems: NavItem[] = [
         descKey: 'items.agents.children.all.description',
         path: '/agents',
         icon: Users,
-      },
-      {
-        titleKey: 'items.agents.children.invite.title',
-        descKey: 'items.agents.children.invite.description',
-        path: '/agents?action=new',
-        icon: UserPlus,
-      },
-      {
-        titleKey: 'items.agents.children.bind.title',
-        descKey: 'items.agents.children.bind.description',
-        path: '/agents?view=bind',
-        icon: Sparkles,
       },
     ],
   },
@@ -110,6 +100,5 @@ export const navItems: NavItem[] = [
       },
     ],
   },
-  { labelKey: 'items.fusion.label', path: '/fusion', icon: FlaskConical },
   { labelKey: 'items.settings.label', path: '/settings', icon: Settings },
 ]
