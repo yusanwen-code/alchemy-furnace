@@ -30,6 +30,9 @@ func newController(backend Backend) *Controller {
 	return &Controller{backend: backend}
 }
 
+// NewController 导出构造: 供 cmd/desktop 注入测试 backend 与装配平台实现
+func NewController(backend Backend) *Controller { return newController(backend) }
+
 // Start 启动托盘(幂等)。锁内只改状态, 锁外调用 backend, 避免平台回调重入死锁。
 // nil 回调在传给 backend 前替换为空函数, backend 可安全调用。
 func (c *Controller) Start(cb Callbacks) error {

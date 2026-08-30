@@ -39,6 +39,16 @@ func TestControllerStartStopAreIdempotent(t *testing.T) {
 	require.Equal(t, 1, f.stops)
 }
 
+// 导出构造 NewController 与内部 newController 行为一致(生命周期层注入用)
+func TestNewControllerExportedConstructor(t *testing.T) {
+	f := &fakeBackend{}
+	c := NewController(f)
+	require.NoError(t, c.Start(Callbacks{}))
+	require.True(t, c.Ready())
+	require.NoError(t, c.Stop())
+	require.Equal(t, 1, f.starts)
+}
+
 // Start 失败: Ready()==false, 后续 Stop 不触碰 backend
 func TestControllerStartFailureKeepsNotReady(t *testing.T) {
 	f := &fakeBackend{err: os.ErrInvalid}
