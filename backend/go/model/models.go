@@ -46,15 +46,16 @@ func (ElixirPill) TableName() string {
 // DaoAgent 道人模型，对应 dao_agents 表
 // 道人是 AI 对话代理，拥有基础性格，可服用多个金丹获得语言模式/人格特质
 type DaoAgent struct {
-	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:道人唯一标识"`
-	UUID        uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
-	Name        string    `json:"name" gorm:"size:100;not null;comment:道人名称"`
-	Avatar      string    `json:"avatar" gorm:"type:text;comment:头像 URL 或 data:image 数据 URI(≤1.5M 字符)"`
-	Personality string    `json:"personality" gorm:"type:text;comment:基础性格描述/系统提示词"`
-	ModelName   string    `json:"model_name" gorm:"size:50;default:gpt-4o;comment:使用的LLM模型名称"`
-	Status      string    `json:"status" gorm:"size:20;default:active;comment:状态: active(活跃)/inactive(停用)"`
-	Proactivity int       `json:"proactivity" gorm:"default:50;comment:主动性/表达欲(0-100,群聊发言欲)"`
-	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	ID            uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:道人唯一标识"`
+	UUID          uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
+	Name          string    `json:"name" gorm:"size:100;not null;comment:道人名称"`
+	Avatar        string    `json:"avatar" gorm:"type:text;comment:头像 URL 或 data:image 数据 URI(≤1.5M 字符)"`
+	Personality   string    `json:"personality" gorm:"type:text;comment:基础性格描述/系统提示词"`
+	ModelName     string    `json:"model_name" gorm:"size:50;default:gpt-4o;comment:使用的LLM模型名称"`
+	Status        string    `json:"status" gorm:"size:20;default:active;comment:状态: active(活跃)/inactive(停用)"`
+	Proactivity   int       `json:"proactivity" gorm:"default:50;comment:主动性/表达欲(0-100,群聊发言欲)"`
+	MemoryEnabled bool      `json:"memory_enabled" gorm:"not null;default:true;comment:是否启用本地记忆(检索/蒸馏)"`
+	CreatedAt     time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
 
 	// 关联关系：一个道人服用多个金丹
 	AgentPills []AgentPill `json:"agent_pills,omitempty" gorm:"foreignKey:AgentID;references:ID;constraint:OnDelete:CASCADE;"`
@@ -98,14 +99,14 @@ func (AgentPill) TableName() string {
 // 缓存每个道人合成后的系统提示词与涌现规则，避免每次对话重复合成
 // 当道人性格、服用金丹或金丹内容变化时失效/重建
 type LanguagePattern struct {
-	ID                uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:缓存唯一标识"`
-	AgentID           uint      `json:"agent_id" gorm:"not null;uniqueIndex;comment:关联道人ID"`
-	SystemPrompt      string    `json:"system_prompt" gorm:"type:text;not null;comment:合成后的系统提示词"`
-	EmergenceRules    JSONList  `json:"emergence_rules" gorm:"serializer:json;comment:涌现规则列表"`
-	InnerTensions     JSONList  `json:"inner_tensions" gorm:"serializer:json;comment:检测到的内在冲突"`
+	ID             uint     `json:"id" gorm:"primaryKey;autoIncrement;comment:缓存唯一标识"`
+	AgentID        uint     `json:"agent_id" gorm:"not null;uniqueIndex;comment:关联道人ID"`
+	SystemPrompt   string   `json:"system_prompt" gorm:"type:text;not null;comment:合成后的系统提示词"`
+	EmergenceRules JSONList `json:"emergence_rules" gorm:"serializer:json;comment:涌现规则列表"`
+	InnerTensions  JSONList `json:"inner_tensions" gorm:"serializer:json;comment:检测到的内在冲突"`
 	// BehaviorProfile 完整结构化行为档案(P1 起每次合成必写;老库为 NULL 视为失效缓存自动重建。
 	// 刻意偏离 spec §6.3 的 NOT NULL:SQLite ADD COLUMN NOT NULL(无默认值)在非空表上会失败)
-	BehaviorProfile   JSONMap   `json:"behavior_profile,omitempty" gorm:"serializer:json;comment:完整结构化行为档案"`
+	BehaviorProfile JSONMap `json:"behavior_profile,omitempty" gorm:"serializer:json;comment:完整结构化行为档案"`
 	// ProfileVersion 行为档案版本(behavior.ProfileVersion);不一致视为失效重建
 	ProfileVersion    int       `json:"profile_version" gorm:"not null;default:1;comment:行为档案版本"`
 	SourceFingerprint string    `json:"source_fingerprint" gorm:"size:80;not null;comment:来源指纹(sha256: 前缀 + 64 位 hex = 71 字符)"`
@@ -206,7 +207,7 @@ func (SessionMember) TableName() string {
 // 停用供应商后其下全部模型在凭证解析链中不可用
 type LLMProvider struct {
 	ID              uint      `json:"id" gorm:"primaryKey;autoIncrement;comment:供应商唯一标识"`
-	UUID              uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
+	UUID            uuid.UUID `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
 	Name            string    `json:"name" gorm:"size:50;not null;uniqueIndex;comment:供应商标识（如 openai/deepseek/dashscope）"`
 	DisplayName     string    `json:"display_name" gorm:"size:100;not null;comment:显示名（如 OpenAI/通义千问）"`
 	Protocol        string    `json:"protocol" gorm:"size:50;not null;default:openai-compatible;comment:协议类型（预留扩展）"`
@@ -585,3 +586,41 @@ func (m *UserProfile) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// ---------- 本地记忆(Agent Memory) ----------
+
+// AgentMemory 道人本地记忆(spec §10.1)
+// 内容规则:Content ≤500 Unicode 字符;Keywords ≤12;Importance 1-5;Confidence 0-1;
+// ContentHash=SHA256(kind|normalized_content);同哈希 active 只更新 confidence/importance;
+// 冲突(同 kind + bigram ≥0.85)→ 新 active + 旧 superseded;pinned 永不自动置替;
+// 用户删除/清空 = 物理删除
+type AgentMemory struct {
+	ID              uint       `json:"id" gorm:"primaryKey;autoIncrement;comment:记忆唯一标识"`
+	UUID            uuid.UUID  `json:"-" gorm:"type:uuid;uniqueIndex;comment:对外标识"`
+	AgentID         uint       `json:"-" gorm:"index;not null;comment:所属道人"`
+	Kind            string     `json:"kind" gorm:"size:32;index;not null;comment:类型: user_fact/user_preference/relationship/open_loop/episode"`
+	Content         string     `json:"content" gorm:"type:text;not null;comment:记忆内容(≤500字)"`
+	Keywords        JSONList   `json:"keywords" gorm:"serializer:json;comment:关键词数组(≤12)"`
+	Importance      int        `json:"importance" gorm:"default:3;comment:重要性1-5"`
+	Confidence      float64    `json:"confidence" gorm:"default:0.8;comment:置信度0-1"`
+	Pinned          bool       `json:"pinned" gorm:"default:false;comment:置顶(永不自动置替)"`
+	Status          string     `json:"status" gorm:"size:16;index;not null;default:active;comment:active/superseded/archived"`
+	SourceSessionID string     `json:"source_session_id" gorm:"size:36;comment:来源会话UUID"`
+	SourceMessageID string     `json:"source_message_id" gorm:"size:36;comment:来源消息UUID"`
+	ContentHash     string     `json:"-" gorm:"char:64;index;not null;comment:内容哈希"`
+	LastAccessedAt  *time.Time `json:"last_accessed_at" gorm:"comment:最近检索时间"`
+	CreatedAt       time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt       time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName 指定表名
+func (AgentMemory) TableName() string {
+	return "agent_memories"
+}
+
+// BeforeCreate 默认对外 UUID
+func (m *AgentMemory) BeforeCreate(tx *gorm.DB) error {
+	if m.UUID == uuid.Nil {
+		m.UUID = uuid.New()
+	}
+	return nil
+}
