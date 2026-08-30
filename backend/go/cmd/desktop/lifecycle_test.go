@@ -7,6 +7,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/desktoptray"
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v2/pkg/options"
 )
 
 // fakeWindowRuntime 记录窄接口调用
@@ -16,6 +17,7 @@ type fakeWindowRuntime struct {
 	unminimises int
 	abouts      int
 	quits       int
+	saved       int // 窗口几何落盘次数
 }
 
 func (f *fakeWindowRuntime) Hide(context.Context)       { f.hides++ }
@@ -33,18 +35,21 @@ func (f *fakeTrayBackend) Start(desktoptray.Callbacks) error { return f.err }
 func (f *fakeTrayBackend) Stop() error                       { f.stops++; return nil }
 
 // fixture: trayErr=nil → 托盘就绪; 非 nil → Start 失败(降级路径)
+// saveState 注入 fake: 真实 saveWindowState 需要 Wails frontend ctx,测试环境无则 log.Fatalf
 func newLifecycleFixture(trayErr error) (*desktopLifecycle, *fakeWindowRuntime, *fakeTrayBackend) {
 	win := &fakeWindowRuntime{}
 	tb := &fakeTrayBackend{err: trayErr}
 	l := newDesktopLifecycle(win, desktoptray.NewController(tb))
+	l.saveState = func(context.Context) error { win.saved++; return nil }
 	return l, win, tb
 }
 
-// 托盘就绪: 关闭 → 隐藏窗口并返回 true(吞掉关闭)
+// 托盘就绪: 关闭 → 保存窗口状态 + 隐藏窗口, 返回 true(吞掉关闭)
 func TestLifecycleBeforeCloseHidesWhenTrayReady(t *testing.T) {
 	l, win, _ := newLifecycleFixture(nil)
 	require.NoError(t, l.Start(context.Background()))
 	require.True(t, l.BeforeClose(context.Background()))
+	require.Equal(t, 1, win.saved)
 	require.Equal(t, 1, win.hides)
 }
 
@@ -106,8 +111,42 @@ func TestLifecycleShutdownStopsTrayOnce(t *testing.T) {
 	_, _, tb := newLifecycleFixture(nil)
 	tray := desktoptray.NewController(tb)
 	l := newDesktopLifecycle(&fakeWindowRuntime{}, tray)
+	l.saveState = func(context.Context) error { return nil }
 	require.NoError(t, l.Start(context.Background()))
 	l.Shutdown()
 	l.Shutdown()
 	require.Equal(t, 1, tb.stops)
+}
+
+// 装配契约: HideWindowOnClose=false(否则绕过托盘失败降级), 生命周期字段全部接线
+func TestConfigureDesktopLifecycleFields(t *testing.T) {
+	l, _, _ := newLifecycleFixture(nil)
+	opts := &options.App{}
+	configureDesktopLifecycle(opts, l)
+	require.False(t, opts.HideWindowOnClose)
+	require.NotNil(t, opts.OnBeforeClose)
+	require.NotNil(t, opts.OnStartup)
+	require.NotNil(t, opts.OnShutdown)
+	require.NotNil(t, opts.SingleInstanceLock)
+	require.NotNil(t, opts.SingleInstanceLock.OnSecondInstanceLaunch)
+}
+
+// 单实例唤回: 第二实例通知触发 ShowMainWindow(Unminimise + Show)
+func TestConfigureSecondInstanceShowsMainWindow(t *testing.T) {
+	l, win, _ := newLifecycleFixture(nil)
+	opts := &options.App{}
+	configureDesktopLifecycle(opts, l)
+	require.NoError(t, l.Start(context.Background()))
+	opts.SingleInstanceLock.OnSecondInstanceLaunch(options.SecondInstanceData{})
+	require.Equal(t, 1, win.unminimises)
+	require.Equal(t, 1, win.shows)
+}
+
+// 唤回早于 startup(context 未注入): pendingShow 记录, Start 注入 ctx 后消费一次
+func TestLifecyclePendingShowConsumedOnStart(t *testing.T) {
+	l, win, _ := newLifecycleFixture(nil)
+	l.ShowMainWindow() // 未 Start: ctx 为 nil, 只记 pendingShow
+	require.Equal(t, 0, win.shows)
+	require.NoError(t, l.Start(context.Background()))
+	require.Equal(t, 1, win.shows)
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/configuration/loader"
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/desktopidentity"
+	"github.com/alchemy-furnace/server/internal/desktoptray"
 	"github.com/alchemy-furnace/server/internal/engineproc"
 	"github.com/alchemy-furnace/server/internal/logger"
 	"github.com/alchemy-furnace/server/internal/paths"
@@ -129,13 +130,14 @@ func main() {
 	}
 
 	app := NewApp()
-	err = wails.Run(&options.App{
+	lifecycle := newDesktopLifecycle(wailsWindowRuntime{}, desktoptray.New())
+	opts := &options.App{
 		Title:    desktopidentity.DisplayName,
 		Width:    width,
 		Height:   height,
 		MinWidth: 960, MinHeight: 640,
-		// T4: macOS 原生菜单栏(关于/退出 + 剪贴板快捷键)
-		Menu: buildAppMenu(),
+		// T4+T6: macOS 原生菜单栏(自定义"炼丹炉"子菜单,不用 AppMenu 以免生成 Quit/⌘Q 第二退出入口)
+		Menu: buildAppMenu(lifecycle),
 		// mac: 通顶内容,红绿灯 inset 悬浮(任务 T2)
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
@@ -160,11 +162,23 @@ func main() {
 		},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: desktopidentity.BundleID},
 		Bind:               []interface{}{app},
-		OnStartup:          app.startup,
-		OnShutdown: func(ctx context.Context) {
-			// T5c 关窗落盘窗口几何(必须在 srv.Shutdown 前,ctx 仍有效)
-			saveWindowState(ctx)
-			_ = srv.Shutdown(ctx)
+		// OnStartup/OnBeforeClose/OnShutdown/OnSecondInstanceLaunch 由 configureDesktopLifecycle 装配
+	}
+	// 生命周期字段装配: HideWindowOnClose=false(关闭→托盘,失败降级关闭即退出),
+	// OnBeforeClose/OnStartup 接 lifecycle, 单实例唤回 → ShowMainWindow
+	configureDesktopLifecycle(opts, lifecycle)
+	// 组合关停覆盖 configure 默认(仅停托盘): 保存窗口状态→停托盘→关 HTTP→停 Python→关 DB。
+	// 每步失败继续后续清理并记录; sync.Once 保证只执行一次(Wails 可能多次回调)
+	var shutdownOnce sync.Once
+	opts.OnShutdown = func(ctx context.Context) {
+		shutdownOnce.Do(func() {
+			if err := saveWindowState(ctx); err != nil {
+				log.Printf("[炼丹炉] 保存窗口状态失败: %v", err)
+			}
+			lifecycle.Shutdown()
+			if err := srv.Shutdown(ctx); err != nil && err != http.ErrServerClosed {
+				log.Printf("[炼丹炉] 关闭桌面服务: %v", err)
+			}
 			readyMu.Lock()
 			stop := stopEngine
 			readyMu.Unlock()
@@ -172,8 +186,9 @@ func main() {
 				stop()
 			}
 			dao.CloseDatabase()
-		},
-	})
+		})
+	}
+	err = wails.Run(opts)
 	if err != nil {
 		log.Fatalf("[炼丹炉] 窗口启动失败: %v", err)
 	}

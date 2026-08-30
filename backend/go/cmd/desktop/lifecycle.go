@@ -5,10 +5,12 @@ package desktop
 
 import (
 	"context"
+	"log"
 	"sync"
 	"sync/atomic"
 
 	"github.com/alchemy-furnace/server/internal/desktoptray"
+	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -43,17 +45,23 @@ type desktopLifecycle struct {
 	window windowRuntime
 	tray   *desktoptray.Controller
 
-	trayReady atomic.Bool
-	quitting  atomic.Bool
+	// saveState 窗口几何落盘(可注入: 测试用 fake, 真实实现=windowstate.saveWindowState,
+	// 它需要 Wails frontend ctx, 测试环境没有会 log.Fatalf)
+	saveState func(context.Context) error
+
+	trayReady   atomic.Bool
+	quitting    atomic.Bool
+	pendingShow atomic.Bool // 第二实例唤回早于 startup(context 未注入)时记录
 
 	shutdownOnce sync.Once
 }
 
 func newDesktopLifecycle(window windowRuntime, tray *desktoptray.Controller) *desktopLifecycle {
-	return &desktopLifecycle{window: window, tray: tray}
+	return &desktopLifecycle{window: window, tray: tray, saveState: saveWindowState}
 }
 
-// Start 注入 Wails context 并启动托盘(幂等); 托盘失败仅记录错误, 不弹阻塞对话框
+// Start 注入 Wails context 并启动托盘(幂等); 托盘失败仅记录错误, 不弹阻塞对话框。
+// startup 前到达的第二实例唤回在此消费一次(此时 ctx 已可用)。
 func (l *desktopLifecycle) Start(ctx context.Context) error {
 	l.mu.Lock()
 	l.ctx = ctx
@@ -63,17 +71,24 @@ func (l *desktopLifecycle) Start(ctx context.Context) error {
 		Quit: l.RequestQuit,
 	})
 	l.trayReady.Store(l.tray.Ready())
+	if l.pendingShow.Swap(false) {
+		l.ShowMainWindow()
+	}
 	return err
 }
 
 // BeforeClose 窗口关闭回调: true=吞掉关闭(隐藏到托盘), false=允许退出
-// 先查 quitting(真正退出中不拦截), 再查 trayReady(托盘失败时关闭即退出)
+// 先查 quitting(真正退出中不拦截), 再查 trayReady(托盘失败时关闭即退出);
+// 只有托盘可用时才保存窗口状态并隐藏。
 func (l *desktopLifecycle) BeforeClose(ctx context.Context) bool {
 	if l.quitting.Load() {
 		return false
 	}
 	if !l.trayReady.Load() {
 		return false
+	}
+	if err := l.saveState(ctx); err != nil {
+		log.Printf("[炼丹炉] 关闭时保存窗口状态失败: %v", err)
 	}
 	l.HideMainWindow()
 	return true
@@ -91,11 +106,13 @@ func (l *desktopLifecycle) HideMainWindow() {
 }
 
 // ShowMainWindow 恢复主窗口: 先取消最小化再显示
+// context 未注入(第二实例通知早于 startup)时记 pendingShow, Start 后消费一次
 func (l *desktopLifecycle) ShowMainWindow() {
 	l.mu.RLock()
 	ctx := l.ctx
 	l.mu.RUnlock()
 	if ctx == nil {
+		l.pendingShow.Store(true)
 		return
 	}
 	l.window.Unminimise(ctx)
@@ -132,4 +149,21 @@ func (l *desktopLifecycle) Shutdown() {
 	l.shutdownOnce.Do(func() {
 		_ = l.tray.Stop()
 	})
+}
+
+// configureDesktopLifecycle 装配 Wails 生命周期字段(可测试工厂)
+// HideWindowOnClose 必须为 false: true 会绕过托盘失败降级(关闭即退出)
+// OnShutdown 默认=lifecycle.Shutdown(幂等停托盘); main.go 需要组合关停时在其后覆盖
+func configureDesktopLifecycle(opts *options.App, lifecycle *desktopLifecycle) {
+	opts.HideWindowOnClose = false
+	opts.OnBeforeClose = lifecycle.BeforeClose
+	// Wails 回调签名无返回值, 用闭包适配(Start 失败记录错误, 不弹阻塞对话框)
+	opts.OnStartup = func(ctx context.Context) { _ = lifecycle.Start(ctx) }
+	opts.OnShutdown = func(context.Context) { lifecycle.Shutdown() }
+	if opts.SingleInstanceLock == nil {
+		opts.SingleInstanceLock = &options.SingleInstanceLock{}
+	}
+	opts.SingleInstanceLock.OnSecondInstanceLaunch = func(options.SecondInstanceData) {
+		lifecycle.ShowMainWindow()
+	}
 }

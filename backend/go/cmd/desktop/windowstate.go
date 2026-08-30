@@ -48,9 +48,10 @@ func loadWindowState() *windowState {
 	return &s
 }
 
-// saveWindowState 关窗时落盘当前几何(X/Y wails v2 应用不到下次启动,仅落盘以便未来用)
-func saveWindowState(ctx context.Context) {
+// saveWindowState 关窗/隐藏时落盘当前几何(X/Y wails v2 应用不到下次启动,仅落盘以便未来用)
+// 返回 error 供调用方记录: 组合关停要求每步失败继续后续清理
+func saveWindowState(ctx context.Context) error {
 	w, h := wailsruntime.WindowGetSize(ctx)
 	x, y := wailsruntime.WindowGetPosition(ctx)
-	_ = (&windowState{w, h, x, y}).save()
+	return (&windowState{w, h, x, y}).save()
 }
