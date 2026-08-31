@@ -895,7 +895,8 @@
     "stream": {
       "retry": "重试",
       "interrupted": "连接在回复完成前中断。可重试并开始一次新的尝试。",
-      "retryBoundary": "群聊中断后开始新的尝试；上方已完成的回复会继续保留。"
+      "retryBoundary": "群聊中断后开始新的尝试；上方已完成的回复会继续保留。",
+      "pending": "正在等待回应..."
     },
     "history": {
       "loadOlder": "加载更早消息",

@@ -642,7 +642,7 @@ export function ChatView({ sessionId }: { sessionId?: string }) {
               <div className="bg-card border border-gold/30 rounded-2xl rounded-tl-sm px-4 py-3 animate-pulse">
                 <div className="flex items-center gap-1.5 text-xs text-gold/70">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>道人思考中...</span>
+                  <span>{t('stream.pending')}</span>
                 </div>
               </div>
             </div>

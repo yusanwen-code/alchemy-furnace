@@ -896,7 +896,8 @@
     "stream": {
       "retry": "Retry",
       "interrupted": "The connection ended before this response completed. Retry to start a new attempt.",
-      "retryBoundary": "New attempt after an interrupted group turn; completed replies remain above."
+      "retryBoundary": "New attempt after an interrupted group turn; completed replies remain above.",
+      "pending": "Waiting for a response..."
     },
     "history": {
       "loadOlder": "Load earlier messages",
