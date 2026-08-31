@@ -1,14 +1,14 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-// 适配层只关心:把校验后的查询 UUID 透传给 PillDetailPage。
+// 适配层只关心:把校验后的查询 UUID 透传给 PillItemDetailPage。
 // 不得 mock @/lib/entity-detail-route —— 适配层的契约就是调用真实解析函数。
 const pageSpy = vi.fn()
 
 vi.mock('./pill-detail', () => ({
-  default: (props: { pillId?: string }) => {
+  default: (props: { itemId?: string }) => {
     pageSpy(props)
-    return <div data-testid="pill-detail-probe">{props.pillId ?? 'invalid'}</div>
+    return <div data-testid="pill-detail-probe">{props.itemId ?? 'invalid'}</div>
   },
 }))
 
@@ -24,7 +24,7 @@ afterEach(() => {
 })
 
 describe('PillDetailPageClient', () => {
-  it('passes a valid query UUID into PillDetailPage', () => {
+  it('passes a valid query UUID as the inventory item id', () => {
     searchParams = new URLSearchParams('id=11111111-1111-4111-8111-111111111111')
     return import('./pill-detail-page-client').then(({ PillDetailPageClient }) => {
       render(<PillDetailPageClient />)

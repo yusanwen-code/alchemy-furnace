@@ -1,23 +1,22 @@
 'use client'
 
 /**
- * 融合炉 - 预览弹窗
- * 复用 bind-agent-modal 弹窗模式: fixed overlay z-50 + dao-card max-w-2xl
- * name/description 可编辑（受控）→ 保存时透传给 page onSave/onEdit
- * - [换一炉] onReroll(带 exclude_operator_id)
- * - [编辑] onEdit(先保存再跳详情)
- * - [保存入库] onSave(保存并清空)
+ * 融合炉 - 预览弹窗（融合两阶段的第一阶段）
+ * 预览由 POST /fusion/previews 持久化（15 分钟 TTL），不消耗任何材料；
+ * 保存时才调用 confirm 原子消耗全部材料并产出新丹。
+ * - [换一炉] onReroll：再次生成 = 重新预览（带 exclude_operator_id）
+ * - [编辑] onEdit：仅编辑允许字段（名称/描述），保存后跳新丹详情；不绕回旧 createPill
+ * - [保存入库] onSave：只调用 confirm（幂等），不再前端 createPill + deletePill
  * - [关闭] onClose
  */
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { X, FlaskConical, AlertCircle, Loader2, RefreshCcw, Edit3, Save, ChevronDown } from 'lucide-react'
-import type { FuseResult, FuseOperator } from '@/services/fusionService'
-import type { Pill } from '@/services/types'
+import { X, FlaskConical, AlertCircle, Loader2, RefreshCcw, Edit3, Save, ChevronDown, Info } from 'lucide-react'
+import type { FusionPreview, PillItemListItem } from '@/services/types'
 
 interface FusionPreviewModalProps {
-  result: FuseResult
-  parents: Pill[]
+  result: FusionPreview
+  parents: PillItemListItem[]
   saving: boolean
   onReroll: () => void
   onSave: (edited: { name: string; description: string }) => Promise<void> | void
@@ -49,13 +48,14 @@ export function FusionPreviewModal({
     setBusy('edit')
     try { await onEdit({ name: name.trim() || result.name, description: description.trim() }) } finally { setBusy(null) }
   }
-  const handleReroll = () => {
-    if (busy) return
+  const handleReroll = async () => {
+    if (busy || saving) return
     setBusy('reroll')
-    try { onReroll() } finally { setBusy(null) }
+    // 再次生成 = 重新预览：等待新预览到达才解锁，防重复点击并发多次预览
+    try { await onReroll() } finally { setBusy(null) }
   }
 
-  const operator: FuseOperator = result.operator
+  const operator = result.operator
   const lineageNames = parents.map((p) => p.name).join(' × ')
 
   return (
@@ -86,6 +86,12 @@ export function FusionPreviewModal({
             <span>{t('degradedWarning')}</span>
           </div>
         )}
+
+        {/* 两阶段契约：预览不消耗材料，保存时才消耗 */}
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-sage/30 bg-sage/5 px-3 py-2 text-xs text-sage">
+          <Info className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{t('consumeHint')}</span>
+        </div>
 
         <div className="mb-4 rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{t('lineageLabel')}: </span>

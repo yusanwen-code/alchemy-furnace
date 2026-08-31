@@ -30,6 +30,16 @@ var allMigratableModels = []any{
 	&model.LLMModel{},
 	&model.UserProfile{},
 	&model.AgentMemory{},
+	// 金丹消耗品重构（2026-08-31）：丹方/库存/能力快照/幂等操作/迁移状态
+	&model.PillRecipe{},
+	&model.PillRecipeRevision{},
+	&model.PillItem{},
+	&model.AgentPillEffect{},
+	&model.PillOperation{},
+	&model.FusionPreview{},
+	&model.PillMigrationState{},
+	&model.PillLegacyMap{},
+	&model.PillStarterGrant{},
 }
 
 // nullableAlterations 新老 schema 漂移:GORM AutoMigrate 不会把已存在的 NOT NULL 列改为可空

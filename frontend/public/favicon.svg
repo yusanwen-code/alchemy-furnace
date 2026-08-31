@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <linearGradient id="flame" x1="0%" y1="100%" x2="0%" y2="0%">
-      <stop offset="0%" style="stop-color:#C23A30"/>
-      <stop offset="50%" style="stop-color:#D4A843"/>
-      <stop offset="100%" style="stop-color:#F5F0E6"/>
-    </linearGradient>
-  </defs>
-  <circle cx="50" cy="50" r="46" fill="#1A1A2E" stroke="#D4A843" stroke-width="2"/>
-  <path d="M50 20 Q60 40 55 50 Q65 45 50 75 Q35 45 45 50 Q40 40 50 20" fill="url(#flame)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="炼丹炉">
+  <rect width="64" height="64" fill="#fff"/>
+  <g fill="#000" stroke="#000" stroke-linejoin="round">
+    <circle cx="32" cy="7" r="3.6" stroke="none"/>
+    <path d="M20.5 6.5C26 12.5 19 14.5 13 17C4.5 20.5 4.5 27 13 31.5C23 37 43 37 53 31C61.5 26 59 19.5 51 16.5C44 14 39 12 43.5 7" fill="none" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M13 26.5C19 19.5 39 18.5 51 23.5C39 21.5 22 21.5 15.5 28" stroke="none"/>
+    <path d="M11.5 33C8.5 43 15 51.5 30.5 54C46 56.5 56 46 52.5 33" fill="none" stroke-width="3.6" stroke-linecap="butt"/>
+    <path d="M16 51.5C21.5 55.5 21 58.5 18 61H13C17 57.5 17.5 55 15 51Z" stroke="none"/>
+    <path d="M48 51.5C42.5 55.5 43 58.5 46 61H51C47 57.5 46.5 55 49 51Z" stroke="none"/>
+  </g>
 </svg>

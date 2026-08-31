@@ -13,10 +13,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/alchemy-furnace/server/internal/configuration"
 	"github.com/alchemy-furnace/server/internal/behavior"
+	"github.com/alchemy-furnace/server/internal/configuration"
 	"github.com/alchemy-furnace/server/internal/errors"
-	idao "github.com/alchemy-furnace/server/internal/interface/dao"
 	iservice "github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
 	"github.com/alchemy-furnace/server/internal/service/engine"
@@ -28,8 +27,8 @@ import (
 
 // Trial service.Trial 接口实现
 type Trial struct {
-	pill       idao.Pill
-	synthesis  synthesis.Client // 接口,便于单测 mock
+	inventory  iservice.PillInventory // 丹方版本读接口(试丹只读,不消耗不写效果)
+	synthesis  synthesis.Client       // 接口,便于单测 mock
 	credential credential.Resolver
 	httpClient httpDoer // 接口化: 生产为 *http.Client,测试可注入假实现
 }
@@ -39,66 +38,95 @@ type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// New 构造试丹业务实例
-func New(pill idao.Pill, synthesisClient synthesis.Client, credential credential.Resolver) *Trial {
+// New 构造试丹业务实例(任务 5 起依赖丹方库存读接口,不再引用旧 ElixirPill DAO)
+func New(inventory iservice.PillInventory, synthesisClient synthesis.Client, credential credential.Resolver) *Trial {
 	return &Trial{
-		pill:       pill,
+		inventory:  inventory,
 		synthesis:  synthesisClient,
 		credential: credential,
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
-// loadTrialPills 按 UUID 批量加载金丹并组装为合成输入
-// 排序键 (sort_order, uuid_str) 字典序,保证合成指纹稳定
+// loadTrialPills 按输入目标解析金丹并组装为合成输入
+// 三种目标互斥: 丹方版本(recipe_id 当前 / recipe_id+revision_id 指定)、旧金丹 LegacyMap、未保存草稿。
+// 试丹是模拟: 不消耗金丹、不写 AgentPillEffect;旧 pill_id 不读取可用库存。
+// 结果按 (sort_order, id) 字典序排序,与 Python 端指纹排序键对齐,保证合成指纹稳定。
 func (s *Trial) loadTrialPills(ctx context.Context, inputs []iservice.TrialPillInput) ([]synthesis.PillInput, errors.Error) {
 	if len(inputs) == 0 {
 		return []synthesis.PillInput{}, nil
 	}
 
-	// 排序键 (sort_order, uuid_str) 字典序,与 Python 端指纹算法对齐
-	sorted := make([]iservice.TrialPillInput, len(inputs))
-	copy(sorted, inputs)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		if sorted[i].SortOrder != sorted[j].SortOrder {
-			return sorted[i].SortOrder < sorted[j].SortOrder
-		}
-		return sorted[i].PillID.String() < sorted[j].PillID.String()
-	})
-
-	uids := make([]uuid.UUID, 0, len(sorted))
-	for _, in := range sorted {
-		uids = append(uids, in.PillID)
-	}
-
-	pills, err := s.pill.FindPillsByUUIDs(ctx, uids)
-	if err != nil {
-		return nil, err.Relation(errors.ErrorServerInternalError("service.trial.load_pills"))
-	}
-	pillMap := make(map[string]*model.ElixirPill, len(pills))
-	for _, p := range pills {
-		pillMap[p.UUID.String()] = p
-	}
-
-	result := make([]synthesis.PillInput, 0, len(sorted))
-	for _, in := range sorted {
-		pill, ok := pillMap[in.PillID.String()]
-		if !ok {
-			return nil, errors.New(errors.ErrorTypeRecordNotFound, "service.trial.pill_missing", "金丹(id=%s)不存在", in.PillID.String())
+	result := make([]synthesis.PillInput, 0, len(inputs))
+	for i, in := range inputs {
+		loaded, aerr := s.resolveTrialPill(ctx, i, in)
+		if aerr != nil {
+			return nil, aerr
 		}
 		weight := in.Weight
 		if weight <= 0 {
 			weight = 1.0
 		}
-		result = append(result, synthesis.PillInput{
-			ID:          pill.UUID.String(),
-			Name:        pill.Name,
-			Weight:      weight,
-			SortOrder:   in.SortOrder,
-			SkillSchema: pill.SkillSchema,
-		})
+		loaded.Weight = weight
+		loaded.SortOrder = in.SortOrder
+		result = append(result, loaded)
 	}
+
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].SortOrder != result[j].SortOrder {
+			return result[i].SortOrder < result[j].SortOrder
+		}
+		return result[i].ID < result[j].ID
+	})
 	return result, nil
+}
+
+// resolveTrialPill 解析单颗试丹输入(返回合成输入,Weight/SortOrder 由调用方回填):
+// 草稿内联 > 指定版本 > 丹方当前版本 > 旧金丹 LegacyMap;目标缺失/多重 → 400。
+func (s *Trial) resolveTrialPill(ctx context.Context, index int, in iservice.TrialPillInput) (synthesis.PillInput, errors.Error) {
+	// 版本必须依附丹方(先于目标唯一性检查,给出更精确的错误)
+	if in.RevisionID != uuid.Nil && in.RecipeID == uuid.Nil {
+		return synthesis.PillInput{}, errors.New(errors.ErrorTypeInvalidRequest, "service.trial.revision_requires_recipe",
+			"第%d颗金丹: 指定版本必须携带所属丹方 recipe_id", index+1)
+	}
+	targets := 0
+	for _, has := range []bool{in.PillID != uuid.Nil, in.RecipeID != uuid.Nil, in.Draft != nil} {
+		if has {
+			targets++
+		}
+	}
+	if targets != 1 {
+		return synthesis.PillInput{}, errors.New(errors.ErrorTypeInvalidRequest, "service.trial.invalid_target",
+			"第%d颗金丹必须且只能提供 pill_id、recipe_id(+revision_id) 或草稿之一", index+1)
+	}
+
+	if in.Draft != nil {
+		// 草稿无身份: ID 为空,指纹由内容(name+skill_schema)决定,不落库
+		return synthesis.PillInput{ID: "", Name: in.Draft.Name, SkillSchema: in.Draft.SkillSchema}, nil
+	}
+
+	var rev *model.PillRecipeRevision
+	var aerr errors.Error
+	switch {
+	case in.RevisionID != uuid.Nil:
+		rev, aerr = s.inventory.GetRecipeRevision(ctx, in.RecipeID, in.RevisionID)
+	case in.RecipeID != uuid.Nil:
+		_, rev, aerr = s.inventory.GetRecipe(ctx, in.RecipeID)
+	default:
+		recipeUUID, lerr := s.inventory.ResolveLegacy(ctx, "pill", in.PillID.String())
+		if lerr != nil {
+			return synthesis.PillInput{}, lerr
+		}
+		_, rev, aerr = s.inventory.GetRecipe(ctx, recipeUUID)
+	}
+	if aerr != nil {
+		return synthesis.PillInput{}, aerr
+	}
+	return synthesis.PillInput{
+		ID:          rev.UUID.String(),
+		Name:        rev.Name,
+		SkillSchema: rev.SkillSchema,
+	}, nil
 }
 
 // Synthesize 试丹-合成预览:不写入缓存,返回行为引擎渲染结果
@@ -218,8 +246,8 @@ func (s *Trial) Chat(ctx context.Context, req *iservice.TrialChatRequest) (*iser
 	// Python /chat/completions 以 BaseResponse 信封返回 {code,message,data:{content,...}},
 	// 需解包 data 后再取 Content/Model/Usage(与 /synthesis/combine 直返 CombineResponse 不同)
 	var envelope struct {
-		Code int                         `json:"code"`
-		Data iservice.TrialChatResponse  `json:"data"`
+		Code int                        `json:"code"`
+		Data iservice.TrialChatResponse `json:"data"`
 	}
 	if derr := json.NewDecoder(resp.Body).Decode(&envelope); derr != nil {
 		return nil, errors.ErrorServerInternalError("service.trial.chat_decode")

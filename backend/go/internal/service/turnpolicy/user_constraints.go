@@ -22,8 +22,15 @@ type UserTurnConstraints struct {
 	OneEach        bool
 }
 
-// 停止标记:明确结束意图(§8.2「烦」本身不等于停止)
-var stopMarkers = []string{"别说了", "不用说了", "不用再说", "够了", "到此为止", "别再说了", "不用回了", "不聊了"}
+// explicitStopCommands 只接受整句明确停止命令。任意位置的停止词
+// 会误伤「他对我说别说了」和「预算够了吗」等正常问题。
+var explicitStopCommands = map[string]bool{
+	"停": true, "够了": true, "别说了": true, "不用说了": true,
+	"不用再说了": true, "到此为止": true, "到此为止吧": true,
+	"别再说了": true, "不用回了": true, "不用回复了": true,
+	"不聊了": true, "好了别说了": true, "够了别说了": true,
+	"够了，别说了": true,
+}
 
 // 简短标记
 var conciseMarkers = []string{"直接说结论", "说重点", "简短", "别啰嗦", "少说", "简洁", "一句话说清", "简而言之"}
@@ -65,30 +72,10 @@ func ExtractUserTurnConstraints(userMessage string) UserTurnConstraints {
 		strings.Contains(lower, "别停") ||
 		strings.Contains(lower, "别断")
 
-	// 停止:命中的停止标记未被否定前缀修饰
+	// 停止:只识别整句明确命令，不能用子串匹配。
 	if !continueSignal {
-		for _, marker := range stopMarkers {
-			idx := strings.Index(lower, marker)
-			if idx < 0 {
-				continue
-			}
-			negated := false
-			for _, neg := range negationPrefixes {
-				start := idx - len(neg)
-				if start >= 0 && lower[start:idx] == neg {
-					negated = true
-					break
-				}
-			}
-			if !negated {
-				c.WantsStop = true
-				break
-			}
-		}
-		// 独立「停」字(前后非汉字)
-		if !c.WantsStop && isBareStop(lower) {
-			c.WantsStop = true
-		}
+		command := strings.Trim(strings.TrimSpace(lower), "，。,.!?！？；;：:")
+		c.WantsStop = explicitStopCommands[command]
 	}
 
 	// 简短
@@ -122,24 +109,4 @@ func ExtractUserTurnConstraints(userMessage string) UserTurnConstraints {
 		}
 	}
 	return c
-}
-
-// isBareStop 独立「停」字(前后无汉字);按 rune 遍历避免字节下标错位
-func isBareStop(lower string) bool {
-	rs := []rune(lower)
-	for i, r := range rs {
-		if r != '停' {
-			continue
-		}
-		beforeOK := i == 0 || !isHan(rs[i-1])
-		afterOK := i+1 >= len(rs) || !isHan(rs[i+1])
-		if beforeOK && afterOK {
-			return true
-		}
-	}
-	return false
-}
-
-func isHan(r rune) bool {
-	return (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF)
 }

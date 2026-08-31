@@ -1,0 +1,94 @@
+# 金丹库存迁移（消耗品重构）运维手册
+
+> 适用版本：金丹消耗品重构（pill-inventory-v1）。本文档描述升级自动迁移的行为、
+> 数据去向、备份位置与回滚步骤。迁移由桌面端 / 自部署 serve 启动链自动执行，
+> **无需人工干预**；本文档供排障与回滚时使用。
+
+## 一、升级时自动发生什么
+
+启动链顺序（`cmd/desktop/main.go` / `cmd/main` serve 模式相同）：
+
+1. `dao.MaybeAutoMigrate` — 建新表（幂等）
+2. `dao.MigratePillInventory` — 库存迁移（本手册主体）
+3. `dao.SeedBuiltinRecipes` — 内置丹方（按名幂等）
+4. `dao.GrantStarterPills` — 新用户每内置丹方赠送 1 枚可用金丹；迁移用户只记账不领取
+
+迁移只执行一次：`pill_migration_states` 表写完成标记（key=`pill-inventory-v1`），
+之后每次启动日志出现「金丹库存迁移已完成(pill-inventory-v1)，跳过」。
+
+### 数据去向（旧 → 新）
+
+| 旧表数据 | 去向 |
+|---|---|
+| `elixir_pills` 每条定义 | 1 个丹方（`pill_recipes`）+ 1 个不可变版本（`pill_recipe_revisions`）+ 1 条迁移操作记录 |
+| 未绑定的金丹 | 1 枚**可用**库存（`pill_items.state=available`） |
+| 每条绑定（`agent_pills`） | 1 枚**历史**库存（`consumed_by_agent`，已服用不再作库存展示）+ 1 条已吸收能力快照（`agent_pill_effects`） |
+| 旧表本身 | **保留原样**（供回滚），不再被任何读接口使用 |
+
+迁移摘要查询：`GET /api/v1/migration-summary`（只读，不触发迁移），返回
+`migrated / is_fresh_install / legacy_pills / legacy_binds / recipes /
+available_items / history_items / effects / backup_path / completed_at`。
+未迁移库返回 `migrated=false`。
+
+### 预检与拒绝
+
+- 旧表缺列 → 拒绝迁移（异常 schema）
+- 存在绑定但定义缺失（孤儿绑定）→ 拒绝
+- 同一道人绑定同一金丹多次（重复绑定）→ 拒绝
+- 拒绝时启动失败并报错，**不切换读取**；旧世界保持可用
+
+## 二、备份位置与校验
+
+升级前自动执行**一致性备份**（SQLite `VACUUM INTO`），失败则阻止迁移：
+
+- 路径：`<数据库同目录>/backups/pill-inventory-<时间戳>.db`
+  - 桌面端：`~/Library/Application Support/AlchemyFurnace/backups/`
+  - 自部署：`./data/backups/`
+- 备份内容：迁移事务前的完整快照（旧表全部数据 + 尚未回填的新表空表），
+  创建后随即 `integrity_check` 校验，日志打印「迁移前备份完成: <路径>」
+
+验收示例（本机实测日志）：
+```
+[炼丹炉] 金丹库存迁移前备份完成: .../backups/pill-inventory-20260831-194138.db
+[炼丹炉] 金丹库存迁移完成：旧定义=3 旧绑定=2 丹方=3 可用=1 历史=2 能力=2
+```
+
+## 三、错误恢复
+
+迁移在**单事务**内完成：预检 → 回填 → 数量断言 → 写完成标记，任一步失败整体回滚，
+并伴随数量断言（`assertMigrationCounts`）校验回填行数与旧数据一致，不一致即失败回滚。
+
+- 迁移失败 → 应用启动失败（日志含「金丹库存迁移失败」）；数据仍在旧世界，
+  修复后重试（重启即重试，幂等）。
+- 备份失败 → 启动失败，不会在无备份的情况下迁移。
+
+## 四、回滚步骤
+
+旧表（`elixir_pills` / `agent_pills` / `dao_agents`）在迁移后**保留**，因此：
+
+1. 停止应用（彻底退出，含托盘）。
+2. 用备份文件恢复：
+   ```bash
+   # 桌面端示例（替换为实际备份时间戳）
+   cp "~/Library/Application Support/AlchemyFurnace/backups/pill-inventory-<时间戳>.db" \
+      "~/Library/Application Support/AlchemyFurnace/alchemy.db"
+   ```
+3. 重新启动应用。恢复后的库无完成标记（备份是迁移前快照），会自动重新执行迁移；
+   若需停在旧世界，请使用**重构前版本**的安装包启动该库。
+
+### 回滚限制
+
+- 迁移不可逆地改变了语义：旧绑定服用记录 → 已吸收能力快照；已服用金丹**不会**回到可用库存。
+  因此**回滚到重构前版本后，服用编排以旧 `agent_pills` 为准**，迁移产出的新表数据
+  在新版本界面展示；新旧版本数据视图不同，属预期。
+- 已迁移的库再次「重新迁移」仅当库被删除重建或恢复备份（无完成标记）时才发生。
+- 请勿手动删除 `pill_migration_states` 标记行（除非明确知道后果）。
+
+## 五、验证清单（升级后）
+
+- [ ] 启动日志出现「迁移前备份完成」与「迁移完成：旧定义=…」两行
+- [ ] `GET /api/v1/migration-summary` 返回 `migrated=true`，计数与旧数据吻合
+- [ ] 桌面「丹方」页可见原金丹定义（名称、内容不变）
+- [ ] 桌面「金丹库存」页：未服用金丹显示为可用；已服用金丹**不再作为库存展示**
+- [ ] 道人「已吸收能力」保留（迁移自旧绑定），移除能力不返还库存
+- [ ] 重启后不再出现新的备份文件（幂等标记生效）

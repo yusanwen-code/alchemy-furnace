@@ -25,3 +25,8 @@ func ErrorConflictWithData(code string, data any, message string, values ...any)
 func ErrorServerInternalError(code string) Error {
 	return New(ErrorTypeServerInternalError, code, "服务器内部错误")
 }
+
+// ErrorGone 旧入口已下线(->410);code 用业务码(如 pill.legacy_api_removed)
+func ErrorGone(code string, message string) Error {
+	return New(ErrorTypeGone, code, message)
+}

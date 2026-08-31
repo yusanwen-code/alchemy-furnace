@@ -1,24 +1,29 @@
 'use client'
 
 /**
- * 融合炉页面 - 投丹入炉,合而新之
- * - 左 dao-card: 金丹池(搜索 + 卡片网格,点击 toggle 加入融合槽)
+ * 融合炉页面 - 投丹入炉,合而新之（融合两阶段：预览不消耗 → 确认原子消耗）
+ * - 左 dao-card: 库存池(分页加载 + 搜索 + 卡片网格,点击 toggle 加入融合槽)
  * - 右 dao-card: 融合槽(已选卡片可移除) + 炉火动画 + [开始融合]
  * - 融合中: 卡片飞入炉中 + 火焰爆燃(forceIntensity=1)
- * - 完成后: 弹出 FusionPreviewModal(算子徽标/血统/可编辑/换一炉/保存入库)
- * - 保存入库: 源金丹入炉消耗(删除, 内置金丹受保护), 新丹入库
+ * - 预览完成: 弹出 FusionPreviewModal(算子徽标/血统/可编辑/换一炉/保存入库)
+ * - 保存入库: 只调用 confirm（幂等），原子消耗全部材料并产出新丹；
+ *   不再前端 createPill + deletePill，也没有内置材料豁免
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { FlaskConical, X, Search, Loader2, AlertCircle, AlertTriangle, Check } from 'lucide-react'
-import { pillDetailHref } from '@/lib/entity-detail-route'
-import { listPills, createPill, deletePill } from '@/services/pillService'
-import { fusePills, withLineage, type FuseResult } from '@/services/fusionService'
+import { recipeDetailHref } from '@/lib/entity-detail-route'
+import { listPillItems, previewFusion, confirmFusion } from '@/services/pillInventoryService'
+import {
+  startPendingOperation,
+  clearPendingOperation,
+  recoverOperation,
+} from '@/lib/pending-operations'
 import { listProviders, listModels, updateModel } from '@/services/modelService'
 import type { Provider, LLMModel } from '@/services/modelService'
 import { getSystemConfig, type FusionModelInfo } from '@/services/systemService'
-import type { Pill } from '@/services/types'
+import type { FusionPreview, PillItemListItem, PillOperationResult } from '@/services/types'
 import { BaguaFurnace } from '@/components/alchemy/bagua-furnace'
 import type { FurnaceWindow } from '@/components/alchemy/bagua-furnace-fire'
 import { FusionPreviewModal } from '@/components/fusion/fusion-preview-modal'
@@ -29,6 +34,9 @@ const FURNACE_WINDOWS: FurnaceWindow[] = [
   { id: 'right',  x: 63.18, width: 7.81, top: 50.20, height: 9.08, phase: 0.90 },
 ]
 
+/** 材料池分页大小（库存可能超过百枚，支持加载更多，不一次取完） */
+const POOL_PAGE_SIZE = 48
+
 /** 选择器中:供应商 + 其下启用模型 */
 interface PickerProvider {
   provider: Provider
@@ -38,15 +46,19 @@ interface PickerProvider {
 export default function FusionPage() {
   const t = useTranslations('fusion')
   const router = useRouter()
-  const [pool, setPool] = useState<Pill[]>([])
+  const [pool, setPool] = useState<PillItemListItem[]>([])
+  const [poolTotal, setPoolTotal] = useState(0)
+  const [poolLoadingMore, setPoolLoadingMore] = useState(false)
   const [keyword, setKeyword] = useState('')
-  const [selected, setSelected] = useState<Pill[]>([])
+  const [selected, setSelected] = useState<PillItemListItem[]>([])
   const [fusing, setFusing] = useState(false)
-  const [result, setResult] = useState<FuseResult | null>(null)
+  const [result, setResult] = useState<FusionPreview | null>(null)
   const [errorModal, setErrorModal] = useState<string | null>(null)
   const [hasProvider, setHasProvider] = useState(true)
   const [saving, setSaving] = useState(false)
   const [fusionModel, setFusionModel] = useState<FusionModelInfo | null>(null)
+  const poolPageRef = useRef(1)
+  const poolInFlightRef = useRef(false)
 
   // 融合模型选择器弹窗
   const [showPicker, setShowPicker] = useState(false)
@@ -62,11 +74,27 @@ export default function FusionPage() {
     } catch {}
   }
 
+  /** 加载库存材料池（真实实例；append 追加下一页） */
+  const loadPool = useCallback(async (page: number, append: boolean) => {
+    if (poolInFlightRef.current) return
+    poolInFlightRef.current = true
+    if (append) setPoolLoadingMore(true)
+    try {
+      const data = await listPillItems({ page, size: POOL_PAGE_SIZE })
+      setPool((prev) => (append ? [...prev, ...data.items] : data.items))
+      setPoolTotal(data.total)
+      poolPageRef.current = page
+    } catch {
+      // 池加载失败静默：banner 已有配置警告，不阻塞已选材料的融合
+    } finally {
+      poolInFlightRef.current = false
+      setPoolLoadingMore(false)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
-    listPills({ page_size: 100 })
-      .then((d) => { if (!cancelled) setPool(d.list || []) })
-      .catch(() => {})
+    loadPool(1, false)
     listProviders({ page_size: 100 })
       .then((d) => { if (!cancelled) setHasProvider((d.list || []).length > 0) })
       .catch(() => {})
@@ -75,7 +103,7 @@ export default function FusionPage() {
       .then((c) => { if (!cancelled) setFusionModel(c.fusion_model_info) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [loadPool])
 
   /** 加载选择器中展示的所有启用供应商 + 启用模型 */
   const loadPickerModels = async () => {
@@ -128,17 +156,18 @@ export default function FusionPage() {
   )
   const canFuse = selected.length >= 2 && !fusing && hasProvider
 
-  const toggle = (pill: Pill) => {
+  const toggle = (pill: PillItemListItem) => {
     if (selectedIds.has(pill.id)) setSelected((s) => s.filter((p) => p.id !== pill.id))
     else setSelected((s) => [...s, pill])
   }
 
+  /** 开始融合 = 预览：校验材料 → 模型生成 → 持久化（不消耗任何材料） */
   const doFuse = async (excludeOperatorId?: string) => {
     if (selected.length < 2) return
     setFusing(true)
     setErrorModal(null)
     try {
-      const r = await fusePills(selected.map((p) => p.id), excludeOperatorId)
+      const r = await previewFusion(selected.map((p) => p.id), excludeOperatorId)
       setResult(r)
     } catch (e) {
       setErrorModal(e instanceof Error ? e.message : String(e))
@@ -147,6 +176,11 @@ export default function FusionPage() {
     }
   }
 
+  /**
+   * 保存入库 = 原子确认：confirm 一次性扣全部材料并产出新金丹。
+   * 幂等键 per 用户动作（同 preview 重复点击复用同 key）；断线先 recover，
+   * 404 才按失败处理（仍可同 key 重试）；成功后清 key 并刷新材料池。
+   */
   const handleSave = async (
     edited: { name: string; description: string },
     goEdit: boolean,
@@ -154,37 +188,29 @@ export default function FusionPage() {
     if (!result || saving) return
     setSaving(true)
     setErrorModal(null)
-    try {
-      const schema = withLineage(result.skill_schema, selected, result.operator)
-      const created = await createPill({
-        name: edited.name,
-        description: edited.description,
-        skill_schema: schema,
-        tags: ['融合'],
-        author: '融合炉',
-        version: '1.0.0',
-      })
-
-      // 消耗源金丹: 入炉化新丹, 原丹灰飞烟灭(内置金丹受保护不消耗)
-      const consumable = selected.filter(p => !p.is_builtin)
-      if (consumable.length > 0) {
-        const results = await Promise.allSettled(consumable.map(p => deletePill(p.id)))
-        const failed = results.filter(r => r.status === 'rejected')
-        if (failed.length > 0) {
-          console.warn(`[fusion] ${failed.length}/${consumable.length} 枚源金丹消耗失败`)
-        }
-        // 刷新金丹池(源丹已消耗, 新丹已入库)
-        listPills({ page_size: 100 }).then(d => setPool(d.list || [])).catch(() => {})
-      }
-
-      if (goEdit) {
-        router.push(pillDetailHref(created.id))
+    const key = startPendingOperation('confirm_fusion', `${result.preview_id}→${edited.name}`)
+    const finish = (op: PillOperationResult) => {
+      clearPendingOperation(key)
+      if (goEdit && op.recipe_id) {
+        router.push(recipeDetailHref(op.recipe_id))
       } else {
         setResult(null)
         setSelected([])
+        // 刷新材料池：材料已消耗（consumed_by_fusion）、新丹已入库
+        void loadPool(1, false)
       }
-    } catch (e) {
-      setErrorModal(e instanceof Error ? e.message : String(e))
+    }
+    try {
+      finish(await confirmFusion(key, result.preview_id, edited.name, edited.description))
+    } catch (err) {
+      try {
+        const recovered = await recoverOperation(key)
+        if (recovered) {
+          finish(recovered)
+          return
+        }
+      } catch {}
+      setErrorModal(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -263,7 +289,7 @@ export default function FusionPage() {
               {t('poolTitle')}
             </h2>
             <span className="text-xs text-sage">
-              {filteredPool.length} / {pool.length}
+              {filteredPool.length} / {poolTotal}
             </span>
           </div>
 
@@ -305,15 +331,28 @@ export default function FusionPage() {
                       <p className="w-full truncate text-xs font-medium text-foreground">
                         {p.name}
                       </p>
-                      {p.is_builtin && (
-                        <span className="text-[9px] text-sage">builtin</span>
-                      )}
                     </button>
                   )
                 })}
               </div>
             )}
           </div>
+          {/* 分页加载更多：库存可能超过单页，追加下一页 */}
+          {pool.length < poolTotal && (
+            <button
+              type="button"
+              onClick={() => loadPool(poolPageRef.current + 1, true)}
+              disabled={poolLoadingMore}
+              className="dao-btn-ghost mt-3 w-full text-xs"
+            >
+              {poolLoadingMore ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              {t('loadMore')}
+            </button>
+          )}
         </div>
 
         {/* 右: 融合槽 + 炉火动画 + 开始按钮 */}

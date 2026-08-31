@@ -2,9 +2,10 @@
 
 /**
  * 道人详情页面 - 只读/编辑双态
- * 只读: 完整资料、模型失效警告、语言模式缓存状态、服丹编排(顺序+剂量)
- * 编辑: useAgentEditorFlow 草稿;编辑过程零 API,保存=基础资料→完整编排→GET 回读(flow 保证);
- *       失败保留草稿且 ActionFeedback 可重试;「恢复服务端版本」回到基线但保持编辑态
+ * 只读: 完整资料、模型失效警告、语言模式缓存状态、已吸收能力(顺序+剂量,来自
+ *       GET /agents/:id/effects;能力名点击跳转来源金丹实例详情)
+ * 编辑: useAgentEditorFlow 草稿;编辑过程零 API,保存=基础资料→移除缺失能力→全量编排→
+ *       GET 回读(flow 保证);409 冲突保留草稿并刷新合并;失败保留草稿且可重试
  * 删除: 有会话历史(409 delete_has_history)时引导停用;无历史才二次确认硬删除
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -27,7 +28,6 @@ import {
   PinOff,
   Plus,
   RefreshCw,
-  RotateCcw,
   Save,
   Scale,
   Sparkles,
@@ -37,19 +37,19 @@ import {
   X,
 } from 'lucide-react'
 import { useAgent } from '@/contexts/AgentContext'
-import { usePill } from '@/contexts/PillContext'
 import { avatarInputMaxLength } from '@/lib/avatar-validation'
 import { chatSessionHref } from '@/lib/chat-route'
-import { useAgentEditorFlow } from '@/hooks/use-agent-editor-flow'
+import { useAgentEditorFlow, type AgentEffectsData } from '@/hooks/use-agent-editor-flow'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
-import { pillDetailHref } from '@/lib/entity-detail-route'
+import { pillItemDetailHref } from '@/lib/entity-detail-route'
 import { AgentPillComposer } from '@/components/agent-pill-composer'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ApiError } from '@/services/api'
 import * as agentService from '@/services/agentService'
+import { listEffects } from '@/services/pillInventoryService'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
 import type { AgentDetail, AgentMemory, CreateMemoryRequest, MemoryKind } from '@/services/types'
@@ -620,11 +620,22 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   const router = useRouter()
 
   const { state: agentState, fetchAgent, dispatch } = useAgent()
-  const { state: pillState, fetchPills } = usePill()
   const launchFlow = useChatLaunchFlow()
 
   const agent = agentState.currentAgent
-  const flow = useAgentEditorFlow(agent)
+  // 已吸收能力列表（服用快照 + effects_revision 乐观锁）；null=未加载/失败
+  const [effectsData, setEffectsData] = useState<AgentEffectsData | null>(null)
+  const [effectsLoadFailed, setEffectsLoadFailed] = useState(false)
+  const loadEffects = useCallback(async () => {
+    if (!agentId) return
+    setEffectsLoadFailed(false)
+    try {
+      setEffectsData(await listEffects(agentId))
+    } catch {
+      setEffectsLoadFailed(true)
+    }
+  }, [agentId])
+  const flow = useAgentEditorFlow(agent, effectsData, setEffectsData)
   useUnsavedChanges(flow.dirty, t('unsavedConfirm'))
 
   // null = 尚未加载成功(不做失效判定);数组 = 已加载(可能为空)
@@ -638,7 +649,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   useEffect(() => {
     if (agentId) {
       fetchAgent(agentId)
-      fetchPills()
+      loadEffects()
     }
     let cancelled = false
     modelService
@@ -653,7 +664,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
     return () => {
       cancelled = true
     }
-  }, [agentId, fetchAgent, fetchPills])
+  }, [agentId, fetchAgent, loadEffects])
 
   /** 模型失效判定:选项已成功加载且当前模型不在启用列表中 */
   const isModelInvalid = (modelName: string) =>
@@ -788,7 +799,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
 
   // ========== 只读态 ==========
   if (flow.mode === 'readonly') {
-    const agentPills = [...(agent.agent_pills ?? [])].sort((a, b) => a.sort_order - b.sort_order)
+    const effects = effectsData?.effects ?? []
     const modelInvalid = isModelInvalid(agent.model_name)
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
@@ -841,7 +852,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
                 </span>
                 <span className="flex items-center gap-1">
                   <PillIcon className="h-3.5 w-3.5" />
-                  {t('pillsCount', { count: agentPills.length })}
+                  {t('pillsCount', { count: effects.length })}
                 </span>
                 <span className="flex items-center gap-1" title={tEditor('proactivityHint')}>
                   <Sparkles className="h-3.5 w-3.5" />
@@ -1060,7 +1071,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
         {/* 本地记忆管理(开关/筛选/增删改/置顶/清空/跳转来源) */}
         <LocalMemorySection agent={agent} />
 
-        {/* 服丹编排(只读:按服用顺序展示金丹名与剂量) */}
+        {/* 已吸收能力(只读:按编排顺序展示能力名与剂量;名称点击跳转来源金丹实例) */}
         <section className="dao-card p-5">
           <div className="mb-4 flex items-center gap-2">
             <FlaskConical className="h-4 w-4 shrink-0 text-gold" />
@@ -1068,19 +1079,33 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
               {t('pills.title')}
             </h2>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {t('pillsCount', { count: agentPills.length })}
+              {t('pillsCount', { count: effects.length })}
             </span>
           </div>
-          {agentPills.length === 0 ? (
+          {effectsLoadFailed ? (
+            <div>
+              <ActionFeedback
+                status="error"
+                message={t('effectsLoadFailed')}
+                onRetry={() => void loadEffects()}
+                retryLabel={tCommon('retry')}
+              />
+            </div>
+          ) : effectsData === null ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-gold" />
+              {t('loading')}
+            </p>
+          ) : effects.length === 0 ? (
             <div>
               <p className="text-sm text-muted-foreground">{t('pills.empty')}</p>
               <p className="mt-1 text-xs text-sage">{t('pills.emptyHint')}</p>
             </div>
           ) : (
             <ol className="space-y-2">
-              {agentPills.map((agentPill, index) => (
+              {effects.map((effect, index) => (
                 <li
-                  key={agentPill.id}
+                  key={effect.id}
                   className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted px-3 py-2"
                 >
                   <span className="shrink-0 text-xs text-muted-foreground">{index + 1}.</span>
@@ -1088,14 +1113,14 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
                     <FlaskConical className="h-4 w-4" />
                   </span>
                   <Link
-                    href={pillDetailHref(agentPill.pill_id)}
+                    href={pillItemDetailHref(effect.item_id)}
                     className="min-w-0 flex-1 truncate text-sm font-medium text-foreground transition-colors hover:text-gold"
                   >
-                    {agentPill.pill?.name ?? t('composer.unknownPill')}
+                    {effect.name}
                   </Link>
                   <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
                     <Scale className="h-3 w-3" />
-                    {t('pills.weight')} {agentPill.weight}
+                    {t('pills.weight')} {effect.weight}
                   </span>
                 </li>
               ))}
@@ -1276,7 +1301,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
         </div>
       </div>
 
-      {/* 服丹编排编辑(受控组件:仅改草稿,保存时一次性提交) */}
+      {/* 能力编排编辑(受控组件:仅改草稿,保存时一次性提交;池=已吸收能力,不能凭空绑定金丹) */}
       <section className="dao-card p-5">
         <div className="mb-4 flex items-center gap-2">
           <FlaskConical className="h-4 w-4 shrink-0 text-gold" />
@@ -1284,12 +1309,28 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
             {t('pills.title')}
           </h2>
         </div>
-        <AgentPillComposer
-          value={draft.pills}
-          onChange={pills => flow.updateDraft({ pills })}
-          pills={pillState.pills}
-          fieldErrors={flow.fieldErrors}
-        />
+        {effectsLoadFailed ? (
+          <div>
+            <ActionFeedback
+              status="error"
+              message={t('effectsLoadFailed')}
+              onRetry={() => void loadEffects()}
+              retryLabel={tCommon('retry')}
+            />
+          </div>
+        ) : effectsData === null ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-gold" />
+            {t('loading')}
+          </p>
+        ) : (
+          <AgentPillComposer
+            value={draft.effects}
+            onChange={effects => flow.updateDraft({ effects })}
+            effects={effectsData.effects}
+            fieldErrors={flow.fieldErrors}
+          />
+        )}
       </section>
 
       {/* 底部保存栏 */}
@@ -1305,15 +1346,14 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
             retryLabel={tCommon('retry')}
           />
         )}
-        <button
-          type="button"
-          onClick={flow.restoreServerVersion}
-          disabled={flow.saveStatus === 'submitting'}
-          className="dao-btn-ghost whitespace-nowrap text-sm"
-        >
-          <RotateCcw className="h-4 w-4" />
-          {t('restoreCta')}
-        </button>
+        {flow.saveStatus === 'conflict' && (
+          <ActionFeedback
+            status="error"
+            message={t('effectsConflict')}
+            onRetry={handleSave}
+            retryLabel={tCommon('retry')}
+          />
+        )}
         <button
           type="button"
           onClick={handleSave}

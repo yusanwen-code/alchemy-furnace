@@ -829,6 +829,24 @@ describe('recoverable chat history and streaming', () => {
     )
   })
 
+  it('does not render a zero-speaker failed turn as a successful completion', async () => {
+    doubles.agents = [activeAgent('agent-a', 'Alpha'), activeAgent('agent-b', 'Beta')]
+    doubles.listSessions.mockResolvedValue({ list: [groupSession], total: 1 })
+    doubles.getSession.mockResolvedValue(groupSession)
+    doubles.streamChatMessage.mockImplementationOnce(async (_sessionId: string, _content: string, handlers: StreamHandlers) => {
+      handlers.onAccepted?.()
+      handlers.onTurnDone?.({ spoke: 0, reason: 'failed', failed_speakers: 1 })
+    })
+    const user = userEvent.setup()
+    renderSession(groupSession.id)
+    const input = await screen.findByRole('textbox')
+    await user.type(input, 'question with no answer')
+    await user.click(screen.getByRole('button', { name: 'input.send' }))
+
+    expect(await screen.findByText('本轮未收到有效回复，请重试')).toBeInTheDocument()
+    expect(input).toBeEnabled()
+  })
+
   it('offers mention candidates from current session members only', async () => {
     doubles.agents = [
       activeAgent('agent-a', 'Alpha'),

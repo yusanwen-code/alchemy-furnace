@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AgentPillComposer } from '@/components/agent-pill-composer'
-import type { AgentPillDraftItem, Pill } from '@/services/types'
+import type { AgentEffect, AgentEffectDraftItem } from '@/services/types'
 
 // 真实消息解析(命名空间点路径 + {value} 插值),与 pill-detail.test.tsx 同模式
 function resolveMsg(
@@ -34,48 +34,47 @@ vi.mock('next-intl', async () => {
   }
 })
 
-const pillA: Pill = {
-  id: 'pill-a',
+const effA: AgentEffect = {
+  id: 'eff-a',
   name: '丹心妙语',
-  description: '温润如茶',
-  skill_schema: {},
-  tags: [],
-  version: '1.0.0',
-  is_builtin: false,
+  schema: {},
+  weight: 2,
+  sort_order: 1,
+  item_id: 'item-a',
+  revision_id: 'rev-1',
   created_at: '2026-08-20T00:00:00Z',
-  updated_at: '2026-08-20T00:00:00Z',
 }
-const pillB: Pill = { ...pillA, id: 'pill-b', name: '浩然正气' }
-const pillC: Pill = { ...pillA, id: 'pill-c', name: '清风徐来' }
+const effB: AgentEffect = { ...effA, id: 'eff-b', name: '浩然正气', weight: 1, sort_order: 2, item_id: 'item-b' }
+const effC: AgentEffect = { ...effA, id: 'eff-c', name: '清风徐来', weight: 3, sort_order: 3, item_id: 'item-c' }
 
-const twoRows: AgentPillDraftItem[] = [
-  { key: 'pill-a', pill_id: 'pill-a', weight: 2 },
-  { key: 'pill-b', pill_id: 'pill-b', weight: 1 },
+const twoRows: AgentEffectDraftItem[] = [
+  { key: 'eff-a', effect_id: 'eff-a', weight: 2 },
+  { key: 'eff-b', effect_id: 'eff-b', weight: 1 },
 ]
 
 function renderComposer({
   value = twoRows,
   onChange = vi.fn(),
-  pills = [pillA, pillB, pillC],
+  effects = [effA, effB, effC],
   fieldErrors,
 }: {
-  value?: AgentPillDraftItem[]
-  onChange?: (next: AgentPillDraftItem[]) => void
-  pills?: Pill[]
+  value?: AgentEffectDraftItem[]
+  onChange?: (next: AgentEffectDraftItem[]) => void
+  effects?: AgentEffect[]
   fieldErrors?: Record<string, string>
 } = {}) {
   return { onChange, ...render(
-    <AgentPillComposer value={value} onChange={onChange} pills={pills} fieldErrors={fieldErrors} />,
+    <AgentPillComposer value={value} onChange={onChange} effects={effects} fieldErrors={fieldErrors} />,
   ) }
 }
 
-describe('AgentPillComposer', () => {
+describe('AgentPillComposer（effects 池）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
   afterEach(() => cleanup())
 
-  it('按草稿顺序渲染金丹名与剂量输入', () => {
+  it('按草稿顺序渲染能力名与剂量输入', () => {
     renderComposer()
     const weights = screen.getAllByRole('spinbutton')
     expect(weights).toHaveLength(2)
@@ -85,7 +84,7 @@ describe('AgentPillComposer', () => {
     expect(screen.getByText('浩然正气')).toBeInTheDocument()
   })
 
-  it('剂量输入是键盘可访问的 number input,带金丹名 aria-label', () => {
+  it('剂量输入是键盘可访问的 number input,带能力名 aria-label', () => {
     renderComposer()
     expect(screen.getByRole('spinbutton', { name: /丹心妙语/ })).toBeInTheDocument()
   })
@@ -98,8 +97,8 @@ describe('AgentPillComposer', () => {
     const weightInput = screen.getByRole('spinbutton', { name: /丹心妙语/ })
     fireEvent.change(weightInput, { target: { value: '5' } })
     expect(onChange).toHaveBeenCalledWith([
-      { key: 'pill-a', pill_id: 'pill-a', weight: 5 },
-      { key: 'pill-b', pill_id: 'pill-b', weight: 1 },
+      { key: 'eff-a', effect_id: 'eff-a', weight: 5 },
+      { key: 'eff-b', effect_id: 'eff-b', weight: 1 },
     ])
   })
 
@@ -115,8 +114,8 @@ describe('AgentPillComposer', () => {
 
     await user.click(screen.getByRole('button', { name: /下移 丹心妙语/ }))
     expect(onChange).toHaveBeenCalledWith([
-      { key: 'pill-b', pill_id: 'pill-b', weight: 1 },
-      { key: 'pill-a', pill_id: 'pill-a', weight: 2 },
+      { key: 'eff-b', effect_id: 'eff-b', weight: 1 },
+      { key: 'eff-a', effect_id: 'eff-a', weight: 2 },
     ])
   })
 
@@ -127,21 +126,21 @@ describe('AgentPillComposer', () => {
 
     await user.click(screen.getByRole('button', { name: /上移 浩然正气/ }))
     expect(onChange).toHaveBeenCalledWith([
-      { key: 'pill-b', pill_id: 'pill-b', weight: 1 },
-      { key: 'pill-a', pill_id: 'pill-a', weight: 2 },
+      { key: 'eff-b', effect_id: 'eff-b', weight: 1 },
+      { key: 'eff-a', effect_id: 'eff-a', weight: 2 },
     ])
   })
 
-  it('停服按钮移除对应行', async () => {
+  it('移除按钮删除对应行(能力移除不返还金丹,保存时生效)', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
     renderComposer({ onChange })
 
     await user.click(screen.getByRole('button', { name: /停服 丹心妙语/ }))
-    expect(onChange).toHaveBeenCalledWith([{ key: 'pill-b', pill_id: 'pill-b', weight: 1 }])
+    expect(onChange).toHaveBeenCalledWith([{ key: 'eff-b', effect_id: 'eff-b', weight: 1 }])
   })
 
-  it('添加下拉只列未服用金丹,选中后追加到末尾(默认剂量 1,带稳定 key)', async () => {
+  it('添加下拉只列未编排能力,选中后追加到末尾(默认剂量 1,key=effect_id)', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
     renderComposer({ onChange })
@@ -152,26 +151,26 @@ describe('AgentPillComposer', () => {
     expect(options).not.toContain('丹心妙语')
     expect(options).not.toContain('浩然正气')
 
-    await user.selectOptions(select, 'pill-c')
+    await user.selectOptions(select, 'eff-c')
     expect(onChange).toHaveBeenCalledWith([
       ...twoRows,
-      { key: 'pill-c', pill_id: 'pill-c', weight: 1 },
+      { key: 'eff-c', effect_id: 'eff-c', weight: 1 },
     ])
   })
 
-  it('全部金丹已服用时不显示添加下拉,显示提示', () => {
-    renderComposer({ pills: [pillA, pillB] })
+  it('池中能力全部已编排时不显示添加下拉,显示提示', () => {
+    renderComposer({ effects: [effA, effB] })
     expect(screen.queryByRole('combobox', { name: '添加金丹' })).toBeNull()
     expect(screen.getByText(/都已服用|all/i)).toBeInTheDocument()
   })
 
-  it('金丹列表中找不到 pill_id 时显示未知金丹占位', () => {
-    renderComposer({ value: [{ key: 'gone', pill_id: 'gone', weight: 1 }] })
+  it('池中找不到 effect_id 时显示未知能力占位', () => {
+    renderComposer({ value: [{ key: 'gone', effect_id: 'gone', weight: 1 }] })
     expect(screen.getByText(/未知金丹/)).toBeInTheDocument()
   })
 
-  it('fieldErrors 中 pills.<key>.weight 的机器码被翻译成错误文案展示', () => {
-    renderComposer({ fieldErrors: { 'pills.pill-a.weight': 'range' } })
+  it('fieldErrors 中 effects.<key>.weight 的机器码被翻译成错误文案展示', () => {
+    renderComposer({ fieldErrors: { 'effects.eff-a.weight': 'range' } })
     expect(screen.getByRole('alert')).toHaveTextContent(/0-10/)
   })
 

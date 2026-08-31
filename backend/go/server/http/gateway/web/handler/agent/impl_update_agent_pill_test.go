@@ -1,4 +1,6 @@
 // 更新服用记录接口回归测试(bug 修复: body 不再要求 pill_id,金丹由路径 UUID 标识)
+// 任务 3 起该记录为「已吸收能力」(agent_pill_effects),路径 UUID 为金丹实例 UUID;
+// 更新走单事务: 改能力 → EffectsRevision++ → 缓存失效
 // 使用 sqlite 内存库(glebarez/sqlite,纯 Go 驱动),无需外部基础设施
 package agent
 
@@ -13,6 +15,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
+	"github.com/alchemy-furnace/server/internal/service/pill_inventory_service"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/middleware"
 	"github.com/alchemy-furnace/server/server/http/router"
@@ -39,7 +42,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 	sqlDB.SetMaxOpenConns(1)
 
-	if err := db.AutoMigrate(&model.DaoAgent{}, &model.ElixirPill{}, &model.AgentPill{}, &model.LanguagePattern{}); err != nil {
+	if err := db.AutoMigrate(&model.DaoAgent{}, &model.ElixirPill{}, &model.AgentPill{}, &model.LanguagePattern{},
+		&model.AgentPillEffect{}, &model.PillItem{},
+		&model.PillRecipe{}, &model.PillRecipeRevision{}); err != nil {
 		t.Fatalf("迁移测试表失败: %v", err)
 	}
 
@@ -55,27 +60,49 @@ func setupRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.RequestID())
 
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), nil)
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewModelDao(),
+		pill_inventory_service.New(dao.GetDB(), time.Now)), nil)
 	r.PUT("/api/v1/agents/:uuid/pills/:pill_uuid", router.Wrapper(h.UpdateAgentPill))
 	return r
 }
 
-// seedBoundPair 造数: 道人 + 金丹 + 服用记录,返回双方 UUID
-func seedBoundPair(t *testing.T, db *gorm.DB) (string, string) {
+// seedConsumedPair 造数: 道人 + 已服用实例(consumed_by_agent) + 活跃能力,返回双方 UUID
+func seedConsumedPair(t *testing.T, db *gorm.DB) (string, string) {
 	t.Helper()
 
 	agent := model.DaoAgent{Name: "测试道人", ModelName: "gpt-4o", Status: "active"}
 	if err := db.Create(&agent).Error; err != nil {
 		t.Fatalf("创建测试道人失败: %v", err)
 	}
-	pill := model.ElixirPill{Name: "测试金丹", SkillSchema: model.JSONMap{"expression_dna": map[string]interface{}{"rhythm": "快"}}}
-	if err := db.Create(&pill).Error; err != nil {
-		t.Fatalf("创建测试金丹失败: %v", err)
+	recipe := model.PillRecipe{}
+	if err := db.Create(&recipe).Error; err != nil {
+		t.Fatalf("创建测试丹方失败: %v", err)
 	}
-	if err := db.Create(&model.AgentPill{AgentID: agent.ID, PillID: pill.ID, Weight: 1.0, SortOrder: 1}).Error; err != nil {
-		t.Fatalf("创建测试服用记录失败: %v", err)
+	rev := model.PillRecipeRevision{
+		RecipeID:    recipe.ID,
+		Revision:    1,
+		Name:        "测试丹方",
+		SkillSchema: model.JSONMap{"expression_dna": map[string]interface{}{"rhythm": "快"}},
 	}
-	return agent.UUID.String(), pill.UUID.String()
+	if err := db.Create(&rev).Error; err != nil {
+		t.Fatalf("创建测试丹方版本失败: %v", err)
+	}
+	item := model.PillItem{RecipeRevisionID: rev.ID, State: model.PillConsumedByAgent}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatalf("创建测试金丹实例失败: %v", err)
+	}
+	if err := db.Create(&model.AgentPillEffect{
+		AgentID:          agent.ID,
+		ItemID:           item.ID,
+		RecipeRevisionID: rev.ID,
+		NameSnapshot:     "测试丹方",
+		SchemaSnapshot:   rev.SkillSchema,
+		Weight:           1.0,
+		SortOrder:        1,
+	}).Error; err != nil {
+		t.Fatalf("创建测试能力失败: %v", err)
+	}
+	return agent.UUID.String(), item.UUID.String()
 }
 
 // putJSON 发送 PUT JSON 请求并解析响应包络
@@ -97,11 +124,11 @@ func putJSON(t *testing.T, r *gin.Engine, path string, body string) (int, map[st
 // TestUpdateAgentPill_NoPillIDInBody 修复验证: body 仅 {weight, sort_order} 即可成功(原 bug 要求 pill_id 报 400)
 func TestUpdateAgentPill_NoPillIDInBody(t *testing.T) {
 	db := setupTestDB(t)
-	agentUUID, pillUUID := seedBoundPair(t, db)
+	agentUUID, itemUUID := seedConsumedPair(t, db)
 	r := setupRouter()
 
 	status, envelope := putJSON(t, r,
-		fmt.Sprintf("/api/v1/agents/%s/pills/%s", agentUUID, pillUUID),
+		fmt.Sprintf("/api/v1/agents/%s/pills/%s", agentUUID, itemUUID),
 		`{"weight": 2, "sort_order": 3}`)
 
 	if status != http.StatusOK {
@@ -111,24 +138,29 @@ func TestUpdateAgentPill_NoPillIDInBody(t *testing.T) {
 		t.Fatalf("期望 code=0, 实际 %v", envelope)
 	}
 
-	// 数据确实更新
-	var ap model.AgentPill
-	if err := db.First(&ap).Error; err != nil {
-		t.Fatalf("查询服用记录失败: %v", err)
+	// 能力数据确实更新 + 编排版本递增
+	var ef model.AgentPillEffect
+	if err := db.First(&ef).Error; err != nil {
+		t.Fatalf("查询能力失败: %v", err)
 	}
-	if ap.Weight != 2 || ap.SortOrder != 3 {
-		t.Fatalf("期望 weight=2 sort_order=3, 实际 weight=%v sort_order=%v", ap.Weight, ap.SortOrder)
+	if ef.Weight != 2 || ef.SortOrder != 3 {
+		t.Fatalf("期望 weight=2 sort_order=3, 实际 weight=%v sort_order=%v", ef.Weight, ef.SortOrder)
+	}
+	var reload model.DaoAgent
+	db.First(&reload)
+	if reload.EffectsRevision != 1 {
+		t.Fatalf("effects_revision = %d, 期望 1", reload.EffectsRevision)
 	}
 }
 
 // TestUpdateAgentPill_WeightOutOfRange 权重超上限(>10)返回 400
 func TestUpdateAgentPill_WeightOutOfRange(t *testing.T) {
 	db := setupTestDB(t)
-	agentUUID, pillUUID := seedBoundPair(t, db)
+	agentUUID, itemUUID := seedConsumedPair(t, db)
 	r := setupRouter()
 
 	status, envelope := putJSON(t, r,
-		fmt.Sprintf("/api/v1/agents/%s/pills/%s", agentUUID, pillUUID),
+		fmt.Sprintf("/api/v1/agents/%s/pills/%s", agentUUID, itemUUID),
 		`{"weight": 11, "sort_order": 3}`)
 
 	if status != http.StatusBadRequest {
@@ -158,10 +190,10 @@ func TestUpdateAgentPill_NonUUIDPath(t *testing.T) {
 // TestUpdateAgentPill_UnknownUUID 合法 UUID 但不存在返回 404
 func TestUpdateAgentPill_UnknownUUID(t *testing.T) {
 	db := setupTestDB(t)
-	agentUUID, _ := seedBoundPair(t, db)
+	agentUUID, _ := seedConsumedPair(t, db)
 	r := setupRouter()
 
-	// 金丹 UUID 不存在
+	// 金丹实例 UUID 不存在(未吸收)
 	status, envelope := putJSON(t, r,
 		fmt.Sprintf("/api/v1/agents/%s/pills/%s", agentUUID, uuid.NewString()),
 		`{"weight": 2, "sort_order": 3}`)

@@ -4,75 +4,68 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentDetailPage from '@/app/(main)/agents/detail/agent-detail'
 import { ApiError } from '@/services/api'
-import type { AgentDetail, AgentMemory, Pill } from '@/services/types'
+import type { AgentDetail, AgentEffect, AgentMemory } from '@/services/types'
 
 // ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
 const td = vi.hoisted(() => {
   const IDS = {
     AGENT_ID: '11111111-1111-4111-8111-111111111111',
     OTHER_AGENT_ID: '22222222-2222-4222-8222-222222222222',
-    PILL_A_ID: '33333333-3333-4333-8333-333333333333',
-    PILL_B_ID: '44444444-4444-4444-8444-444444444444',
-    PILL_C_ID: '55555555-5555-4555-8555-555555555555',
-    AP_1_ID: '66666666-6666-4666-8666-666666666666',
-    AP_2_ID: '77777777-7777-4777-8777-777777777777',
+    ITEM_A_ID: '33333333-3333-4333-8333-333333333333',
+    ITEM_B_ID: '44444444-4444-4444-8444-444444444444',
+    ITEM_C_ID: '55555555-5555-4555-8555-555555555555',
     MEMORY_A_ID: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     SESSION_A_ID: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   }
   return {
     IDS,
     push: vi.fn(),
-  fetchAgent: vi.fn(),
-  fetchPills: vi.fn(),
-  getAgent: vi.fn(),
-  updateAgent: vi.fn(),
-  replacePills: vi.fn(),
-  deleteAgent: vi.fn(),
-  fetchMemories: vi.fn(),
-  createMemory: vi.fn(),
-  updateMemory: vi.fn(),
-  deleteMemory: vi.fn(),
-  clearMemories: vi.fn(),
-  listModelOptions: vi.fn(),
-  launchSingle: vi.fn(),
-  launchRetry: vi.fn(),
-  dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
-  propId: IDS.AGENT_ID as string | undefined,
-  agentState: {
-    agents: [] as AgentDetail[],
-    total: 0,
-    currentAgent: null as AgentDetail | null,
-    loading: false,
-    error: null as string | null,
-    detailLoad: { id: null as string | null, status: 'idle' as DetailStatus, error: null as string | null },
-  },
-  pillState: {
-    pills: [] as Pill[],
-    total: 0,
-    currentPill: null as Pill | null,
-    loading: false,
-    error: null as string | null,
-  },
-  launchState: { status: 'idle' } as
-    | { status: 'idle' }
-    | { status: 'submitting' }
-    | { status: 'error'; message: string; errorCode?: string },
+    fetchAgent: vi.fn(),
+    getAgent: vi.fn(),
+    updateAgent: vi.fn(),
+    deleteAgent: vi.fn(),
+    fetchMemories: vi.fn(),
+    createMemory: vi.fn(),
+    updateMemory: vi.fn(),
+    deleteMemory: vi.fn(),
+    clearMemories: vi.fn(),
+    listEffects: vi.fn(),
+    updateEffects: vi.fn(),
+    removeEffect: vi.fn(),
+    listModelOptions: vi.fn(),
+    launchSingle: vi.fn(),
+    launchRetry: vi.fn(),
+    dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
+    propId: IDS.AGENT_ID as string | undefined,
+    agentState: {
+      agents: [] as AgentDetail[],
+      total: 0,
+      currentAgent: null as AgentDetail | null,
+      loading: false,
+      error: null as string | null,
+      detailLoad: { id: null as string | null, status: 'idle' as DetailStatus, error: null as string | null },
+    },
+    launchState: { status: 'idle' } as
+      | { status: 'idle' }
+      | { status: 'submitting' }
+      | { status: 'error'; message: string; errorCode?: string },
   }
 })
 
 const {
   AGENT_ID,
   OTHER_AGENT_ID,
-  PILL_A_ID,
-  PILL_B_ID,
-  PILL_C_ID,
-  AP_1_ID,
-  AP_2_ID,
+  ITEM_A_ID,
+  ITEM_B_ID,
+  ITEM_C_ID,
   MEMORY_A_ID,
   SESSION_A_ID,
 } = td.IDS
 
 type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
+
+// RFC 4122(含 version/variant 位);幂等 pending key 由 crypto.randomUUID 生成
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 // 真实消息解析(命名空间点路径 + {value} 插值)
 function resolveMsg(
@@ -127,26 +120,28 @@ vi.mock('@/contexts/AgentContext', () => ({
   }),
 }))
 
-vi.mock('@/contexts/PillContext', () => ({
-  usePill: () => ({
-    state: td.pillState,
-    fetchPills: td.fetchPills,
-  }),
-}))
-
 vi.mock('@/services/agentService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/agentService')>()
   return {
     ...actual,
     getAgent: td.getAgent,
     updateAgent: td.updateAgent,
-    replacePills: td.replacePills,
     deleteAgent: td.deleteAgent,
     fetchAgentMemories: td.fetchMemories,
     createAgentMemory: td.createMemory,
     updateAgentMemory: td.updateMemory,
     deleteAgentMemory: td.deleteMemory,
     clearAgentMemories: td.clearMemories,
+  }
+})
+
+vi.mock('@/services/pillInventoryService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/pillInventoryService')>()
+  return {
+    ...actual,
+    listEffects: td.listEffects,
+    updateEffects: td.updateEffects,
+    removeEffect: td.removeEffect,
   }
 })
 
@@ -166,19 +161,21 @@ vi.mock('@/hooks/use-chat-launch-flow', () => ({
 }))
 
 // ---- fixtures ----
-const pillA: Pill = {
-  id: PILL_A_ID,
+// 已吸收能力(服用快照;item_id 指向消耗后原实例,仅供详情跳转)
+const effA: AgentEffect = {
+  id: 'eff-a',
   name: '丹心妙语',
-  description: '温润如茶',
-  skill_schema: {},
-  tags: [],
-  version: '1.0.0',
-  is_builtin: false,
+  schema: {},
+  weight: 2,
+  sort_order: 1,
+  item_id: ITEM_A_ID,
+  revision_id: 'rev-1',
   created_at: '2026-08-20T00:00:00Z',
-  updated_at: '2026-08-20T00:00:00Z',
 }
-const pillB: Pill = { ...pillA, id: PILL_B_ID, name: '浩然正气' }
-const pillC: Pill = { ...pillA, id: PILL_C_ID, name: '清风徐来' }
+const effB: AgentEffect = { ...effA, id: 'eff-b', name: '浩然正气', weight: 1, sort_order: 2, item_id: ITEM_B_ID }
+const effC: AgentEffect = { ...effA, id: 'eff-c', name: '清风徐来', weight: 3, sort_order: 3, item_id: ITEM_C_ID }
+
+const effectsData2 = { effects_revision: 2, effects: [effA, effB] }
 
 const baseAgent: AgentDetail = {
   id: AGENT_ID,
@@ -190,10 +187,6 @@ const baseAgent: AgentDetail = {
   proactivity: 60,
   created_at: '2026-08-20T00:00:00Z',
   updated_at: '2026-08-20T00:00:00Z',
-  agent_pills: [
-    { id: AP_1_ID, agent_id: AGENT_ID, pill_id: PILL_A_ID, weight: 2, sort_order: 1, created_at: '2026-08-20T00:00:00Z', pill: pillA },
-    { id: AP_2_ID, agent_id: AGENT_ID, pill_id: PILL_B_ID, weight: 1, sort_order: 2, created_at: '2026-08-20T00:00:00Z', pill: pillB },
-  ],
   language_pattern: {
     is_valid: true,
     system_prompt: '你是太上老君',
@@ -254,17 +247,19 @@ async function enterEditing(user: ReturnType<typeof userEvent.setup>) {
 
 describe('AgentDetailPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks() // 清实现与 once 队列(clearAllMocks 不清 once,跨测试泄漏)
+    sessionStorage.clear() // 真实 pending-operations 实现
     td.dispatchCalls.length = 0
     td.agentState.agents = []
     td.agentState.currentAgent = null
     td.agentState.detailLoad = { id: null, status: 'idle', error: null }
     td.propId = AGENT_ID
-    td.pillState.pills = [pillA, pillB, pillC]
     td.launchState = { status: 'idle' }
     i18n.locale = 'zh-CN'
     td.fetchAgent.mockResolvedValue(undefined)
-    td.fetchPills.mockResolvedValue(undefined)
+    td.listEffects.mockResolvedValue(effectsData2)
+    td.updateEffects.mockResolvedValue({ effects_revision: 3, effects: [effA, effB] })
+    td.removeEffect.mockResolvedValue(undefined)
     td.listModelOptions.mockResolvedValue(modelOptions)
     td.launchSingle.mockResolvedValue(true)
     td.fetchMemories.mockResolvedValue([])
@@ -284,15 +279,15 @@ describe('AgentDetailPage', () => {
       td.propId = undefined
       renderPage()
       expect(td.fetchAgent).not.toHaveBeenCalled()
-      expect(td.fetchPills).not.toHaveBeenCalled()
+      expect(td.listEffects).not.toHaveBeenCalled()
       expect(screen.getByText('道人链接无效，请返回道人府重新选择')).toBeInTheDocument()
       expect(screen.queryByText('道人不存在或已被删除')).toBeNull()
     })
 
-    it('有效 id 发起详情拉取', () => {
+    it('有效 id 发起详情与能力列表拉取', () => {
       renderPage()
       expect(td.fetchAgent).toHaveBeenCalledWith(AGENT_ID)
-      expect(td.fetchPills).toHaveBeenCalled()
+      expect(td.listEffects).toHaveBeenCalledWith(AGENT_ID)
     })
 
     it('加载态:显示加载提示', () => {
@@ -328,21 +323,37 @@ describe('AgentDetailPage', () => {
   })
 
   describe('只读态', () => {
-    it('展示完整资料:名称/性格/模型/状态/主动性/服丹编排(顺序+剂量)', () => {
+    it('展示完整资料:名称/性格/模型/状态/主动性/已吸收能力(顺序+剂量+来源跳转)', async () => {
       setDetailState({ agent: baseAgent })
       renderPage()
+      // 能力列表加载完成后(异步挂载)再断言;顶部 meta 条与区块标题各显示一次计数
+      expect(await screen.findAllByText('2 项能力')).toHaveLength(2)
       expect(screen.getByRole('heading', { name: '太上老君' })).toBeInTheDocument()
       expect(screen.getByText('沉稳如山')).toBeInTheDocument()
       expect(screen.getByText('gpt-4o')).toBeInTheDocument()
       expect(screen.getByText('活跃')).toBeInTheDocument()
       expect(screen.getByText(/60/)).toBeInTheDocument()
-      // 服丹编排按 sort_order 顺序展示金丹名与剂量(作用域限定在编排区块,排除语言模式卡片列表项)
-      const pillsSection = screen.getByRole('heading', { name: '已服用金丹' }).closest('section')!
-      const rows = within(pillsSection).getAllByRole('listitem')
+      // 已吸收能力按 sort_order 顺序展示名称与剂量(作用域限定在能力区块,排除语言模式卡片列表项)
+      const section = screen.getByRole('heading', { name: '已吸收能力' }).closest('section')!
+      expect(within(section).getByText('2 项能力')).toBeInTheDocument()
+      const rows = within(section).getAllByRole('listitem')
       expect(rows[0]).toHaveTextContent('丹心妙语')
       expect(rows[0]).toHaveTextContent('2')
+      // 能力名点击跳转来源金丹实例详情(库存实例地址)
+      expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', `/pills/detail?id=${ITEM_A_ID}`)
       expect(rows[1]).toHaveTextContent('浩然正气')
       expect(rows[1]).toHaveTextContent('1')
+    })
+
+    it('能力列表加载失败:区块内展示错误并可重试', async () => {
+      td.listEffects.mockRejectedValueOnce(new ApiError('服务器内部错误', 500))
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      expect(await screen.findByText('能力列表加载失败')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '重试' }))
+      await waitFor(() => expect(td.listEffects).toHaveBeenCalledTimes(2))
+      await screen.findByText('丹心妙语')
     })
 
     it('语言模式缓存状态:有效时展示涌现规则与丹性相冲', () => {
@@ -415,7 +426,7 @@ describe('AgentDetailPage', () => {
   })
 
   describe('编辑态', () => {
-    it('进入编辑:字段回显,保存前编辑不发起任何 API', async () => {
+    it('进入编辑:字段回显,保存前编辑不发起任何写 API', async () => {
       setDetailState({ agent: baseAgent })
       const user = userEvent.setup()
       renderPage()
@@ -433,8 +444,11 @@ describe('AgentDetailPage', () => {
       await user.click(screen.getByRole('button', { name: /下移 丹心妙语/ }))
 
       expect(td.updateAgent).not.toHaveBeenCalled()
-      expect(td.replacePills).not.toHaveBeenCalled()
+      expect(td.removeEffect).not.toHaveBeenCalled()
+      expect(td.updateEffects).not.toHaveBeenCalled()
       expect(td.getAgent).not.toHaveBeenCalled()
+      // 能力列表仅在挂载时拉取一次,无保存前置重读
+      expect(td.listEffects).toHaveBeenCalledTimes(1)
     })
 
     it('编辑态提供状态切换与头像字段', async () => {
@@ -452,11 +466,14 @@ describe('AgentDetailPage', () => {
       expect(avatar).toHaveValue('https://example.com/laojun.png')
     })
 
-    it('保存成功:基础资料 → 完整编排 → GET 回读,顺序与新编排正确', async () => {
+    it('保存成功:基础资料 → 重读能力 → 全量编排 → GET 回读,顺序与新编排正确', async () => {
       setDetailState({ agent: baseAgent })
       const fresh: AgentDetail = { ...baseAgent, name: '改名老君', updated_at: '2026-08-23T00:00:00Z' }
       td.updateAgent.mockResolvedValue(fresh)
-      td.replacePills.mockResolvedValue(fresh)
+      // 挂载拉取(rev2 三能力,池含清风徐来) → 保存前重读(rev3,编排后)
+      td.listEffects
+        .mockResolvedValueOnce({ effects_revision: 2, effects: [effA, effB, effC] })
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
       td.getAgent.mockResolvedValue(fresh)
       const user = userEvent.setup()
       renderPage()
@@ -465,22 +482,104 @@ describe('AgentDetailPage', () => {
       const nameInput = screen.getByDisplayValue('太上老君')
       await user.clear(nameInput)
       await user.type(nameInput, '改名老君')
-      // 下移第一枚 + 新增一枚,编排变化进入同一保存事务
+      // 停服清风徐来 → 下移丹心妙语 → 从池(未编排能力)重新添加,编排变化进入同一保存事务
+      await user.click(screen.getByRole('button', { name: /停服 清风徐来/ }))
       await user.click(screen.getByRole('button', { name: /下移 丹心妙语/ }))
-      await user.selectOptions(screen.getByRole('combobox', { name: '添加金丹' }), PILL_C_ID)
+      await user.selectOptions(screen.getByRole('combobox', { name: '添加金丹' }), 'eff-c')
       await user.click(screen.getByRole('button', { name: '保存' }))
 
       await waitFor(() => expect(td.getAgent).toHaveBeenCalledWith(AGENT_ID))
       expect(td.updateAgent).toHaveBeenCalledWith(AGENT_ID, expect.objectContaining({ name: '改名老君' }))
-      expect(td.replacePills).toHaveBeenCalledWith(AGENT_ID, [
-        { pill_id: PILL_B_ID, weight: 1 },
-        { pill_id: PILL_A_ID, weight: 2 },
-        { pill_id: PILL_C_ID, weight: 1 },
+      // 全量编排:乐观锁 = 保存前重读的 effects_revision;提交集 = 草稿顺序(effectId/weight/sortOrder)
+      expect(td.updateEffects).toHaveBeenCalledWith(AGENT_ID, 3, [
+        { effectId: 'eff-b', weight: 1, sortOrder: 0 },
+        { effectId: 'eff-a', weight: 2, sortOrder: 1 },
+        { effectId: 'eff-c', weight: 1, sortOrder: 2 },
       ])
-      expect(td.updateAgent.mock.invocationCallOrder[0]).toBeLessThan(td.replacePills.mock.invocationCallOrder[0])
-      expect(td.replacePills.mock.invocationCallOrder[0]).toBeLessThan(td.getAgent.mock.invocationCallOrder[0])
+      expect(td.updateAgent.mock.invocationCallOrder[0]).toBeLessThan(
+        td.listEffects.mock.invocationCallOrder[1],
+      )
+      expect(td.listEffects.mock.invocationCallOrder[1]).toBeLessThan(
+        td.updateEffects.mock.invocationCallOrder[0],
+      )
+      expect(td.updateEffects.mock.invocationCallOrder[0]).toBeLessThan(
+        td.getAgent.mock.invocationCallOrder[0],
+      )
       // GET 回读后回到只读并展示最新名称
       await screen.findByRole('heading', { name: '改名老君' })
+    })
+
+    it('移除能力:save 走幂等 removeEffect,重读后全量编排不含被移除项', async () => {
+      setDetailState({ agent: baseAgent })
+      const fresh: AgentDetail = { ...baseAgent, name: '收丹老君', updated_at: '2026-08-23T00:00:00Z' }
+      td.updateAgent.mockResolvedValue(fresh)
+      // 挂载(rev2 双能力) → 移除后重读(rev3 仅剩丹心妙语)
+      td.listEffects
+        .mockResolvedValueOnce(effectsData2)
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA] })
+      td.getAgent.mockResolvedValue(fresh)
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      // 移除浩然正气(能力移除不返还金丹)
+      await user.click(screen.getByRole('button', { name: /停服 浩然正气/ }))
+      await user.click(screen.getByRole('button', { name: '保存' }))
+
+      await waitFor(() => expect(td.getAgent).toHaveBeenCalledWith(AGENT_ID))
+      // 幂等 key = 稳定 UUID(重试沿用同一 key,由 pending 记录保证)
+      expect(td.removeEffect).toHaveBeenCalledWith(expect.stringMatching(UUID_RE), AGENT_ID, 'eff-b')
+      expect(td.updateEffects).toHaveBeenCalledWith(AGENT_ID, 3, [
+        { effectId: 'eff-a', weight: 2, sortOrder: 0 },
+      ])
+      // 成功后 pending 记录清理完毕
+      expect(sessionStorage.getItem('alchemy_pending_operations')).toBe('[]')
+      // 回读只读态:能力区块仅剩一枚
+      await screen.findByRole('heading', { name: '收丹老君' })
+      const section = screen.getByRole('heading', { name: '已吸收能力' }).closest('section')!
+      expect(within(section).getAllByRole('listitem')).toHaveLength(1)
+    })
+
+    it('409 能力冲突:保留草稿并合并新能力,提示确认后重试成功', async () => {
+      setDetailState({ agent: baseAgent })
+      const fresh: AgentDetail = { ...baseAgent, updated_at: '2026-08-23T00:00:00Z' }
+      td.updateAgent.mockResolvedValue(fresh)
+      // 挂载(rev2) → 保存前重读(rev2) → 冲突刷新(rev3 新增清风徐来) → 重试重读(rev3)
+      td.listEffects
+        .mockResolvedValueOnce(effectsData2)
+        .mockResolvedValueOnce(effectsData2)
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
+        .mockResolvedValue({ effects_revision: 3, effects: [effA, effB, effC] })
+      td.updateEffects
+        .mockRejectedValueOnce(
+          new ApiError('能力编排冲突', 409, {
+            error_code: 'service.agent.effects_conflict',
+          }),
+        )
+        .mockResolvedValue({ effects_revision: 3, effects: [effA, effB, effC] })
+      td.getAgent.mockResolvedValue(fresh)
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      // 用户把丹心妙语剂量改为 5(并发窗口另一窗口吸收了清风徐来)
+      const weightInput = screen.getByRole('spinbutton', { name: /丹心妙语/ })
+      fireEvent.change(weightInput, { target: { value: '5' } })
+      await user.click(screen.getByRole('button', { name: '保存' }))
+
+      // 冲突提示 + 合并后仍保留用户编辑(草稿不丢)
+      expect(await screen.findByText(/已刷新合并最新能力/)).toBeInTheDocument()
+      expect(screen.getByDisplayValue('太上老君')).toBeInTheDocument()
+
+      // 重新确认:乐观锁 = 刷新后 rev3;提交集 = 合并结果(保留行维持用户权重,新能力追加末尾)
+      await user.click(screen.getByRole('button', { name: '重试' }))
+      await waitFor(() => expect(td.getAgent).toHaveBeenCalledWith(AGENT_ID))
+      expect(td.updateEffects).toHaveBeenCalledWith(AGENT_ID, 3, [
+        { effectId: 'eff-a', weight: 5, sortOrder: 0 },
+        { effectId: 'eff-b', weight: 1, sortOrder: 1 },
+        { effectId: 'eff-c', weight: 3, sortOrder: 2 },
+      ])
+      await screen.findByRole('heading', { name: '太上老君' })
     })
 
     it('保存失败:错误反馈可重试且草稿不丢', async () => {
@@ -496,11 +595,10 @@ describe('AgentDetailPage', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent('保存失败')
       expect(screen.getByDisplayValue('新名字')).toBeInTheDocument()
-      expect(td.replacePills).not.toHaveBeenCalled()
+      expect(td.updateEffects).not.toHaveBeenCalled()
 
       const fresh: AgentDetail = { ...baseAgent, name: '新名字' }
       td.updateAgent.mockResolvedValue(fresh)
-      td.replacePills.mockResolvedValue(fresh)
       td.getAgent.mockResolvedValue(fresh)
       await user.click(screen.getByRole('button', { name: '重试' }))
       await screen.findByRole('heading', { name: '新名字' })
@@ -518,21 +616,7 @@ describe('AgentDetailPage', () => {
 
       expect(await screen.findByText('道号不能为空')).toBeInTheDocument()
       expect(td.updateAgent).not.toHaveBeenCalled()
-      expect(td.replacePills).not.toHaveBeenCalled()
-    })
-
-    it('恢复服务端版本:草稿回到基线但保持编辑态', async () => {
-      setDetailState({ agent: baseAgent })
-      const user = userEvent.setup()
-      renderPage()
-      await enterEditing(user)
-      const nameInput = screen.getByDisplayValue('太上老君')
-      await user.clear(nameInput)
-      await user.type(nameInput, '改名')
-
-      await user.click(screen.getByRole('button', { name: '恢复服务端版本' }))
-      expect(screen.getByDisplayValue('太上老君')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
+      expect(td.updateEffects).not.toHaveBeenCalled()
     })
 
     it('取消:放弃修改回到只读,零 API', async () => {
@@ -569,7 +653,7 @@ describe('AgentDetailPage', () => {
       expect(screen.queryByText('nuwa-apply')).toBeNull()
 
       await enterEditing(user)
-      // 编辑态同样不允许出现女娲入口:道人能力应先炼制金丹,再在编辑页绑定
+      // 编辑态同样不允许出现女娲入口:道人能力应来自已服用的金丹快照,而非直接蒸馏注入
       expect(screen.queryByText('nuwa-apply')).toBeNull()
       expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
     })
@@ -592,7 +676,7 @@ describe('AgentDetailPage', () => {
         await screen.findByText('头像仅支持完整 http/https URL 或 data:image 数据 URI'),
       ).toBeInTheDocument()
       expect(td.updateAgent).not.toHaveBeenCalled()
-      expect(td.replacePills).not.toHaveBeenCalled()
+      expect(td.updateEffects).not.toHaveBeenCalled()
     })
 
     it('头像为非法协议时拒绝保存:零 API', async () => {
@@ -610,14 +694,13 @@ describe('AgentDetailPage', () => {
         await screen.findByText('头像仅支持完整 http/https URL 或 data:image 数据 URI'),
       ).toBeInTheDocument()
       expect(td.updateAgent).not.toHaveBeenCalled()
-      expect(td.replacePills).not.toHaveBeenCalled()
+      expect(td.updateEffects).not.toHaveBeenCalled()
     })
 
     it('头像为合法 data URI 时保存通过并随 updateAgent 提交', async () => {
       setDetailState({ agent: baseAgent })
       const fresh: AgentDetail = { ...baseAgent, avatar: 'data:image/png;base64,AAAA' }
       td.updateAgent.mockResolvedValue(fresh)
-      td.replacePills.mockResolvedValue(fresh)
       td.getAgent.mockResolvedValue(fresh)
       const user = userEvent.setup()
       renderPage()
@@ -651,7 +734,7 @@ describe('AgentDetailPage', () => {
         await screen.findByText('头像过长（URL 上限 2048 字符，data URI 上限 1500000 字符）'),
       ).toBeInTheDocument()
       expect(td.updateAgent).not.toHaveBeenCalled()
-      expect(td.replacePills).not.toHaveBeenCalled()
+      expect(td.updateEffects).not.toHaveBeenCalled()
     })
   })
 
@@ -775,10 +858,9 @@ describe('AgentDetailPage', () => {
       const heading = screen.getByRole('heading', { name: 'Language pattern (pill nature)' })
       expect(heading).not.toHaveClass('truncate')
 
-      // 编辑态:保存与恢复按钮可达
+      // 编辑态:保存按钮可达
       await user.click(screen.getByRole('button', { name: 'Edit daoist' }))
       expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
-      expect(screen.getByRole('button', { name: 'Restore server version' })).toBeInTheDocument()
     })
   })
 

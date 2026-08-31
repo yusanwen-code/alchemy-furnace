@@ -23,6 +23,7 @@ import (
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/fusion"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/model"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/pill"
+	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/pill_inventory"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/trial"
 	"github.com/alchemy-furnace/server/server/http/service"
 )
@@ -40,9 +41,10 @@ func NewPill() *pill.Pill {
 // NewAgent 道人处理器装配
 func NewAgent() *agent.Agent {
 	daoAgent := service.ProvideAgentDao()
-	daoPill := service.ProvidePillDao()
 	model := service.ProvideModelDao()
-	agent_serviceAgent := agent_service.New(daoAgent, daoPill, model)
+	db := service.ProvideDB()
+	inventory := service.ProvideInventory(db)
+	agent_serviceAgent := agent_service.New(daoAgent, model, inventory)
 	memory := service.ProvideMemoryDao()
 	modelResolver := credential.NewResolver()
 	provider := service.NewEngineBaseURL()
@@ -53,20 +55,21 @@ func NewAgent() *agent.Agent {
 
 // NewTrial 试丹处理器装配
 func NewTrial() *trial.Trial {
-	daoPill := service.ProvidePillDao()
+	db := service.ProvideDB()
+	inventory := service.ProvideInventory(db)
 	client := service.NewSynthesisClient()
 	modelResolver := credential.NewResolver()
-	trial_serviceTrial := trial_service.New(daoPill, client, modelResolver)
+	trial_serviceTrial := trial_service.New(inventory, client, modelResolver)
 	trialTrial := trial.New(trial_serviceTrial)
 	return trialTrial
 }
 
 // NewFusion 金丹融合处理器装配
 func NewFusion() *fusion.Fusion {
-	daoPill := service.ProvidePillDao()
+	db := service.ProvideDB()
 	fusionClient := service.NewFusionClient()
 	modelResolver := credential.NewResolver()
-	fusion_serviceFusion := fusion_service.New(daoPill, fusionClient, modelResolver)
+	fusion_serviceFusion := fusion_service.New(db, fusionClient, modelResolver)
 	fusionFusion := fusion.New(fusion_serviceFusion)
 	return fusionFusion
 }
@@ -74,8 +77,9 @@ func NewFusion() *fusion.Fusion {
 func NewDistillation() *distillation.Handler {
 	client := service.NewDistillationClient()
 	modelResolver := credential.NewResolver()
-	daoPill := service.ProvidePillDao()
-	distillation_serviceService := distillation_service.New(client, modelResolver, daoPill)
+	db := service.ProvideDB()
+	inventory := service.ProvideInventory(db)
+	distillation_serviceService := distillation_service.New(client, modelResolver, inventory)
 	handler := distillation.New(distillation_serviceService)
 	return handler
 }
@@ -103,4 +107,18 @@ func NewChat() *chat.Chat {
 	chat_serviceChat := chat_service.NewDynamic(daoChat, daoAgent, languagePatternService, modelResolver, provider, serviceMemory)
 	chatChat := chat.New(chat_serviceChat)
 	return chatChat
+}
+
+// NewPillInventory 金丹消耗品库存处理器装配(任务 5)
+func NewPillInventory() *pill_inventory.Handler {
+	db := service.ProvideDB()
+	inventory := service.ProvideInventory(db)
+	fusionClient := service.NewFusionClient()
+	modelResolver := credential.NewResolver()
+	fusion_serviceFusion := fusion_service.New(db, fusionClient, modelResolver)
+	daoAgent := service.ProvideAgentDao()
+	daoModel := service.ProvideModelDao()
+	agent_serviceAgent := agent_service.New(daoAgent, daoModel, inventory)
+	handler := pill_inventory.New(inventory, fusion_serviceFusion, agent_serviceAgent)
+	return handler
 }

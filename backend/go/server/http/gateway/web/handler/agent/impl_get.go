@@ -6,7 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Get 道人详情(含已服用金丹与语言模式缓存)
+// Get 道人详情(含已吸收能力快照与语言模式缓存)
+// 任务 8 旧入口审计: 不再返回遗留 agent_pills 绑定(旧表仅保留供回滚),
+// 能力数据走 GET /api/v1/agents/:uuid/effects
 // GET /api/v1/agents/:uuid
 func (cls *Agent) Get(c *gin.Context) (response.Code, any, error) {
 	uid, err := parseUUID(c)

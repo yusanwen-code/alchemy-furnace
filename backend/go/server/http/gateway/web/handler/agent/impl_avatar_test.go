@@ -15,9 +15,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
+	"github.com/alchemy-furnace/server/internal/service/pill_inventory_service"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/middleware"
 	"github.com/alchemy-furnace/server/server/http/router"
@@ -54,7 +56,8 @@ func setupAvatarRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), nil)
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewModelDao(),
+		pill_inventory_service.New(dao.GetDB(), time.Now)), nil)
 	r.POST("/api/v1/agents", router.Wrapper(h.Create))
 	r.PUT("/api/v1/agents/:uuid", router.Wrapper(h.Update))
 	return r

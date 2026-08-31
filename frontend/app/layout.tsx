@@ -30,8 +30,8 @@ const notoSansSC = Noto_Sans_SC({
  *      in `app/[locale]/layout.tsx`. The chrome therefore also lives
  *      there, not here.
  *   3. Non-locale MVP routes (`/agents`, `/chat`, `/pills`, `/models`,
- *      `/settings`) still need the client-side `Providers` (Pill /
- *      Agent / Chat contexts) to work, so we keep those here.
+ *      `/settings`) still need the client-side `Providers` (Agent /
+ *      Chat contexts) to work, so we keep those here.
  *
  * Net effect: chrome is rendered only for pages under `[locale]/`.
  * Migrating the other routes under `[locale]/` in a follow-up will

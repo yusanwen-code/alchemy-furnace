@@ -40,13 +40,35 @@ func New(agent dao.Agent, synthesis synthesis.Client, creds credential.Resolver)
 // GetOrBuildPattern 获取道人语言模式: 缓存命中(is_valid + 指纹一致 + 新档案结构)直接返回;
 // 否则走三段式重建: 确定性编译(Go) -> 涌现合成(Python) -> 确定性渲染(Go)。
 // 合成失败/降级时返回无损确定性渲染(is_valid=false 临时对象,不落库),聊天不阻断。
+// 缓存保护(§3.2): 写回前事务内核对 EffectsRevision(读取时记录值),并发编排变更导致
+// 冲突时丢弃本次结果重读重试,最多重试 2 次;仍冲突返回 409 agent.effects_conflict,
+// 不返回旧能力拼装结果、不覆盖新能力。
 func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID uint) (*model.LanguagePattern, errors.Error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		pattern, err := s.buildOnce(ctx, agentID)
+		if err == nil {
+			return pattern, nil
+		}
+		if err.GetCode() != "agent.effects_conflict" || attempt == 2 {
+			return nil, err
+		}
+		// 编排已变更: 本次编译基于过期能力,丢弃并重读当前状态(重读若缓存命中则不重合成)
+		zap.L().Warn("[炼丹炉] 语言模式缓存写入与并发编排变更冲突,丢弃结果重试",
+			zap.Uint("agent_id", agentID), zap.Int("attempt", attempt+1))
+	}
+	return nil, errors.ErrorServerInternalError("service.language_pattern.retry_exhausted")
+}
+
+// buildOnce 单次「读取→命中判断→(编译+合成+渲染)→带版本核对写回」。
+// 冲突错误(agent.effects_conflict)由 GetOrBuildPattern 外层决定重试,不在本层吞掉。
+func (s *LanguagePatternService) buildOnce(ctx context.Context, agentID uint) (*model.LanguagePattern, errors.Error) {
 	agent, err := s.agent.TakeAgentDetailByID(ctx, agentID)
 	if err != nil {
 		return nil, err.Relation(errors.ErrorRecordNotFound("service.language_pattern.take_agent"))
 	}
 
-	fingerprint, fpErr := computeFingerprint(agent.Personality, agent.AgentPills)
+	pills := buildPillInputs(agent)
+	fingerprint, fpErr := computeFingerprint(agent.Personality, pills)
 	if fpErr != nil {
 		return nil, errors.ErrorServerInternalError("service.language_pattern.fingerprint")
 	}
@@ -57,18 +79,6 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 		agent.LanguagePattern.BehaviorProfile != nil &&
 		agent.LanguagePattern.ProfileVersion == behavior.ProfileVersion {
 		return agent.LanguagePattern, nil
-	}
-
-	// 缓存未命中: 组装合成输入
-	pills := make([]synthesis.PillInput, 0, len(agent.AgentPills))
-	for _, ap := range agent.AgentPills {
-		pills = append(pills, synthesis.PillInput{
-			ID:          ap.Pill.UUID.String(),
-			Name:        ap.Pill.Name,
-			Weight:      ap.Weight,
-			SortOrder:   ap.SortOrder,
-			SkillSchema: ap.Pill.SkillSchema,
-		})
 	}
 
 	// 解析合成专用模型凭证(失败不阻塞合成: 回退环境变量模型配置)
@@ -108,6 +118,7 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 		emergenceRules = model.JSONList{}
 	}
 
+	var pattern *model.LanguagePattern
 	if agent.LanguagePattern != nil {
 		agent.LanguagePattern.SystemPrompt = behavior.RenderSystemPrompt(profile, agent.Name)
 		agent.LanguagePattern.EmergenceRules = emergenceRules
@@ -116,30 +127,44 @@ func (s *LanguagePatternService) GetOrBuildPattern(ctx context.Context, agentID 
 		agent.LanguagePattern.ProfileVersion = behavior.ProfileVersion
 		agent.LanguagePattern.SourceFingerprint = fingerprint
 		agent.LanguagePattern.IsValid = true
-		if err := s.agent.SaveLanguagePattern(ctx, agent.LanguagePattern); err != nil {
-			return nil, err.Relation(errors.ErrorServerInternalError("service.language_pattern.save"))
+		pattern = agent.LanguagePattern
+	} else {
+		pattern = &model.LanguagePattern{
+			AgentID:           agentID,
+			SystemPrompt:      behavior.RenderSystemPrompt(profile, agent.Name),
+			EmergenceRules:    emergenceRules,
+			InnerTensions:     innerTensions,
+			BehaviorProfile:   bp,
+			ProfileVersion:    behavior.ProfileVersion,
+			SourceFingerprint: fingerprint,
+			IsValid:           true,
 		}
-		zap.L().Info("[炼丹炉] 语言模式合成完成(更新缓存)",
-			zap.Uint("agent_id", agentID), zap.Int("pill_count", len(pills)))
-		return agent.LanguagePattern, nil
 	}
-
-	pattern := &model.LanguagePattern{
-		AgentID:           agentID,
-		SystemPrompt:      behavior.RenderSystemPrompt(profile, agent.Name),
-		EmergenceRules:    emergenceRules,
-		InnerTensions:     innerTensions,
-		BehaviorProfile:   bp,
-		ProfileVersion:    behavior.ProfileVersion,
-		SourceFingerprint: fingerprint,
-		IsValid:           true,
+	// 写回缓存前事务内核对 EffectsRevision(读取时记录值);冲突由外层重读重试
+	if err := s.agent.SaveLanguagePatternIfRevision(ctx, pattern, agent.EffectsRevision); err != nil {
+		return nil, err
 	}
-	if err := s.agent.SaveLanguagePattern(ctx, pattern); err != nil {
-		return nil, err.Relation(errors.ErrorServerInternalError("service.language_pattern.create"))
-	}
-	zap.L().Info("[炼丹炉] 语言模式合成完成(新建缓存)",
+	zap.L().Info("[炼丹炉] 语言模式合成完成(缓存写入)",
 		zap.Uint("agent_id", agentID), zap.Int("pill_count", len(pills)))
 	return pattern, nil
+}
+
+// buildPillInputs 从已吸收能力快照构建合成输入(任务 3 起的事实来源):
+// 身份=被服用实例 UUID(传播到行为指纹与 turn policy);内容=吸收时的名称/完整 schema 快照,
+// 不依赖丹方当前内容与金丹是否还在库存。权重/顺序=吸收时编排值。
+func buildPillInputs(agent *model.DaoAgent) []synthesis.PillInput {
+	effects := agent.AgentPillEffects
+	pills := make([]synthesis.PillInput, 0, len(effects))
+	for _, ef := range effects {
+		pills = append(pills, synthesis.PillInput{
+			ID:          ef.Item.UUID.String(),
+			Name:        ef.NameSnapshot,
+			Weight:      ef.Weight,
+			SortOrder:   ef.SortOrder,
+			SkillSchema: ef.SchemaSnapshot,
+		})
+	}
+	return pills
 }
 
 // losslessTempPattern 合成失败/降级时返回的无损确定性渲染(不落库):
@@ -180,34 +205,35 @@ func toInnerTensions(tensions []synthesis.InnerTension) model.JSONList {
 	return list
 }
 
-// computeFingerprint 计算来源指纹: SHA256(personality + 排序后的金丹)
-// 排序键 (sort_order, uuid字符串) 字典序;序列化与 Python json.dumps(ensure_ascii=False, sort_keys=True) 字节一致;
+// computeFingerprint 计算来源指纹: SHA256(personality + 排序后的已吸收能力)
+// 排序键 (sort_order, id字符串) 字典序,id=被服用实例 UUID(任务 3 起,与 turn policy 身份一致);
+// 序列化与 Python json.dumps(ensure_ascii=False, sort_keys=True) 字节一致;
 // 返回 "sha256:"+hex
-func computeFingerprint(personality string, agentPills []model.AgentPill) (string, error) {
-	// 按 (sort_order, uuid字符串) 字典序排序(与 Python 端 key=lambda p: (sort_order, str(id)) 一致)
-	ordered := make([]model.AgentPill, len(agentPills))
-	copy(ordered, agentPills)
+func computeFingerprint(personality string, pills []synthesis.PillInput) (string, error) {
+	// 按 (sort_order, id字符串) 字典序排序(与 Python 端 key=lambda p: (sort_order, str(id)) 一致)
+	ordered := make([]synthesis.PillInput, len(pills))
+	copy(ordered, pills)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		if ordered[i].SortOrder != ordered[j].SortOrder {
 			return ordered[i].SortOrder < ordered[j].SortOrder
 		}
-		return ordered[i].Pill.UUID.String() < ordered[j].Pill.UUID.String()
+		return ordered[i].ID < ordered[j].ID
 	})
 
 	// 构建 payload: {personality, pills: [{id, name, weight, sort_order, skill_schema}]}
-	pills := make([]any, 0, len(ordered))
-	for _, ap := range ordered {
-		pills = append(pills, map[string]any{
-			"id":           ap.Pill.UUID.String(),
-			"name":         ap.Pill.Name,
-			"weight":       ap.Weight,
-			"sort_order":   ap.SortOrder,
-			"skill_schema": ap.Pill.SkillSchema,
+	list := make([]any, 0, len(ordered))
+	for _, p := range ordered {
+		list = append(list, map[string]any{
+			"id":           p.ID,
+			"name":         p.Name,
+			"weight":       p.Weight,
+			"sort_order":   p.SortOrder,
+			"skill_schema": p.SkillSchema,
 		})
 	}
 	payload := map[string]any{
 		"personality": personality,
-		"pills":       pills,
+		"pills":       list,
 	}
 
 	raw, err := canonicalJSON(payload)

@@ -9,24 +9,29 @@
   },
   "nav": {
     "ariaLabel": "主导航",
+    "pillWorkspaceLabel": "金丹阁分区",
     "mobileAriaLabel": "移动端导航",
     "openMenu": "打开菜单",
     "closeMenu": "关闭菜单",
     "startCta": "开炉论道",
     "items": {
       "home": {
-        "label": "丹房"
+        "label": "首页"
       },
       "pills": {
         "label": "金丹阁",
         "children": {
           "all": {
-            "title": "全部金丹",
-            "description": "浏览阁中已成之丹，观语言模式万千"
+            "title": "金丹库存",
+            "description": "查看已炼制的金丹；服用或融合后消耗"
           },
           "fusion": {
-            "title": "融合金丹",
+            "title": "融合炉",
             "description": "投丹入炉，合而新之"
+          },
+          "recipes": {
+            "title": "丹方",
+            "description": "按方炼制，丹方永存；金丹入库存为消耗品"
           }
         }
       },
@@ -128,11 +133,6 @@
     },
     "stats": {
       "ariaLabel": "炉房概览",
-      "pills": {
-        "label": "阁中藏丹",
-        "unit": "枚",
-        "caption": "金丹阁所藏语言模式"
-      },
       "agents": {
         "label": "府中道人",
         "unit": "位",
@@ -143,29 +143,33 @@
         "unit": "场",
         "caption": "已结与未结之缘"
       },
-      "builtins": {
-        "label": "内置丹方",
-        "unit": "味",
-        "caption": "系统预置的金丹"
+      "inventory": {
+        "label": "库存金丹",
+        "unit": "枚",
+        "caption": "阁中可用之丹"
+      },
+      "recipes": {
+        "label": "丹方",
+        "unit": "张",
+        "caption": "可永久传承之方"
       }
     },
     "spotlight": {
       "badge": "新成之丹",
       "viewAll": "入阁观丹 →",
-      "kindBuiltIn": "内置丹方",
-      "kindSelfMade": "自行炼制",
       "noDescription": "此丹未留丹解，入阁可观其详。",
       "viewCta": "观其丹性",
       "emptyTitle": "阁中尚无一丹",
-      "emptyDesc": "丹阁空空，炉火却正温。炼第一枚语言模式金丹，塑道人之性情。",
-      "emptyCta": "炼制新金丹"
+      "emptyDesc": "丹阁空空,炉火却正温。先立丹方,再炼第一枚语言模式金丹,塑道人之性情。",
+      "emptyCta": "前往丹方炼制",
+      "version": "版本 v{revision}"
     },
     "recipeList": {
       "title": "丹方录",
-      "count": "{count} 味 · 藏丹",
-      "builtInBadge": "内置",
-      "noDescription": "未留丹解",
-      "empty": "暂无藏丹"
+      "count": "{count} 张 · 丹方",
+      "empty": "暂无丹方,炉火待温",
+      "versionBadge": "版本 v{revision}",
+      "availableCount": "库存 {count} 枚"
     },
     "sessions": {
       "title": "论道旧录",
@@ -213,33 +217,78 @@
     "outputTruncatedHint": "模型的结构化输出被截断。系统已调整生成策略；请重试，持续失败时更换合成模型。"
   },
   "pills": {
-    "title": "金丹阁",
-    "subtitle": "炼制语言模式金丹，塑造道人性情",
-    "searchPlaceholder": "搜索金丹名称或描述...",
-    "filter": {
-      "all": "全部金丹",
-      "builtin": "系统内置",
-      "custom": "自行炼制"
-    },
-    "create": "炼制新金丹",
+    "title": "金丹库存",
+    "subtitle": "服用或融合会消耗金丹；能力一经吸收永久保留",
     "loading": "正在搜寻金丹...",
     "loadErrorTitle": "金丹列表加载失败",
     "retry": "重新加载",
-    "emptyTitle": "暂无金丹",
-    "emptySearchTitle": "未找到匹配的金丹",
-    "emptySearchDesc": "尝试其他关键词或过滤条件",
-    "emptyDesc": "点击上方按钮开始炼制你的第一颗金丹",
+    "emptyTitle": "暂无可用金丹",
+    "emptyDesc": "先在丹方中炼制 1 枚；服用或融合会消耗它",
+    "goToRecipes": "去丹方炼制",
+    "availableCount": "{count} 枚可用",
+    "itemRevision": "版本 v{revision}",
+    "loadMore": "加载更多"
+  },
+  "recipes": {
+    "title": "丹方",
+    "subtitle": "丹方永久保留；按方炼制金丹入库存，金丹为消耗品",
+    "searchPlaceholder": "搜索丹方名称或描述...",
+    "create": "新建丹方",
+    "loading": "正在翻阅丹方...",
+    "loadErrorTitle": "丹方列表加载失败",
+    "retry": "重新加载",
+    "emptyTitle": "暂无丹方",
+    "emptySearchTitle": "未找到匹配的丹方",
+    "emptySearchDesc": "尝试其他关键词",
+    "emptyDesc": "点击上方按钮写下你的第一份丹方",
     "modal": {
-      "title": "炼制新金丹",
-      "nameLabel": "金丹名称 *",
-      "namePlaceholder": "如：文言文金丹",
+      "title": "新建丹方",
+      "nameLabel": "丹方名称 *",
+      "namePlaceholder": "如：文言文丹方",
       "descLabel": "描述（含触发语、反触发语）",
-      "descPlaceholder": "描述这颗金丹赋予的语言模式或人格特质...",
-      "descHint": "创建后将进入炼丹房编辑器，完善表达 DNA、心智模型等结构化内容",
+      "descPlaceholder": "描述这份丹方赋予的语言模式或人格特质...",
       "cancel": "取消",
-      "submit": "开始炼制"
+      "submit": "定稿丹方",
+      "hint": "丹方定稿后可随时「炼制 1 枚」产出金丹；金丹服用即消耗，能力保留"
     },
-    "closeModal": "关闭弹窗"
+    "closeModal": "关闭弹窗",
+    "backToList": "返回丹方",
+    "invalidLink": "链接无效",
+    "loadingDetail": "正在研读丹方...",
+    "notFound": "丹方不存在或已删除",
+    "content": {
+      "empty": "未留丹解"
+    },
+    "schema": {
+      "empty": "尚未书写"
+    },
+    "editCta": "编辑新版本",
+    "migrationBanner": {
+      "saved": "已保存 {recipes} 份丹方、保留 {effects} 项已吸收能力、可用金丹 {availableItems} 枚；",
+      "consumedNote": "已服用金丹不再作为库存展示。",
+      "dismiss": "关闭迁移摘要"
+    },
+    "exportSkillCta": "导出 Skill",
+    "craftCta": "炼制 1 枚",
+    "crafting": "炼制中...",
+    "crafted": "已炼制 1 枚，放入库存",
+    "craftFailed": "炼制失败",
+    "archivedBadge": "已归档",
+    "availableCount": "可用 {count} 枚",
+    "revisionLabel": "版本 v{revision}",
+    "createdLabel": "定稿于",
+    "authorLabel": "撰方人",
+    "versionLabel": "版本标签",
+    "editSave": "保存新版本",
+    "editCancel": "取消",
+    "editHint": "保存后生成不可变新版本；已炼制的金丹与已吸收的能力不受影响",
+    "unsavedConfirm": "丹方有未保存的修改，确定离开吗？",
+    "saving": "正在保存新版本...",
+    "saveFailed": "保存失败，请重试",
+    "saveConflict": "丹方已被更新，请刷新后重试",
+    "archivedNotice": "此丹方已归档，不能再炼制新金丹；历史金丹与能力不受影响",
+    "noInventory": "暂无库存，点击「炼制 1 枚」",
+    "loadMore": "加载更多"
   },
   "fusion": {
     "title": "融合炉",
@@ -283,72 +332,20 @@
         "emptyTitle": "暂无可用模型",
         "emptyDesc": "请先到「设置 → 模型管理」添加并启用模型",
         "emptyDescModels": "该供应商下未配置任何启用模型"
-      }
-    }
+      },
+      "consumeHint": "不消耗材料；保存时消耗"
+    },
+    "loadMore": "加载更多"
   },
   "pill": {
-    "backToList": "返回金丹阁",
+    "backToList": "返回库存",
     "invalidLink": "金丹链接无效，请返回金丹阁重新选择",
     "loading": "加载金丹...",
-    "notFound": "金丹不存在或已被删除",
-    "editCta": "编辑丹方",
-    "cancelCta": "取消",
-    "bindCta": "赠予道人",
-    "exportSkillCta": "导出 Skill",
-    "deleteCta": "删除金丹",
-    "tab": {
-      "content": "丹解",
-      "schema": "丹方结构",
-      "relations": "服用者"
-    },
-    "meta": {
-      "builtin": "内置丹方",
-      "custom": "自行炼制",
-      "createdAt": "炼制于",
-      "updatedAt": "更新于"
-    },
-    "content": {
-      "title": "丹解",
-      "empty": "此丹未留丹解。",
-      "systemPrompt": "系统提示",
-      "userPrompt": "用户提示"
-    },
-    "schema": {
-      "title": "丹方结构",
-      "empty": "此丹无结构化丹方。"
-    },
-    "relations": {
-      "title": "服用此丹的道人",
-      "empty": "尚无道人服用此丹。",
-      "weight": "权重 {weight}"
-    },
-    "dialog": {
-      "deleteTitle": "确认删除",
-      "deleteDesc": "此操作不可逆，确定要删除此丹吗？",
-      "cancel": "取消",
-      "confirm": "确认删除",
-      "bindTitle": "赠予道人",
-      "bindDesc": "为 {agent} 服用此丹，权重 {weight}"
-    },
+    "notFound": "没有找到这枚金丹",
     "editor": {
-      "saveCta": "保存金丹",
-      "savedFeedback": "已存入金丹阁",
-      "destroyCta": "销毁",
-      "destroyArmCta": "再点一次确认销毁",
-      "deleteConfirm": "确定要销毁这颗金丹吗？此操作不可恢复。",
-      "makeCopyCta": "制作副本",
-      "copying": "制作副本中…",
-      "copyFailed": "制作副本失败，请重试",
-      "saving": "保存中…",
-      "saveFailed": "保存失败，修改已保留，请重试",
-      "deleteFailed": "删除失败，请重试",
-      "unsavedConfirm": "当前有未保存的修改，确定要离开吗？",
-      "builtInBadge": "内置",
       "pillNamePlaceholder": "金丹名称",
       "descPlaceholder": "金丹简介（含触发语、反触发语）...",
-      "authorLabel": "作者",
       "authorPlaceholder": "作者",
-      "versionLabel": "版本",
       "tagsLabel": "标签",
       "tagsAdd": "添加标签",
       "tagsPlaceholder": "文言文，古雅",
@@ -425,7 +422,25 @@
         "addLabel": "添加示例对话",
         "deleteAria": "删除示例对话"
       }
-    }
+    },
+    "retry": "重试",
+    "stateAvailable": "可用",
+    "stateConsumedByAgent": "已服用",
+    "stateConsumedByFusion": "已融合",
+    "stateDiscarded": "已弃置",
+    "stateDescAvailable": "可服用或用于融合；任何操作都会消耗这枚金丹，能力一经吸收永久保留",
+    "stateDescConsumedByAgent": "已服用：这枚金丹已消耗，能力快照保留在道人体内",
+    "stateDescConsumedByFusion": "已融合：作为融合材料被消耗，产出新金丹",
+    "stateDescDiscarded": "已弃置：不可恢复；如仍需要可按丹方重新炼制",
+    "revisionLabel": "版本 v{revision}",
+    "versionLabel": "丹方版本",
+    "consumedAtLabel": "消耗时间",
+    "recipeOrigin": "来源丹方",
+    "archivedBadge": "丹方已归档",
+    "legacyTitle": "该金丹已升级为丹方",
+    "legacyDesc": "旧版金丹已并入丹方体系；请前往丹方页查看配方并炼制新金丹",
+    "viewRecipeCta": "查看丹方",
+    "consumeCta": "服用"
   },
   "agents": {
     "title": "道人府",
@@ -484,14 +499,13 @@
     "saving": "正在保存...",
     "saveFailed": "保存失败，请重试",
     "cancelCta": "取消",
-    "restoreCta": "恢复服务端版本",
     "unsavedConfirm": "有未保存的修改，确定要离开吗？",
     "startChatCta": "开始论道",
     "inactiveChatHint": "沉睡中的道人不能发起会话，可在编辑中唤醒为活跃",
     "modelInvalidBadge": "模型失效",
     "modelInvalidWarning": "当前模型已停用或被删除，仅作保留展示；请在编辑中更换为可用模型",
     "chatSessionTitle": "与{name}的论道",
-    "pillsCount": "{count} 金丹",
+    "pillsCount": "{count} 项能力",
     "meta": {
       "createdAt": "录入于",
       "updatedAt": "更新于"
@@ -501,14 +515,14 @@
       "empty": "未设置基础性格。"
     },
     "pills": {
-      "title": "已服用金丹",
-      "empty": "此道人尚未服用任何金丹。",
+      "title": "已吸收能力",
+      "empty": "此道人尚未吸收任何能力。",
       "addCta": "赐丹",
       "weight": "权重",
       "unbindCta": "停服",
       "selectFromVault": "从金丹阁选择",
       "allBound": "暂无可服用的金丹（所有金丹均已绑定）",
-      "emptyHint": "服用金丹后，道人将习得对应的语言模式与人格特质",
+      "emptyHint": "服用金丹会消耗库存,能力作为快照独立留存;移除能力不返还金丹",
       "reordering": "正在保存新的服用顺序...",
       "dragHint": "拖拽左侧手柄可调整服用顺序，权重与顺序变化后丹性将于下次论道时重新合成",
       "sortOrder": "服用顺序",
@@ -616,7 +630,9 @@
       "edit_title": "编辑记忆",
       "cancel_edit": "取消",
       "op_failed": "操作失败，请重试"
-    }
+    },
+    "effectsConflict": "能力编排已被其他窗口变更，已刷新合并最新能力，请确认后重新保存",
+    "effectsLoadFailed": "能力列表加载失败"
   },
   "about": {
     "pageTitle": "关于",
@@ -705,6 +721,7 @@
       "temperature": "温度",
       "default": "默认",
       "synthesis": "合成",
+      "fusion": "融合",
       "enabled": "启用",
       "refCount": "引用数",
       "actions": "操作"
@@ -769,23 +786,6 @@
     "errorToggleProvider": "更新供应商状态失败",
     "errorToggleModel": "更新模型状态失败",
     "errorTestConnection": "连接测试失败"
-  },
-  "bindModal": {
-    "title": "服用此丹",
-    "pillLabel": "金丹",
-    "agentLabel": "道人",
-    "weightLabel": "权重 (0-10)",
-    "weightHint": "权重越高，金丹对道人性情的影响越强",
-    "cancel": "取消",
-    "submit": "服用",
-    "alreadyBound": "此道人已服用此丹",
-    "closeModal": "关闭弹窗",
-    "prompt": "将「{name}」赠予一位道人服用",
-    "noAgents": "暂无道人，请先在道人府招募一位",
-    "sortOrder": "服用顺序",
-    "success": "已赠予",
-    "errorLoadAgents": "获取道人列表失败",
-    "errorBind": "绑定失败"
   },
   "skillExport": {
     "title": "导出 Skill",
@@ -896,7 +896,8 @@
       "retry": "重试",
       "interrupted": "连接在回复完成前中断。可重试并开始一次新的尝试。",
       "retryBoundary": "群聊中断后开始新的尝试；上方已完成的回复会继续保留。",
-      "pending": "正在等待回应..."
+      "pending": "正在等待回应...",
+      "noResponse": "本轮未收到有效回复，请重试。"
     },
     "history": {
       "loadOlder": "加载更早消息",
@@ -991,5 +992,19 @@
     "changelog": "更新内容",
     "later": "稍后",
     "update": "立即更新"
+  },
+  "consumeDialog": {
+    "title": "服用金丹",
+    "prompt": "服用后将消耗 1 枚金丹，道人保留能力；需要再次使用可按丹方炼制。",
+    "noAgents": "暂无道人可服用",
+    "weightLabel": "剂量",
+    "sortOrder": "顺序",
+    "cancel": "取消",
+    "submit": "服用",
+    "submitting": "服用中…",
+    "success": "已服用",
+    "closeModal": "关闭",
+    "errorLoadAgents": "道人加载失败",
+    "errorConsume": "服用失败"
   }
 }

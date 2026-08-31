@@ -1,4 +1,6 @@
 // 完整服丹编排接口(PUT /api/v1/agents/:uuid/pills)回归测试
+// 任务 5 起该写路由恒 410 pill.legacy_api_removed(防绕过库存直接写绑定):
+// 路径与载荷一律不解析,任何请求(含非法 UUID)都返回 410,不产生任何写入
 // 真实 sqlite 内存库 + 真实 service + 真实 handler,不引入 mock
 package agent
 
@@ -6,9 +8,11 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
+	"github.com/alchemy-furnace/server/internal/service/pill_inventory_service"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/middleware"
 	"github.com/alchemy-furnace/server/server/http/router"
@@ -18,13 +22,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupReplacePillsRouter 注册完整服丹编排路由(与既有逐项 POST 共存由 router.go 保证,此处只测本路由)
-// memory 参数本测试未涉及,传 nil
+// setupReplacePillsRouter 注册完整服丹编排路由(仅测本路由;memory 参数本测试未涉及,传 nil)
 func setupReplacePillsRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), nil)
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewModelDao(),
+		pill_inventory_service.New(dao.GetDB(), time.Now)), nil)
 	r.PUT("/api/v1/agents/:uuid/pills", router.Wrapper(h.ReplacePills))
 	return r
 }
@@ -47,120 +51,104 @@ func seedAgentWithPillsForReplace(t *testing.T, db *gorm.DB, pillCount int) (str
 	return agent.UUID.String(), pillUUIDs
 }
 
-func TestReplacePills_SuccessReturnsOrderedDetail(t *testing.T) {
+// assertGone410 断言 410 + 稳定错误码 pill.legacy_api_removed
+// envelope.code 是路由业务码(数字),稳定错误码在 error_code 字段(字符串)
+func assertGone410(t *testing.T, status int, envelope map[string]interface{}) {
+	t.Helper()
+	if status != http.StatusGone {
+		t.Fatalf("期望 HTTP 410, 实际 %d, body: %v", status, envelope)
+	}
+	code, ok := envelope["error_code"].(string)
+	if !ok || code != "pill.legacy_api_removed" {
+		t.Fatalf("期望 error_code=pill.legacy_api_removed, 实际 %v", envelope["error_code"])
+	}
+}
+
+// TestReplacePills_ValidRequestReturnsGone 有效请求也 410: 完整编排入口已下线,
+// 防绕过库存直接写绑定;410 不应产生任何写入
+func TestReplacePills_ValidRequestReturnsGone(t *testing.T) {
 	db := setupTestDB(t)
 	agentUUID, pillUUIDs := seedAgentWithPillsForReplace(t, db, 3)
 	r := setupReplacePillsRouter()
 
-	// 故意乱序 + 自定义权重
 	body := fmt.Sprintf(`{"pills":[
 		{"pill_id": %q, "weight": 2.5},
 		{"pill_id": %q, "weight": 1.0}
 	]}`, pillUUIDs[2], pillUUIDs[0])
 	status, envelope := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), body)
+	assertGone410(t, status, envelope)
 
-	if status != http.StatusOK {
-		t.Fatalf("期望 HTTP 200, 实际 %d, body: %v", status, envelope)
-	}
-	if envelope["code"].(float64) != 0 {
-		t.Fatalf("期望 code=0, 实际 %v", envelope)
-	}
-	data, ok := envelope["data"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("响应缺 data: %v", envelope)
-	}
-	agentPills, ok := data["agent_pills"].([]interface{})
-	if !ok || len(agentPills) != 2 {
-		t.Fatalf("agent_pills = %v, 期望 2 条", data["agent_pills"])
-	}
-	first := agentPills[0].(map[string]interface{})
-	second := agentPills[1].(map[string]interface{})
-	if first["pill_id"].(string) != pillUUIDs[2] || second["pill_id"].(string) != pillUUIDs[0] {
-		t.Fatalf("顺序未保持: got %s,%s want %s,%s", first["pill_id"], second["pill_id"], pillUUIDs[2], pillUUIDs[0])
-	}
-	if first["weight"].(float64) != 2.5 || second["weight"].(float64) != 1.0 {
-		t.Fatalf("权重错误: %v,%v", first["weight"], second["weight"])
-	}
-	if first["sort_order"].(float64) != 1 || second["sort_order"].(float64) != 2 {
-		t.Fatalf("sort_order 应为 1,2: %v,%v", first["sort_order"], second["sort_order"])
-	}
-}
-
-func TestReplacePills_EmptyClearsRelations(t *testing.T) {
-	db := setupTestDB(t)
-	agentUUID, pillUUIDs := seedAgentWithPillsForReplace(t, db, 2)
-	r := setupReplacePillsRouter()
-
-	// 先绑定两枚
-	body := fmt.Sprintf(`{"pills":[{"pill_id": %q, "weight": 1},{"pill_id": %q, "weight": 1}]}`, pillUUIDs[0], pillUUIDs[1])
-	if status, env := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), body); status != http.StatusOK {
-		t.Fatalf("预置编排失败: %d %v", status, env)
-	}
-	// 空数组清空
-	status, envelope := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), `{"pills":[]}`)
-	if status != http.StatusOK {
-		t.Fatalf("清空期望 200, 实际 %d, body: %v", status, envelope)
-	}
-	data := envelope["data"].(map[string]interface{})
-	if aps, ok := data["agent_pills"].([]interface{}); ok && len(aps) != 0 {
-		t.Fatalf("清空后仍有 %d 条服用记录", len(aps))
-	}
 	var count int64
 	db.Model(&model.AgentPill{}).Count(&count)
 	if count != 0 {
-		t.Fatalf("数据库仍残留 %d 条服用记录", count)
+		t.Fatalf("410 后仍写入 %d 条绑定", count)
 	}
 }
 
-func TestReplacePills_InvalidAgentUUID(t *testing.T) {
-	setupTestDB(t)
-	r := setupReplacePillsRouter()
-	status, _ := putJSON(t, r, "/api/v1/agents/not-a-uuid/pills", `{"pills":[]}`)
-	if status != http.StatusBadRequest {
-		t.Fatalf("非法道人 UUID 期望 400, 实际 %d", status)
-	}
-}
-
-func TestReplacePills_InvalidPillUUIDInBody(t *testing.T) {
+// TestReplacePills_EmptyAlsoGone 空数组(旧清空语义)也 410: 移除能力改走 UnbindPill
+func TestReplacePills_EmptyAlsoGone(t *testing.T) {
 	db := setupTestDB(t)
 	agentUUID, _ := seedAgentWithPillsForReplace(t, db, 1)
 	r := setupReplacePillsRouter()
-	status, _ := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID),
-		`{"pills":[{"pill_id": "not-a-uuid", "weight": 1}]}`)
-	if status != http.StatusBadRequest {
-		t.Fatalf("非法金丹 UUID 期望 400, 实际 %d", status)
-	}
+	status, envelope := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), `{"pills":[]}`)
+	assertGone410(t, status, envelope)
 }
 
-func TestReplacePills_WeightOutOfRange(t *testing.T) {
+// TestReplacePills_WeightOutOfRangeAlsoGone 权重越界不再做旧校验: 一律 410
+func TestReplacePills_WeightOutOfRangeAlsoGone(t *testing.T) {
 	db := setupTestDB(t)
 	agentUUID, pillUUIDs := seedAgentWithPillsForReplace(t, db, 1)
 	r := setupReplacePillsRouter()
 	for _, w := range []string{"0", "11"} {
 		body := fmt.Sprintf(`{"pills":[{"pill_id": %q, "weight": %s}]}`, pillUUIDs[0], w)
 		status, envelope := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), body)
-		if status != http.StatusBadRequest {
-			t.Fatalf("权重 %s 期望 400, 实际 %d, body: %v", w, status, envelope)
-		}
+		assertGone410(t, status, envelope)
 	}
 }
 
-func TestReplacePills_PillNotFound(t *testing.T) {
+// TestReplacePills_UnknownTargetsAlsoGone 未知道人/未知金丹同样 410(封禁先行,不做任何查询)
+func TestReplacePills_UnknownTargetsAlsoGone(t *testing.T) {
 	db := setupTestDB(t)
 	agentUUID, _ := seedAgentWithPillsForReplace(t, db, 1)
 	r := setupReplacePillsRouter()
+
+	status, envelope := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", uuid.NewString()), `{"pills":[]}`)
+	assertGone410(t, status, envelope)
+
 	body := fmt.Sprintf(`{"pills":[{"pill_id": %q, "weight": 1}]}`, uuid.NewString())
-	status, _ := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), body)
-	if status != http.StatusNotFound {
-		t.Fatalf("金丹不存在期望 404, 实际 %d", status)
+	status, envelope = putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID), body)
+	assertGone410(t, status, envelope)
+}
+
+// TestReplacePills_InvalidAgentUUID 非法道人 UUID 同样 410(入口已死,不做解析)
+func TestReplacePills_InvalidAgentUUID(t *testing.T) {
+	setupTestDB(t)
+	r := setupReplacePillsRouter()
+	status, envelope := putJSON(t, r, "/api/v1/agents/not-a-uuid/pills", `{"pills":[]}`)
+	if status != http.StatusGone {
+		t.Fatalf("非法道人 UUID 期望 410, 实际 %d", status)
+	}
+	if ec, _ := envelope["error_code"].(string); ec != "pill.legacy_api_removed" {
+		t.Fatalf("期望 error_code=pill.legacy_api_removed, 实际 %v", envelope["error_code"])
 	}
 }
 
-func TestReplacePills_AgentNotFound(t *testing.T) {
-	setupTestDB(t)
+// TestReplacePills_InvalidPillUUIDInBody 载荷非法同样 410,且不产生任何写入
+func TestReplacePills_InvalidPillUUIDInBody(t *testing.T) {
+	db := setupTestDB(t)
+	agentUUID, _ := seedAgentWithPillsForReplace(t, db, 1)
 	r := setupReplacePillsRouter()
-	status, _ := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", uuid.NewString()), `{"pills":[]}`)
-	if status != http.StatusNotFound {
-		t.Fatalf("道人不存在期望 404, 实际 %d", status)
+	status, envelope := putJSON(t, r, fmt.Sprintf("/api/v1/agents/%s/pills", agentUUID),
+		`{"pills":[{"pill_id": "not-a-uuid", "weight": 1}]}`)
+	if status != http.StatusGone {
+		t.Fatalf("非法金丹 UUID 期望 410, 实际 %d", status)
+	}
+	if ec, _ := envelope["error_code"].(string); ec != "pill.legacy_api_removed" {
+		t.Fatalf("期望 error_code=pill.legacy_api_removed, 实际 %v", envelope["error_code"])
+	}
+	var count int64
+	db.Model(&model.AgentPill{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("410 后仍写入 %d 条绑定", count)
 	}
 }

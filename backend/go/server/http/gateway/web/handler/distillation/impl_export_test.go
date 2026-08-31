@@ -16,6 +16,7 @@ import (
 	nudist "github.com/alchemy-furnace/server/internal/distillation"
 	"github.com/alchemy-furnace/server/internal/service/credential"
 	"github.com/alchemy-furnace/server/internal/service/distillation_service"
+	"github.com/alchemy-furnace/server/internal/service/pill_inventory_service"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/middleware"
 
@@ -39,7 +40,11 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("获取底层连接失败: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
-	if err := db.AutoMigrate(&model.ElixirPill{}); err != nil {
+	if err := db.AutoMigrate(
+		&model.PillRecipe{}, &model.PillRecipeRevision{}, &model.PillLegacyMap{},
+		&model.PillItem{}, &model.AgentPillEffect{}, &model.PillOperation{},
+		&model.FusionPreview{}, &model.PillMigrationState{}, &model.PillStarterGrant{},
+	); err != nil {
 		t.Fatalf("迁移测试表失败: %v", err)
 	}
 	dao.DB = db
@@ -83,7 +88,8 @@ func setupSkillExportRouter(db *gorm.DB, client nudist.Client) (*gin.Engine, *fa
 	r := gin.New()
 	r.Use(middleware.RequestID())
 	fake, _ := client.(*fakeExportClient)
-	h := New(distillation_service.New(client, fakeExportResolver{}, dao.NewPillDao()))
+	inventory := pill_inventory_service.New(db, time.Now)
+	h := New(distillation_service.New(client, fakeExportResolver{}, inventory))
 	r.POST("/api/v1/distillation/skill-export", h.SkillExport)
 	return r, fake
 }
@@ -143,34 +149,132 @@ func TestSkillExport_StructuredModeReturnsZip(t *testing.T) {
 	}
 }
 
-func TestSkillExport_PillIDModeLoadsSavedPill(t *testing.T) {
+// seedRecipe 造一份丹方 + n 个版本(Revision 1..n),当前版本指向最新,返回 (丹方, 版本列表)
+func seedRecipe(t *testing.T, db *gorm.DB, n int) (model.PillRecipe, []model.PillRecipeRevision) {
+	t.Helper()
+	recipe := model.PillRecipe{}
+	if err := db.Create(&recipe).Error; err != nil {
+		t.Fatalf("建丹方失败: %v", err)
+	}
+	revs := make([]model.PillRecipeRevision, 0, n)
+	for i := 1; i <= n; i++ {
+		rev := model.PillRecipeRevision{
+			RecipeID:    recipe.ID,
+			Revision:    i,
+			Name:        fmt.Sprintf("丹方 v%d", i),
+			Description: fmt.Sprintf("第 %d 版简介", i),
+			SkillSchema: model.JSONMap{"identity_card": "x"},
+			Tags:        model.JSONList{"语言"},
+		}
+		if err := db.Create(&rev).Error; err != nil {
+			t.Fatalf("建版本失败: %v", err)
+		}
+		revs = append(revs, rev)
+	}
+	latest := revs[len(revs)-1]
+	if err := db.Model(&recipe).Update("current_revision_id", latest.ID).Error; err != nil {
+		t.Fatalf("指向当前版本失败: %v", err)
+	}
+	return recipe, revs
+}
+
+// TestSkillExport_LegacyPillIDResolvedViaMap 旧 pill ID 只经 LegacyMap 解析到丹方当前版本,
+// 不读取可用库存;导出后丹方只读
+func TestSkillExport_LegacyPillIDResolvedViaMap(t *testing.T) {
 	db := setupTestDB(t)
-	pill := model.ElixirPill{Name: "已保存金丹", Description: "已保存的金丹简介", SkillSchema: model.JSONMap{"identity_card": "x"}, Tags: model.JSONList{"语言"}}
-	if err := db.Create(&pill).Error; err != nil {
-		t.Fatalf("创建金丹失败: %v", err)
+	recipe, _ := seedRecipe(t, db, 1)
+	legacyID := "550e8400-e29b-41d4-a716-446655440000"
+	if err := db.Create(&model.PillLegacyMap{
+		LegacyKind: "pill", LegacyID: legacyID, TargetUUID: recipe.UUID,
+	}).Error; err != nil {
+		t.Fatalf("建旧映射失败: %v", err)
 	}
 	client := &fakeExportClient{result: &nudist.ExportResult{Filename: "alchemy-skill-x-claude.zip", Content: []byte("PK")}}
 	r, fake := setupSkillExportRouter(db, client)
 
-	body := fmt.Sprintf(`{"pill_id": %q, "format": "claude"}`, pill.UUID.String())
+	body := fmt.Sprintf(`{"pill_id": %q, "format": "claude"}`, legacyID)
 	status, raw, _ := postSkillExport(t, r, body)
 
 	if status != http.StatusOK {
 		t.Fatalf("期望 200, 实际 %d, body=%s", status, raw)
 	}
-	if fake.skill == nil || fake.skill.Name != "已保存金丹" || fake.skill.Description != "已保存的金丹简介" {
-		t.Fatalf("服务端未按 pill_id 重装载金丹: %+v", fake.skill)
+	if fake.skill == nil || fake.skill.Name != "丹方 v1" || fake.skill.Description != "第 1 版简介" {
+		t.Fatalf("服务端未按 LegacyMap 解析到丹方版本: %+v", fake.skill)
 	}
 	if fake.skill.EvidenceLevel != "limited" || fake.skill.GeneratedAt == "" {
-		t.Fatalf("pill 模式投影字段异常: %+v", fake.skill)
+		t.Fatalf("版本投影字段异常: %+v", fake.skill)
 	}
-	// 接口只读: 金丹不得被删除或修改
-	var after model.ElixirPill
-	if err := db.First(&after, "uuid = ?", pill.UUID.String()).Error; err != nil {
-		t.Fatalf("导出后金丹丢失: %v", err)
+	// 接口只读: 丹方/版本不得被修改或删除
+	var revCount int64
+	db.Model(&model.PillRecipeRevision{}).Where("recipe_id = ?", recipe.ID).Count(&revCount)
+	if revCount != 1 {
+		t.Fatalf("导出后版本数 = %d, 期望 1", revCount)
 	}
-	if after.Name != "已保存金丹" {
-		t.Fatalf("导出修改了金丹: %+v", after)
+}
+
+// TestSkillExport_RecipeIDExportsCurrentRevision recipe_id 单独 → 导出当前版本(v2)
+func TestSkillExport_RecipeIDExportsCurrentRevision(t *testing.T) {
+	db := setupTestDB(t)
+	recipe, _ := seedRecipe(t, db, 2)
+	client := &fakeExportClient{result: &nudist.ExportResult{Filename: "x.zip", Content: []byte("PK")}}
+	r, fake := setupSkillExportRouter(db, client)
+
+	body := fmt.Sprintf(`{"recipe_id": %q, "format": "codex"}`, recipe.UUID.String())
+	status, raw, _ := postSkillExport(t, r, body)
+
+	if status != http.StatusOK {
+		t.Fatalf("期望 200, 实际 %d, body=%s", status, raw)
+	}
+	if fake.skill == nil || fake.skill.Name != "丹方 v2" {
+		t.Fatalf("应导出当前版本 v2: %+v", fake.skill)
+	}
+}
+
+// TestSkillExport_RevisionIDExportsSpecifiedRevision recipe_id+revision_id → 指定旧版本
+func TestSkillExport_RevisionIDExportsSpecifiedRevision(t *testing.T) {
+	db := setupTestDB(t)
+	recipe, revs := seedRecipe(t, db, 2)
+	client := &fakeExportClient{result: &nudist.ExportResult{Filename: "x.zip", Content: []byte("PK")}}
+	r, fake := setupSkillExportRouter(db, client)
+
+	body := fmt.Sprintf(`{"recipe_id": %q, "revision_id": %q, "format": "codex"}`,
+		recipe.UUID.String(), revs[0].UUID.String())
+	status, raw, _ := postSkillExport(t, r, body)
+
+	if status != http.StatusOK {
+		t.Fatalf("期望 200, 实际 %d, body=%s", status, raw)
+	}
+	if fake.skill == nil || fake.skill.Name != "丹方 v1" {
+		t.Fatalf("应导出指定版本 v1: %+v", fake.skill)
+	}
+}
+
+// TestSkillExport_RevisionOfOtherRecipe404 revision 不属于 URL 的丹方 → 404
+func TestSkillExport_RevisionOfOtherRecipe404(t *testing.T) {
+	db := setupTestDB(t)
+	recipeA, _ := seedRecipe(t, db, 1)
+	_, revsB := seedRecipe(t, db, 1)
+	r, _ := setupSkillExportRouter(db, &fakeExportClient{})
+
+	body := fmt.Sprintf(`{"recipe_id": %q, "revision_id": %q, "format": "codex"}`,
+		recipeA.UUID.String(), revsB[0].UUID.String())
+	status, raw, _ := postSkillExport(t, r, body)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("跨丹方版本期望 404, 实际 %d, body=%s", status, raw)
+	}
+}
+
+// TestSkillExport_UnknownRecipe404 未知丹方 → 404
+func TestSkillExport_UnknownRecipe404(t *testing.T) {
+	db := setupTestDB(t)
+	r, _ := setupSkillExportRouter(db, &fakeExportClient{})
+
+	body := fmt.Sprintf(`{"recipe_id": %q, "format": "codex"}`, uuid.NewString())
+	status, raw, _ := postSkillExport(t, r, body)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("未知丹方期望 404, 实际 %d, body=%s", status, raw)
 	}
 }
 
@@ -233,6 +337,7 @@ func TestSkillExport_CredentialFieldsForbidden(t *testing.T) {
 	}
 }
 
+// TestSkillExport_PillNotFound 旧 pill ID 无 LegacyMap 映射 → 404,不读取可用库存
 func TestSkillExport_PillNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	r, _ := setupSkillExportRouter(db, &fakeExportClient{})

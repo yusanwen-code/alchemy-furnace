@@ -531,6 +531,41 @@ func TestGroupTurnAllPass(t *testing.T) {
 	}
 }
 
+func TestGroupTurnOrdinaryQuestionAlwaysSelectsPrimarySpeaker(t *testing.T) {
+	svc, chats, _, s := newGroupSvc(t, []string{"主道人应当回答这个问题"})
+	chats.agentByID[1].Proactivity = 0
+	chats.agentByID[2].Proactivity = 0
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "请回答这个问题", log.emit)
+	if countEvent(log, "speaker_done") != 1 {
+		t.Fatalf("ordinary question must have one primary speaker: %v", log.events)
+	}
+}
+
+func TestGroupTurnConciseEnforcesSpeakerLimit(t *testing.T) {
+	svc, chats, _, s := newGroupSvc(t, []string{"第一位回答", "第二位回答"})
+	chats.agentByID[1].Proactivity = 100
+	chats.agentByID[2].Proactivity = 100
+	log := &eventLog{}
+	svc.RunGroupTurn(context.Background(), s.UUID, "简短回答", log.emit)
+	if countEvent(log, "speaker_done") > 1 {
+		t.Fatalf("concise turn must not exceed one speaker: %v", log.events)
+	}
+}
+
+func TestGroupTurnMentionedPassIsVisibleFailure(t *testing.T) {
+	svc, _, _, s := newGroupSvc(t, []string{"[PASS]"})
+	var sawError bool
+	svc.RunGroupTurn(context.Background(), s.UUID, "@孙悟空 请回答", func(event string, payload any) {
+		if event == "error" {
+			sawError = true
+		}
+	})
+	if !sawError {
+		t.Fatal("a mentioned speaker returning PASS must produce a visible failure")
+	}
+}
+
 func TestGroupTurnMustAnswer(t *testing.T) {
 	svc, chats, _, s := newGroupSvc(t, []string{"俺老孙来也", "[PASS]"})
 	log := &eventLog{}

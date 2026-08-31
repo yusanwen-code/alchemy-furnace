@@ -72,10 +72,18 @@ func main() {
 	if err := dao.MaybeAutoMigrate(); err != nil {
 		log.Fatalf("[炼丹炉] 自动建表失败: %v", err)
 	}
-	// 桌面安装包没有运维命令入口，首次启动必须自动准备内置金丹。
-	// SeedBuiltinPills 按名称幂等写入，不覆盖用户已存在的数据。
-	if err := dao.SeedBuiltinPills(dao.GetDB()); err != nil {
-		log.Fatalf("[炼丹炉] 初始化内置金丹失败: %v", err)
+	// 金丹消耗品重构：旧 seed 必须先被替换——先做库存迁移(旧金丹定义→丹方/库存/能力快照,
+	// 内部含升级前一致性备份与回填数量断言)，再确保内置丹方存在(按版本名幂等)，
+	// 最后按迁移报告判定：新用户每丹方赠送 1 枚可用金丹(granted)，迁移用户只记 legacy_accounted 不再领取。
+	// 顺序不可颠倒：若旧 SeedBuiltinPills 先写入，空库会被误判为待迁移旧用户，新安装将拿不到赠送。
+	if err := dao.MigratePillInventory(dao.GetDB()); err != nil {
+		log.Fatalf("[炼丹炉] 金丹库存迁移失败: %v", err)
+	}
+	if err := dao.SeedBuiltinRecipes(dao.GetDB()); err != nil {
+		log.Fatalf("[炼丹炉] 初始化内置丹方失败: %v", err)
+	}
+	if err := dao.GrantStarterPills(dao.GetDB()); err != nil {
+		log.Fatalf("[炼丹炉] 初始化内置金丹赠送失败: %v", err)
 	}
 	go func() {
 		_, stop, err := engineproc.Start(context.Background())

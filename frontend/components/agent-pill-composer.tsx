@@ -1,41 +1,43 @@
 'use client'
 
 /**
- * 服丹编排受控组件
+ * 能力编排受控组件（金丹消耗品重构任务 6：pill_id → effect_id）
  * - 输入输出均为最终数组(value/onChange),自身不触网、不持久化
  * - 行以草稿 key 作 React key;排序仅通过键盘可访问的上移/下移按钮(无拖拽)
- * - 剂量 0-10;越界不在此处拦截,由上层保存校验经 fieldErrors(pills.<key>.weight)回显
+ * - 池 = 道人已吸收能力（服用快照），新增只能在已吸收能力内做权重/顺序编排；
+ *   不能再凭空绑定金丹（服用消耗库存后能力独立存在）
+ * - 剂量 0-10;越界不在此处拦截,由上层保存校验经 fieldErrors(effects.<key>.weight)回显
  */
 import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, FlaskConical, Trash2 } from 'lucide-react'
-import type { AgentPillDraftItem, Pill } from '@/services/types'
+import type { AgentEffectDraftItem, AgentEffect } from '@/services/types'
 
 export interface AgentPillComposerProps {
-  /** 当前服丹编排草稿(最终顺序) */
-  value: AgentPillDraftItem[]
+  /** 当前能力编排草稿(最终顺序) */
+  value: AgentEffectDraftItem[]
   /** 任何增/删/改/排序都输出完整新数组 */
-  onChange: (next: AgentPillDraftItem[]) => void
-  /** 金丹阁全部金丹(名称展示 + 新增选择) */
-  pills: Pill[]
-  /** 字段级校验错误(键为 pills.<key>.weight,值为机器码如 range,组件侧映射文案) */
+  onChange: (next: AgentEffectDraftItem[]) => void
+  /** 道人已吸收能力(名称展示 + 新增选择) */
+  effects: AgentEffect[]
+  /** 字段级校验错误(键为 effects.<key>.weight,值为机器码如 range,组件侧映射文案) */
   fieldErrors?: Record<string, string>
 }
 
 export function AgentPillComposer({
   value,
   onChange,
-  pills,
+  effects,
   fieldErrors,
 }: AgentPillComposerProps) {
   const t = useTranslations('agent.composer')
 
-  const nameOf = (pillId: string) =>
-    pills.find(p => p.id === pillId)?.name ?? t('unknownPill')
+  const nameOf = (effectId: string) =>
+    effects.find(e => e.id === effectId)?.name ?? t('unknownPill')
 
   /** 机器码 -> 文案(未知机器码原样展示,不吞错) */
   const formatError = (code: string) => (code === 'range' ? t('weightError') : code)
 
-  const available = pills.filter(p => !value.some(item => item.pill_id === p.id))
+  const available = effects.filter(e => !value.some(item => item.effect_id === e.id))
 
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction
@@ -54,9 +56,9 @@ export function AgentPillComposer({
     onChange(value.map(item => (item.key === key ? { ...item, weight } : item)))
   }
 
-  const add = (pillId: string) => {
-    if (!pillId || value.some(item => item.pill_id === pillId)) return
-    onChange([...value, { key: pillId, pill_id: pillId, weight: 1 }])
+  const add = (effectId: string) => {
+    if (!effectId || value.some(item => item.effect_id === effectId)) return
+    onChange([...value, { key: effectId, effect_id: effectId, weight: 1 }])
   }
 
   return (
@@ -66,8 +68,8 @@ export function AgentPillComposer({
       )}
 
       {value.map((item, index) => {
-        const name = nameOf(item.pill_id)
-        const errorCode = fieldErrors?.[`pills.${item.key}.weight`]
+        const name = nameOf(item.effect_id)
+        const errorCode = fieldErrors?.[`effects.${item.key}.weight`]
         return (
           <div
             key={item.key}
@@ -144,9 +146,9 @@ export function AgentPillComposer({
           <option value="" disabled>
             {t('addPlaceholder')}
           </option>
-          {available.map(pill => (
-            <option key={pill.id} value={pill.id}>
-              {pill.name}
+          {available.map(effect => (
+            <option key={effect.id} value={effect.id}>
+              {effect.name}
             </option>
           ))}
         </select>

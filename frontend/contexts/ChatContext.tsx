@@ -770,13 +770,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           speakerPartial = false
         }
       },
-      onTurnDone: () => {
+      onTurnDone: (info) => {
         if (!isActiveStream() || turnTerminated) return
         turnTerminated = true
         activeSpeaker = null
         speakerPartial = false
         turnPartial = false
         chunker.markDone()
+        if (info.reason === 'user_stop') {
+          dispatch({ type: 'ADD_SYSTEM_NOTICE', payload: { text: '已按你的要求停止', isError: false } })
+        } else if (info.reason && info.reason !== 'answered') {
+          dispatch({ type: 'ADD_ERROR_MESSAGE', payload: { text: '本轮未收到有效回复，请重试', recovery: 'persisted_retry' } })
+        }
         dispatch({ type: 'FINISH_STREAM' })
         // T6: 群聊回合完成提醒
         notifyDesktop()

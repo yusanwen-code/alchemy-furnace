@@ -1,41 +1,24 @@
+// 旧服用入口（任务 5 起下线）
+// 服用金丹改 POST /api/v1/agents/:id/consume（Idempotency-Key 幂等契约）
+// （plan 任务 5 行 430：绑定写路由返回 410 pill.legacy_api_removed）。
 package agent
 
 import (
-	"github.com/alchemy-furnace/server/internal/context/contextutil"
 	"github.com/alchemy-furnace/server/internal/errors"
-	"github.com/alchemy-furnace/server/server/http/request"
 	"github.com/alchemy-furnace/server/server/http/response"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
-// BindPillRequest 服用金丹请求:pill_id 为金丹 UUID 字符串
+// BindPillRequest 旧服用金丹请求契约（保留以文档化旧客户端载荷；接口已下线）
 type BindPillRequest struct {
 	PillID    string  `json:"pill_id" binding:"required"`
 	Weight    float64 `json:"weight" binding:"gte=0,lte=10"`
 	SortOrder int     `json:"sort_order" binding:"gte=0"`
 }
 
-// BindPill 道人服用金丹
-// POST /api/v1/agents/:uuid/pills
+// BindPill 旧服用入口已下线
+// POST /api/v1/agents/:uuid/pills → 410
 func (cls *Agent) BindPill(c *gin.Context) (response.Code, any, error) {
-	agentUID, err := parseUUID(c)
-	if err != nil {
-		return response.InvalidParams, nil, err
-	}
-
-	var body BindPillRequest
-	if berr := request.ShouldBindJSON(c, &body); berr != nil {
-		return response.InvalidParams, nil, berr
-	}
-
-	pillUID, perr := uuid.Parse(body.PillID)
-	if perr != nil {
-		return response.InvalidParams, nil, errors.New(errors.ErrorTypeInvalidRequest, "handler.agent.bind.pill_uuid", "金丹ID格式不正确")
-	}
-
-	if serr := cls.agent.BindPill(contextutil.NewContextWithGin(c), agentUID, pillUID, body.Weight, body.SortOrder); serr != nil {
-		return response.CodeBindPillFailed, nil, serr
-	}
-	return response.Ok, gin.H{"bound": true}, nil
+	return 0, nil, errors.ErrorGone("pill.legacy_api_removed",
+		"金丹消耗品重构：旧绑定接口已下线，服用请使用 /api/v1/agents/:id/consume")
 }

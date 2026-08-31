@@ -92,3 +92,16 @@ func TestExtractUserTurnConstraintsLatestQuestion(t *testing.T) {
 		t.Fatalf("空输入 LatestQuestion = %q", c.LatestQuestion)
 	}
 }
+
+func TestExtractUserTurnConstraintsDoesNotTreatContextAsStop(t *testing.T) {
+	for _, msg := range []string{
+		"这个预算够了吗？",
+		"他对我说‘别说了’，我该怎么办？",
+		"你为什么不聊了？",
+		"如果够了就告诉我，还不够请继续分析",
+	} {
+		if c := ExtractUserTurnConstraints(msg); c.WantsStop {
+			t.Fatalf("普通疑问/转述不应停止: %q", msg)
+		}
+	}
+}

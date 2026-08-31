@@ -42,15 +42,11 @@ const testDoubles = vi.hoisted(() => ({
   chatDispatch: vi.fn(),
   fetchAgents: vi.fn(),
   fetchAgent: vi.fn(),
-  bindPill: vi.fn(),
-  unbindPill: vi.fn(),
-  updateAgentPill: vi.fn(),
   editAgent: vi.fn(),
   agentDispatch: vi.fn(),
-  fetchPills: vi.fn(),
-  pillDispatch: vi.fn(),
   modelOptions: vi.fn(),
   getChatReadiness: vi.fn(),
+  listEffects: vi.fn(),
   chatState: {
     sessions: [] as ChatSession[],
     currentSession: null as ChatSession | null,
@@ -125,24 +121,7 @@ vi.mock('@/contexts/AgentContext', () => ({
     dispatch: testDoubles.agentDispatch,
     fetchAgents: testDoubles.fetchAgents,
     fetchAgent: testDoubles.fetchAgent,
-    bindPill: testDoubles.bindPill,
-    unbindPill: testDoubles.unbindPill,
-    updateAgentPill: testDoubles.updateAgentPill,
     editAgent: testDoubles.editAgent,
-  }),
-}))
-
-vi.mock('@/contexts/PillContext', () => ({
-  usePill: () => ({
-    state: {
-      pills: [],
-      total: 0,
-      currentPill: null,
-      loading: false,
-      error: null,
-    },
-    dispatch: testDoubles.pillDispatch,
-    fetchPills: testDoubles.fetchPills,
   }),
 }))
 
@@ -157,6 +136,13 @@ vi.mock('@/services/chatService', async (importOriginal) => {
     getChatReadiness: testDoubles.getChatReadiness,
   }
 })
+
+// agent-detail 挂载会拉取能力列表:默认空集合,避免 jsdom 真实 fetch 失败触发 effectsLoadFailed alert
+vi.mock('@/services/pillInventoryService', () => ({
+  listEffects: testDoubles.listEffects,
+  updateEffects: vi.fn(),
+  removeEffect: vi.fn(),
+}))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -200,7 +186,6 @@ describe('chat launch surfaces', () => {
     testDoubles.fetchSessions.mockResolvedValue(undefined)
     testDoubles.fetchAgents.mockResolvedValue(undefined)
     testDoubles.fetchAgent.mockResolvedValue(undefined)
-    testDoubles.fetchPills.mockResolvedValue(undefined)
     testDoubles.modelOptions.mockResolvedValue([])
     testDoubles.getChatReadiness.mockResolvedValue({
       active_agent_count: 2,
@@ -208,6 +193,7 @@ describe('chat launch surfaces', () => {
       can_create_single: true,
       can_create_group: true,
     })
+    testDoubles.listEffects.mockResolvedValue({ effects_revision: 0, effects: [] })
   })
 
   it('renders the lobby skeleton immediately while readiness calls remain pending', () => {

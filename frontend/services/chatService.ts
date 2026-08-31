@@ -126,7 +126,11 @@ export interface StreamHandlers {
   /** 群聊: 某道人发言完毕(已入库) */
   onSpeakerDone?: (info: StreamSpeakerInfo & { message_id?: string; mentions?: ChatMessage['mentions'] }) => void
   /** 群聊: 回合结束(spoke=本回合发言总数) */
-  onTurnDone?: (info: { spoke: number }) => void
+  onTurnDone?: (info: {
+    spoke: number
+    reason?: 'answered' | 'user_stop' | 'no_available_speaker' | 'failed'
+    failed_speakers?: number
+  }) => void
   /** 自动命名成功(单/群聊) */
   onTitle?: (title: string) => void
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/service"
+	"github.com/alchemy-furnace/server/internal/service/pill_inventory_service"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
@@ -33,13 +34,16 @@ func setupServiceTestDB(t *testing.T) (*Agent, *gorm.DB) {
 	sqlDB.SetMaxOpenConns(1)
 	if err := db.AutoMigrate(
 		&model.DaoAgent{}, &model.ElixirPill{}, &model.AgentPill{}, &model.LanguagePattern{},
+		&model.AgentPillEffect{}, &model.PillItem{},
+		&model.PillRecipe{}, &model.PillRecipeRevision{}, &model.PillOperation{},
+		&model.FusionPreview{}, &model.PillMigrationState{}, &model.PillLegacyMap{}, &model.PillStarterGrant{},
 		&model.ChatSession{}, &model.SessionMember{}, &model.LLMProvider{}, &model.LLMModel{},
 	); err != nil {
 		t.Fatalf("迁移测试表失败: %v", err)
 	}
 	dao.DB = db
 	t.Cleanup(func() { dao.DB = nil })
-	return New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), db
+	return New(dao.NewAgentDao(), dao.NewModelDao(), pill_inventory_service.New(db, time.Now)), db
 }
 
 // seedAgentAndPills 造一个道人与 n 枚金丹
@@ -60,111 +64,233 @@ func seedAgentAndPills(t *testing.T, db *gorm.DB, pillCount int) (*model.DaoAgen
 	return agent, pills
 }
 
-func TestReplacePillComposition_SuccessOrdersAndWeights(t *testing.T) {
+// ---------- 任务 3 Step C: 服务层不得保留绕过库存的写路径 ----------
+
+// craftTestItem 经库存服务炼一枚可用金丹实例并返回实例 UUID
+func craftTestItem(t *testing.T, db *gorm.DB, name string) uuid.UUID {
+	t.Helper()
+	inv := pill_inventory_service.New(db, time.Now)
+	res, err := inv.SaveRecipe(context.Background(), service.SaveRecipeRequest{
+		OperationID: uuid.New(),
+		CraftOne:    true,
+		Draft: service.RecipeDraft{
+			Name: name, Description: "测试",
+			SkillSchema: model.JSONMap{"expression_dna": map[string]any{"sentence_length": "mixed"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("炼制实例失败: %v", err)
+	}
+	if len(res.ItemIDs) != 1 {
+		t.Fatalf("期望 1 枚实例, 实际 %d", len(res.ItemIDs))
+	}
+	return res.ItemIDs[0]
+}
+
+// TestReplacePillComposition_RemovedFromService 完整服丹编排已在服务层下线:
+// 任意输入返回 410 pill.legacy_api_removed,且不产生任何绑定写入(防绕过库存)
+func TestReplacePillComposition_RemovedFromService(t *testing.T) {
 	svc, db := setupServiceTestDB(t)
-	agent, pills := seedAgentAndPills(t, db, 3)
-	// 预置有效缓存,成功后应失效
+	agent, pills := seedAgentAndPills(t, db, 2)
+	detail, err := svc.ReplacePillComposition(context.Background(), agent.UUID, []service.PillCompositionItem{
+		{PillUUID: pills[0].UUID, Weight: 2.5},
+	})
+	if err == nil {
+		t.Fatal("ReplacePillComposition 应返回 410 gone, 实际 nil")
+	}
+	assertErrType(t, err, errors.ErrorTypeGone, "完整编排入口")
+	if err.GetCode() != "pill.legacy_api_removed" {
+		t.Fatalf("错误码 = %s, 期望 pill.legacy_api_removed", err.GetCode())
+	}
+	if detail != nil {
+		t.Fatal("410 不应返回道人详情")
+	}
+	var count int64
+	db.Model(&model.AgentPill{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("410 不应产生任何绑定, 实际 %d 条", count)
+	}
+}
+
+// TestReplacePillComposition_InvalidInputAlsoGone 非法输入/空数组一律 410,不再做旧校验
+// (清空编排不是移除能力,改走 UnbindPill)
+func TestReplacePillComposition_InvalidInputAlsoGone(t *testing.T) {
+	svc, db := setupServiceTestDB(t)
+	agent, _ := seedAgentAndPills(t, db, 0)
+	for _, items := range [][]service.PillCompositionItem{
+		{{PillUUID: uuid.New(), Weight: 1}},
+		{{PillUUID: uuid.New(), Weight: 0}},
+		{{PillUUID: uuid.New(), Weight: 1}, {PillUUID: uuid.New(), Weight: 1}},
+		nil,
+	} {
+		_, err := svc.ReplacePillComposition(context.Background(), agent.UUID, items)
+		assertErrType(t, err, errors.ErrorTypeGone, "非法输入也应 410")
+	}
+}
+
+// ---------- 任务 3 Step C: 服用/移除/调权必须经过库存 ----------
+
+// TestBindPillConsumesInventoryItem 服用走库存: 实例 available→consumed_by_agent,
+// 生成能力快照(身份=实例 UUID,权重/顺序=请求值), EffectsRevision 递增, 缓存失效
+func TestBindPillConsumesInventoryItem(t *testing.T) {
+	svc, db := setupServiceTestDB(t)
+	agent, _ := seedAgentAndPills(t, db, 0)
+	itemID := craftTestItem(t, db, "服丹测试")
+	// 预置有效缓存,服用后应失效
 	if err := db.Create(&model.LanguagePattern{AgentID: agent.ID, SystemPrompt: "c", SourceFingerprint: "sha256:x", IsValid: true}).Error; err != nil {
 		t.Fatalf("建缓存失败: %v", err)
 	}
 
-	// 故意乱序 + 自定义权重
-	items := []service.PillCompositionItem{
-		{PillUUID: pills[2].UUID, Weight: 2.5},
-		{PillUUID: pills[0].UUID, Weight: 1.0},
-		{PillUUID: pills[1].UUID, Weight: 0.5},
-	}
-	detail, err := svc.ReplacePillComposition(context.Background(), agent.UUID, items)
-	if err != nil {
-		t.Fatalf("ReplacePillComposition 报错: %v", err)
-	}
-	if len(detail.AgentPills) != 3 {
-		t.Fatalf("服用记录数 = %d, 期望 3", len(detail.AgentPills))
-	}
-	want := []uuid.UUID{pills[2].UUID, pills[0].UUID, pills[1].UUID}
-	wantW := []float64{2.5, 1.0, 0.5}
-	for i, ap := range detail.AgentPills {
-		if ap.Pill.UUID != want[i] {
-			t.Fatalf("第 %d 位 pill = %s, 期望 %s(顺序应保持请求顺序)", i, ap.Pill.UUID, want[i])
-		}
-		if ap.Weight != wantW[i] {
-			t.Fatalf("第 %d 位 weight = %v, 期望 %v", i, ap.Weight, wantW[i])
-		}
-		if ap.SortOrder != i+1 {
-			t.Fatalf("第 %d 位 sort_order = %d, 期望 %d", i, ap.SortOrder, i+1)
-		}
+	if err := svc.BindPill(context.Background(), agent.UUID, itemID, 2.5, 3); err != nil {
+		t.Fatalf("BindPill 报错: %v", err)
 	}
 
-	// 缓存已失效
+	// 实例已消耗,去向可读
+	var item model.PillItem
+	if err := db.Where("uuid = ?", itemID).First(&item).Error; err != nil {
+		t.Fatalf("查实例失败: %v", err)
+	}
+	if item.State != model.PillConsumedByAgent {
+		t.Fatalf("实例状态 = %s, 期望 consumed_by_agent", item.State)
+	}
+
+	// 能力快照生成(身份=实例 UUID)
+	var ef model.AgentPillEffect
+	if err := db.Preload("Item").Where("agent_id = ?", agent.ID).First(&ef).Error; err != nil {
+		t.Fatalf("查能力快照失败: %v", err)
+	}
+	if ef.Item.UUID != itemID {
+		t.Fatalf("能力快照关联实例 = %s, 期望 %s", ef.Item.UUID, itemID)
+	}
+	if ef.Weight != 2.5 || ef.SortOrder != 3 {
+		t.Fatalf("权重/顺序 = %v/%v, 期望 2.5/3", ef.Weight, ef.SortOrder)
+	}
+
+	// EffectsRevision 递增 + 缓存失效
+	var reload model.DaoAgent
+	db.First(&reload, agent.ID)
+	if reload.EffectsRevision != 1 {
+		t.Fatalf("effects_revision = %d, 期望 1", reload.EffectsRevision)
+	}
 	var pattern model.LanguagePattern
-	if err := db.Where("agent_id = ?", agent.ID).First(&pattern).Error; err != nil {
-		t.Fatalf("读缓存失败: %v", err)
-	}
+	db.Where("agent_id = ?", agent.ID).First(&pattern)
 	if pattern.IsValid {
-		t.Fatal("语言模式缓存未被失效")
+		t.Fatal("服用后语言模式缓存未被失效")
 	}
 }
 
-func TestReplacePillComposition_EmptyClearsRelations(t *testing.T) {
+// TestBindPillDuplicateItemRejected 同一实例二次服用(不同幂等键)返回 409,
+// 不产生第二条能力;未知道人/未知实例返回 404
+func TestBindPillDuplicateItemRejected(t *testing.T) {
 	svc, db := setupServiceTestDB(t)
-	agent, pills := seedAgentAndPills(t, db, 2)
-	// 先有绑定
-	if _, err := svc.ReplacePillComposition(context.Background(), agent.UUID, []service.PillCompositionItem{
-		{PillUUID: pills[0].UUID, Weight: 1},
-		{PillUUID: pills[1].UUID, Weight: 1},
-	}); err != nil {
-		t.Fatalf("预置编排失败: %v", err)
+	agent, _ := seedAgentAndPills(t, db, 0)
+	itemID := craftTestItem(t, db, "重复服丹")
+	if err := svc.BindPill(context.Background(), agent.UUID, itemID, 1, 1); err != nil {
+		t.Fatalf("首次服用报错: %v", err)
 	}
-	// 空数组清空
-	detail, err := svc.ReplacePillComposition(context.Background(), agent.UUID, nil)
-	if err != nil {
-		t.Fatalf("空数组 ReplacePillComposition 报错: %v", err)
+	err := svc.BindPill(context.Background(), agent.UUID, itemID, 1, 2)
+	assertErrType(t, err, errors.ErrorTypeConflict, "重复服用同实例")
+	if err.GetCode() != "pill.not_available" {
+		t.Fatalf("错误码 = %s, 期望 pill.not_available", err.GetCode())
 	}
-	if len(detail.AgentPills) != 0 {
-		t.Fatalf("清空后服用记录数 = %d, 期望 0", len(detail.AgentPills))
-	}
-}
-
-func TestReplacePillComposition_DuplicateUUIDRejected(t *testing.T) {
-	svc, db := setupServiceTestDB(t)
-	agent, pills := seedAgentAndPills(t, db, 2)
-	_, err := svc.ReplacePillComposition(context.Background(), agent.UUID, []service.PillCompositionItem{
-		{PillUUID: pills[0].UUID, Weight: 1},
-		{PillUUID: pills[0].UUID, Weight: 2},
-	})
-	assertErrType(t, err, errors.ErrorTypeInvalidRequest, "重复金丹 UUID")
-	// 不应产生任何绑定
 	var count int64
-	if db.Model(&model.AgentPill{}).Where("agent_id = ?", agent.ID).Count(&count); count != 0 {
-		t.Fatalf("重复被拒后仍写入 %d 条绑定", count)
+	db.Model(&model.AgentPillEffect{}).Count(&count)
+	if count != 1 {
+		t.Fatalf("重复服用后能力数 = %d, 期望 1", count)
 	}
 }
 
-func TestReplacePillComposition_PillNotFound(t *testing.T) {
-	svc, db := setupServiceTestDB(t)
-	agent, pills := seedAgentAndPills(t, db, 1)
-	_, err := svc.ReplacePillComposition(context.Background(), agent.UUID, []service.PillCompositionItem{
-		{PillUUID: pills[0].UUID, Weight: 1},
-		{PillUUID: uuid.New(), Weight: 1}, // 不存在
-	})
-	assertErrType(t, err, errors.ErrorTypeRecordNotFound, "金丹不存在")
-}
-
-func TestReplacePillComposition_WeightOutOfRange(t *testing.T) {
-	svc, db := setupServiceTestDB(t)
-	agent, pills := seedAgentAndPills(t, db, 1)
-	for _, w := range []float64{0, -1, 10.5, 11} {
-		_, err := svc.ReplacePillComposition(context.Background(), agent.UUID, []service.PillCompositionItem{
-			{PillUUID: pills[0].UUID, Weight: w},
-		})
-		assertErrType(t, err, errors.ErrorTypeInvalidRequest, fmt.Sprintf("权重 %v 越界", w))
-	}
-}
-
-func TestReplacePillComposition_AgentNotFound(t *testing.T) {
+// TestBindPillUnknownTargets 未知实例/未知道人 → 404(服用事务内含校验)
+func TestBindPillUnknownTargets(t *testing.T) {
 	svc, _ := setupServiceTestDB(t)
-	_, err := svc.ReplacePillComposition(context.Background(), uuid.New(), nil)
-	assertErrType(t, err, errors.ErrorTypeRecordNotFound, "道人不存在的 UUID")
+	err := svc.BindPill(context.Background(), uuid.New(), uuid.New(), 1, 1)
+	assertErrType(t, err, errors.ErrorTypeRecordNotFound, "未知道人")
+}
+
+// TestUnbindPillRemovesEffectOnly 移除能力: 软删(removed_at 保留历史),EffectsRevision 递增,
+// 缓存失效;原实例保持 consumed_by_agent 不返还库存;二次移除 404
+func TestUnbindPillRemovesEffectOnly(t *testing.T) {
+	svc, db := setupServiceTestDB(t)
+	agent, _ := seedAgentAndPills(t, db, 0)
+	itemID := craftTestItem(t, db, "移除测试")
+	if err := svc.BindPill(context.Background(), agent.UUID, itemID, 1, 1); err != nil {
+		t.Fatalf("预置服用失败: %v", err)
+	}
+	// 预置有效缓存,移除后应失效
+	if err := db.Create(&model.LanguagePattern{AgentID: agent.ID, SystemPrompt: "c", SourceFingerprint: "sha256:x", IsValid: true}).Error; err != nil {
+		t.Fatalf("建缓存失败: %v", err)
+	}
+
+	if err := svc.UnbindPill(context.Background(), agent.UUID, itemID); err != nil {
+		t.Fatalf("UnbindPill 报错: %v", err)
+	}
+
+	var ef model.AgentPillEffect
+	if err := db.Where("agent_id = ?", agent.ID).First(&ef).Error; err != nil {
+		t.Fatalf("查能力失败: %v", err)
+	}
+	if ef.RemovedAt == nil {
+		t.Fatal("移除后 removed_at 应为非空(软删保留历史)")
+	}
+	// 实例不返还
+	var item model.PillItem
+	db.Where("uuid = ?", itemID).First(&item)
+	if item.State != model.PillConsumedByAgent {
+		t.Fatalf("移除能力后实例状态 = %s, 期望保持 consumed_by_agent", item.State)
+	}
+	// 版本递增(服用 1 + 移除 1)
+	var reload model.DaoAgent
+	db.First(&reload, agent.ID)
+	if reload.EffectsRevision != 2 {
+		t.Fatalf("effects_revision = %d, 期望 2", reload.EffectsRevision)
+	}
+	var pattern model.LanguagePattern
+	db.Where("agent_id = ?", agent.ID).First(&pattern)
+	if pattern.IsValid {
+		t.Fatal("移除能力后语言模式缓存未被失效")
+	}
+	// 再次移除 → 404(无活跃能力)
+	err := svc.UnbindPill(context.Background(), agent.UUID, itemID)
+	assertErrType(t, err, errors.ErrorTypeRecordNotFound, "二次移除")
+}
+
+// TestUpdateAgentPillUpdatesEffect 调整权重/顺序走能力表(实例 UUID 标识),
+// 递增 EffectsRevision + 失效缓存;未吸收实例 404
+func TestUpdateAgentPillUpdatesEffect(t *testing.T) {
+	svc, db := setupServiceTestDB(t)
+	agent, _ := seedAgentAndPills(t, db, 0)
+	itemID := craftTestItem(t, db, "调权测试")
+	if err := svc.BindPill(context.Background(), agent.UUID, itemID, 1, 1); err != nil {
+		t.Fatalf("预置服用失败: %v", err)
+	}
+	if err := db.Create(&model.LanguagePattern{AgentID: agent.ID, SystemPrompt: "c", SourceFingerprint: "sha256:x", IsValid: true}).Error; err != nil {
+		t.Fatalf("建缓存失败: %v", err)
+	}
+
+	w, s := 2.0, 4
+	if err := svc.UpdateAgentPill(context.Background(), agent.UUID, itemID, &w, &s); err != nil {
+		t.Fatalf("UpdateAgentPill 报错: %v", err)
+	}
+	var ef model.AgentPillEffect
+	if err := db.Where("agent_id = ?", agent.ID).First(&ef).Error; err != nil {
+		t.Fatalf("查能力失败: %v", err)
+	}
+	if ef.Weight != 2 || ef.SortOrder != 4 {
+		t.Fatalf("权重/顺序 = %v/%v, 期望 2/4", ef.Weight, ef.SortOrder)
+	}
+	var reload model.DaoAgent
+	db.First(&reload, agent.ID)
+	if reload.EffectsRevision != 2 {
+		t.Fatalf("effects_revision = %d, 期望 2", reload.EffectsRevision)
+	}
+	var pattern model.LanguagePattern
+	db.Where("agent_id = ?", agent.ID).First(&pattern)
+	if pattern.IsValid {
+		t.Fatal("调整权重后语言模式缓存未被失效")
+	}
+	// 未吸收实例 → 404
+	err := svc.UpdateAgentPill(context.Background(), agent.UUID, uuid.New(), &w, &s)
+	assertErrType(t, err, errors.ErrorTypeRecordNotFound, "未知实例调权")
 }
 
 // seedEnabledModel 造一个已启用供应商下的已启用模型

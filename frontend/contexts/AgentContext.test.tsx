@@ -26,7 +26,6 @@ const agentA: AgentDetail = {
   proactivity: 60,
   created_at: '2026-08-20T00:00:00Z',
   updated_at: '2026-08-20T00:00:00Z',
-  agent_pills: [],
   language_pattern: {
     is_valid: false,
     system_prompt: '',

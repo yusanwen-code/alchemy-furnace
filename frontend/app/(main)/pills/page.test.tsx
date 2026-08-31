@@ -3,18 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import PillsPage from '@/app/(main)/pills/page'
-import { PillProvider } from '@/contexts/PillContext'
-import type { DistillationDraft, Pill } from '@/services/types'
+import type { PillItemListItem } from '@/services/types'
 
 // ---- 可变的测试替身 ----
 const td = vi.hoisted(() => ({
-  listPills: vi.fn(),
-  createPill: vi.fn(),
-  distillNuwa: vi.fn(),
-  push: vi.fn(),
+  listPillItems: vi.fn(),
 }))
 
-// 真实消息解析(命名空间点路径 + {value} 插值,与 agents page.test 一致)
+// 真实消息解析(命名空间点路径 + {value} 插值,与旧 pills page test 一致)
 function resolveMsg(
   messages: unknown,
   namespace: string,
@@ -44,122 +40,120 @@ vi.mock('next-intl', async () => {
 })
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: td.push }),
+  useRouter: () => ({ push: vi.fn() }),
 }))
 
-vi.mock('@/services/pillService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/services/pillService')>()
-  return { ...actual, listPills: td.listPills, createPill: td.createPill }
+vi.mock('@/services/pillInventoryService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/pillInventoryService')>()
+  return { ...actual, listPillItems: td.listPillItems }
 })
 
-// 女娲面板走真实组件(断言其渲染与 distillNuwa 调用),仅 mock 其网络依赖
-vi.mock('@/services/distillationService', () => ({
-  distillNuwa: td.distillNuwa,
-}))
+const RECIPE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const RECIPE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const REVISION_A = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const REVISION_B = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
-// 卡片/弹窗行为在各自测试覆盖,此处隔离
-vi.mock('@/components/pill-card', () => ({
-  PillCard: () => <div data-testid="pill-card" />,
-}))
-
-vi.mock('@/components/bind-agent-modal', () => ({
-  BindAgentModal: () => null,
-}))
-
-// TopTabs 依赖布局测量,替换为简单按钮组
-vi.mock('@/components/interaction/top-tabs', () => ({
-  TopTabs: ({
-    tabs,
-    activeKey,
-    onChange,
-  }: {
-    tabs: Array<{ key: string; label: string }>
-    activeKey: string
-    onChange: (key: string) => void
-  }) => (
-    <div role="tablist">
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          aria-pressed={activeKey === tab.key}
-          onClick={() => onChange(tab.key)}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  ),
-}))
-
-const pill: Pill = {
-  id: 'pill-1',
-  name: '丹心妙语',
-  description: '温润如茶',
-  skill_schema: {},
-  tags: [],
-  version: '1.0.0',
-  is_builtin: false,
-  created_at: '2026-08-20T00:00:00Z',
-  updated_at: '2026-08-20T00:00:00Z',
+function item(idSuffix: string, recipeId: string, name: string, revision: number): PillItemListItem {
+  const id = `00000000-0000-4000-8000-${idSuffix.padStart(12, '0')}`
+  return {
+    id,
+    name,
+    state: 'available',
+    recipe_id: recipeId,
+    revision_id: recipeId === RECIPE_A ? REVISION_A : REVISION_B,
+    revision,
+    created_at: '2026-08-20T00:00:00Z',
+  }
 }
 
-const nuwaDraft: DistillationDraft = {
-  name: '女娲草稿',
-  description: '由女娲蒸馏出的候选',
-  persona_summary: '冷静克制的史官',
-  tags: ['神话', '蒸馏'],
-  skill_schema: { identity_card: '史官' },
-  sources: [
-    { title: '史记', url: 'https://example.com/shiji', dimension: 'tone' },
-  ],
-  model: 'gpt-5',
-  research: {
-    evidence_level: 'standard',
-    document_count: 1,
-    domain_count: 1,
-    total_characters: 2000,
-    warnings: [],
-  },
-}
-
-function renderPage() {
-  return render(
-    <PillProvider>
-      <PillsPage />
-    </PillProvider>,
-  )
-}
-
-describe('PillsPage', () => {
+describe('PillsPage 金丹库存页', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    td.listPills.mockResolvedValue({ list: [pill], total: 1, page: 1, page_size: 100 })
-    td.distillNuwa.mockResolvedValue(nuwaDraft)
+    vi.resetAllMocks()
   })
+
   afterEach(() => cleanup())
 
-  it('创建金丹弹窗渲染女娲面板,且仅由用户点击触发一次 distillNuwa', async () => {
-    const user = userEvent.setup()
-    renderPage()
-    await screen.findByTestId('pill-card')
+  it('首屏分页加载可用库存（page=1, size=24）', async () => {
+    td.listPillItems.mockResolvedValue({ total: 2, items: [item('1', RECIPE_A, '文言文丹方', 1)] })
 
-    await user.click(screen.getByRole('button', { name: '炼制新金丹' }))
-    // 弹窗打开即渲染唯一女娲入口
-    expect(screen.getAllByText('女娲智能蒸馏')).toHaveLength(1)
-    // 打开弹窗不自动触发蒸馏
-    expect(td.distillNuwa).not.toHaveBeenCalled()
+    render(<PillsPage />)
+    expect(await screen.findByText('文言文丹方')).toBeInTheDocument()
+    expect(td.listPillItems).toHaveBeenCalledWith({ page: 1, size: 24 })
+  })
 
-    // 用户显式触发一次蒸馏
-    await user.type(screen.getByPlaceholderText(/保罗·格雷厄姆/), '保罗·格雷厄姆')
-    await user.type(screen.getByPlaceholderText(/思考方式/), '提取他的判断方式')
-    await user.click(screen.getByRole('button', { name: '从互联网收集并蒸馏' }))
-
-    await waitFor(() => expect(td.distillNuwa).toHaveBeenCalledTimes(1))
-    expect(td.distillNuwa).toHaveBeenCalledWith({
-      subject: '保罗·格雷厄姆',
-      brief: '提取他的判断方式',
-      locale: 'zh-CN',
+  it('库存按丹方分组显示数量，条目链接到具体实例详情', async () => {
+    td.listPillItems.mockResolvedValue({
+      total: 3,
+      items: [
+        item('1', RECIPE_A, '文言文丹方', 3),
+        item('2', RECIPE_A, '文言文丹方', 3),
+        item('3', RECIPE_B, '俳句丹方', 1),
+      ],
     })
+
+    render(<PillsPage />)
+
+    // 两组标题 + 各自数量徽标
+    expect(await screen.findByText('文言文丹方')).toBeInTheDocument()
+    expect(screen.getAllByText('2 枚可用').length).toBe(1)
+    expect(screen.getAllByText('俳句丹方').length).toBe(1)
+    expect(screen.getAllByText('1 枚可用').length).toBe(1)
+
+    // 组标题链接到丹方详情；行条目链接到实例详情（?id=<itemId>）
+    expect(screen.getByRole('link', { name: '文言文丹方' })).toHaveAttribute(
+      'href',
+      `/recipes/detail?id=${RECIPE_A}`,
+    )
+    const itemLinks = screen
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.startsWith('/pills/detail?id='))
+    expect(itemLinks.length).toBe(3)
+    expect(itemLinks[0]).toHaveAttribute(
+      'href',
+      '/pills/detail?id=00000000-0000-4000-8000-000000000001',
+    )
+  })
+
+  it('没有库存时提示去丹方炼制（不再显示可无限服用的内置定义）', async () => {
+    td.listPillItems.mockResolvedValue({ total: 0, items: [] })
+
+    render(<PillsPage />)
+
+    expect(await screen.findByText('暂无可用金丹')).toBeInTheDocument()
+    const cta = screen.getByRole('link', { name: '去丹方炼制' })
+    expect(cta).toHaveAttribute('href', '/recipes')
+  })
+
+  it('加载失败展示错误态，重试重新请求', async () => {
+    td.listPillItems.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({
+      total: 1,
+      items: [item('1', RECIPE_A, '文言文丹方', 1)],
+    })
+
+    render(<PillsPage />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('boom')
+
+    await userEvent.click(screen.getByText('重新加载'))
+    expect(await screen.findByText('文言文丹方')).toBeInTheDocument()
+    expect(td.listPillItems).toHaveBeenCalledTimes(2)
+  })
+
+  it('分页：有更多时展示「加载更多」，追加下一页并继续分组合并', async () => {
+    const pageOne = Array.from({ length: 24 }, (_, i) => item(String(i + 1), RECIPE_A, '文言文丹方', 1))
+    td.listPillItems
+      .mockResolvedValueOnce({ total: 26, items: pageOne })
+      .mockResolvedValueOnce({
+        total: 26,
+        items: [item('25', RECIPE_B, '俳句丹方', 1), item('26', RECIPE_A, '文言文丹方', 1)],
+      })
+
+    render(<PillsPage />)
+    await screen.findByText('文言文丹方')
+
+    await userEvent.click(screen.getByText('加载更多'))
+    await waitFor(() => expect(td.listPillItems).toHaveBeenLastCalledWith({ page: 2, size: 24 }))
+    expect(await screen.findByText('俳句丹方')).toBeInTheDocument()
+    expect(screen.getAllByText('25 枚可用').length).toBe(1)
+    expect(screen.getAllByText('1 枚可用').length).toBe(1)
   })
 })

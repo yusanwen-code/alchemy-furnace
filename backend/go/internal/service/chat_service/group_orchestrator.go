@@ -39,7 +39,9 @@ type GroupSpeakerPayload struct {
 
 // GroupTurnDonePayload turn_done 事件数据
 type GroupTurnDonePayload struct {
-	Spoke int `json:"spoke"`
+	Spoke          int    `json:"spoke"`
+	Reason         string `json:"reason"`
+	FailedSpeakers int    `json:"failed_speakers"`
 }
 
 // GroupTitlePayload title 事件数据
@@ -124,7 +126,7 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 
 	// 停止语义:accepted 已发,零引擎调用直接收束(spec §8.2)
 	if turnPlan.Stop {
-		emit("turn_done", GroupTurnDonePayload{Spoke: 0})
+		emit("turn_done", GroupTurnDonePayload{Spoke: 0, Reason: "user_stop"})
 		return
 	}
 
@@ -166,8 +168,33 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 	for _, sm := range scored {
 		restOrder = append(restOrder, sm.m)
 	}
+	// 只有候选超过本轮名额且表达欲桶将其全部过滤时，才强制指定主回答者。
+	// 名额足够时保留原有逐成员尝试语义，避免把普通讨论不必要地缩成一人。
+	var primaryAgentID uint
+	forcePrimary := len(mustOrder) == 0 && len(restOrder) > turnPlan.MaxSpeakers
+	if forcePrimary {
+		anyEligible := false
+		for _, candidate := range restOrder {
+			if turnpolicy.WantsToVolunteer(
+				turnpolicy.PolicyForProactivity(candidate.Agent.Proactivity),
+				session.UUID.String(), candidate.AgentID, userMessageUUID, 1,
+			) {
+				anyEligible = true
+				break
+			}
+		}
+		forcePrimary = !anyEligible
+	}
+	if forcePrimary {
+		primary := restOrder[0]
+		primaryAgentID = primary.AgentID
+		mustOrder = append(mustOrder, primary.AgentID)
+		inMust[primary.AgentID] = true
+		restOrder = restOrder[1:]
+	}
 
 	totalSpoke := 0
+	failedSpeakers := 0
 	firstReply := ""      // 首条 assistant 内容(自动命名用)
 	replies := []string{} // 去重库(§9.2):整回合累计,≥8 字符且 ≥0.85 相似即收敛
 	// 蒸馏目标(§10.3):仅 memory_enabled 且发言成功的成员;模型=首个成功发言人
@@ -196,6 +223,7 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 		nextOrder := []uint{}
 		nextInMust := map[uint]bool{}
 
+		succeededThisRound := 0
 		for _, m := range queue {
 			if ctx.Err() != nil {
 				emit("stopped", struct{}{})
@@ -203,6 +231,9 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 			}
 			// 预算收敛(§8.2):累计回复估算超 MaxTurnTokens 不再开新发言人
 			if turnPlan.MaxTurnTokens > 0 && estimatedReplyTokens(replies) >= turnPlan.MaxTurnTokens {
+				break
+			}
+			if turnPlan.MaxSpeakers > 0 && succeededThisRound >= turnPlan.MaxSpeakers {
 				break
 			}
 			mustAnswer := inMust[m.AgentID]
@@ -223,7 +254,10 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 				convergedTurn = true
 				break // §9.2 去重命中:本回合收敛,不再开新发言人
 			}
-			if errored && mustAnswer {
+			if errored {
+				failedSpeakers++
+			}
+			if errored && mustAnswer && primaryAgentID == 0 {
 				break // §9.4 被点名者失败:显示失败,不静默换人补位
 			}
 			if !spoke {
@@ -231,6 +265,7 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 			}
 			spokeThisRound = true
 			totalSpoke++
+			succeededThisRound++
 			if !mustAnswer {
 				voluntarySpoke = true
 			}
@@ -287,7 +322,11 @@ func (s *Chat) runGroupTurn(ctx context.Context, sessionUID uuid.UUID, content s
 		})
 	}
 
-	emit("turn_done", GroupTurnDonePayload{Spoke: totalSpoke})
+	reason := "answered"
+	if totalSpoke == 0 {
+		reason = "failed"
+	}
+	emit("turn_done", GroupTurnDonePayload{Spoke: totalSpoke, Reason: reason, FailedSpeakers: failedSpeakers})
 	zap.L().Info("[炼丹炉] 群聊回合结束",
 		zap.String("session_uuid", sessionUID.String()), zap.Int("spoke", totalSpoke))
 }
@@ -486,7 +525,14 @@ func (s *Chat) letAgentSpeak(ctx context.Context, session *model.ChatSession, m 
 		emit("error", payload)
 		return false, "", nil, false, payload.Terminal, false, true
 	case passed || fullContent == "":
-		return false, "", nil, false, false, false, false // 沉默/空内容:零痕迹
+		if mustAnswer {
+			emit("error", GroupSpeakerPayload{
+				AgentID: m.Agent.UUID.String(), AgentName: m.Agent.Name, AgentAvatar: m.Agent.Avatar,
+				Content: "该道人未生成有效回答", ErrorCode: "service.chat.required_response_empty",
+			})
+			return false, "", nil, false, false, false, true
+		}
+		return false, "", nil, false, false, false, false // 自愿沉默/空内容:零痕迹
 	}
 
 	fullContent = StripSpeakerPrefix(fullContent)

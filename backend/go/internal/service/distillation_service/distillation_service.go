@@ -9,7 +9,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/distillation"
 	appErrors "github.com/alchemy-furnace/server/internal/errors"
-	"github.com/alchemy-furnace/server/internal/interface/dao"
+	iservice "github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/credential"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/google/uuid"
@@ -18,11 +18,11 @@ import (
 type Service struct {
 	client     distillation.Client
 	credential credential.Resolver
-	pills      dao.Pill
+	inventory  iservice.PillInventory
 }
 
-func New(client distillation.Client, resolver credential.Resolver, pills dao.Pill) *Service {
-	return &Service{client: client, credential: resolver, pills: pills}
+func New(client distillation.Client, resolver credential.Resolver, inventory iservice.PillInventory) *Service {
+	return &Service{client: client, credential: resolver, inventory: inventory}
 }
 
 func (s *Service) Distill(ctx context.Context, subject, brief, locale string) (*distillation.Response, appErrors.Error) {
@@ -63,8 +63,11 @@ func (s *Service) Distill(ctx context.Context, subject, brief, locale string) (*
 }
 
 // SkillExport 只读导出: 服务端重校验(格式/目标唯一性/字段长度/slug/来源协议/敏感内容),
-// 绝不接收或透传 API Key;pill_id 模式从数据库重新装载金丹,结构化模式重校验后透传。
-// 接口不删除、不修改金丹;远端可重试错误映射为 503,内容错误映射为 400。
+// 绝不接收或透传 API Key。
+// 目标解析(任务 5 消耗品重构后): recipe_id 导出丹方当前版本;recipe_id+revision_id
+// 导出指定版本(归属校验,版本必须属于该丹方);旧 pill_id 只经 LegacyMap 解析到丹方,
+// 不读取可用库存;skill 结构化模式重校验后透传。
+// 接口不删除、不修改丹方;远端可重试错误映射为 503,内容错误映射为 400。
 func (s *Service) SkillExport(ctx context.Context, input *distillation.SkillExportInput) (*distillation.ExportResult, appErrors.Error) {
 	if input == nil {
 		return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.input", "缺少导出请求")
@@ -73,31 +76,41 @@ func (s *Service) SkillExport(ctx context.Context, input *distillation.SkillExpo
 	if format != "codex" && format != "claude" {
 		return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.format", "format 必须是 codex 或 claude")
 	}
-	hasPill, hasSkill := strings.TrimSpace(input.PillID) != "", input.Skill != nil
-	if hasPill == hasSkill {
-		return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.target", "必须且只能提供 pill_id 或 skill 之一")
+	hasPill, hasRecipe, hasSkill := strings.TrimSpace(input.PillID) != "", strings.TrimSpace(input.RecipeID) != "", input.Skill != nil
+	targetCount := 0
+	for _, has := range []bool{hasPill, hasRecipe, hasSkill} {
+		if has {
+			targetCount++
+		}
+	}
+	if targetCount != 1 {
+		return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.target",
+			"必须且只能提供 pill_id、recipe_id(+revision_id) 或 skill 之一")
 	}
 
 	skill := input.Skill
-	if hasPill {
+	switch {
+	case hasRecipe:
+		rev, aerr := s.resolveExportRevision(ctx, input)
+		if aerr != nil {
+			return nil, aerr
+		}
+		skill = projectExportRevision(rev)
+	case hasPill:
 		uid, err := uuid.Parse(strings.TrimSpace(input.PillID))
 		if err != nil {
 			return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.pill_id", "非法金丹 ID")
 		}
-		pill, derr := s.pills.TakePillByUUID(ctx, uid)
-		if derr != nil {
-			return nil, derr
+		// 旧 pill ID 只经 LegacyMap 解析,不读取可用库存;无映射 → 404 pill.legacy_not_found
+		recipeUUID, aerr := s.inventory.ResolveLegacy(ctx, "pill", uid.String())
+		if aerr != nil {
+			return nil, aerr
 		}
-		// 只投影导出所需的规范化字段,绝不序列化整行数据库记录
-		skill = &distillation.ExportableSkill{
-			Name:          pill.Name,
-			Description:   pill.Description,
-			SkillSchema:   pill.SkillSchema,
-			Tags:          jsonListToStrings(pill.Tags),
-			Sources:       make([]distillation.Source, 0), // 空来源必须发 [] 而非 null(Pydantic sources: List 拒绝 null)
-			GeneratedAt:   pill.UpdatedAt.UTC().Format(time.RFC3339),
-			EvidenceLevel: "limited",
+		rev, aerr := s.currentExportRevision(ctx, recipeUUID)
+		if aerr != nil {
+			return nil, aerr
 		}
+		skill = projectExportRevision(rev)
 	}
 
 	if err := distillation.ValidateExportable(skill); err != nil {
@@ -131,6 +144,45 @@ func (s *Service) SkillExport(ctx context.Context, input *distillation.SkillExpo
 		return nil, appErrors.New(appErrors.ErrorTypeServerInternalError, "service.skill_export.call", err.Error())
 	}
 	return result, nil
+}
+
+// resolveExportRevision 按 recipe_id(+revision_id) 解析导出目标版本:
+// 仅 recipe_id → 当前版本;带 revision_id → 指定版本(归属校验,不属于该丹方 → 404)。
+func (s *Service) resolveExportRevision(ctx context.Context, input *distillation.SkillExportInput) (*model.PillRecipeRevision, appErrors.Error) {
+	recipeUUID, err := uuid.Parse(strings.TrimSpace(input.RecipeID))
+	if err != nil {
+		return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.recipe_id", "非法丹方 ID")
+	}
+	if strings.TrimSpace(input.RevisionID) == "" {
+		return s.currentExportRevision(ctx, recipeUUID)
+	}
+	revisionUUID, err := uuid.Parse(strings.TrimSpace(input.RevisionID))
+	if err != nil {
+		return nil, appErrors.New(appErrors.ErrorTypeInvalidRequest, "service.skill_export.revision_id", "非法版本 ID")
+	}
+	return s.inventory.GetRecipeRevision(ctx, recipeUUID, revisionUUID)
+}
+
+// currentExportRevision 读丹方当前版本内容(任意状态可读,归档丹方也可导出)
+func (s *Service) currentExportRevision(ctx context.Context, recipeUUID uuid.UUID) (*model.PillRecipeRevision, appErrors.Error) {
+	_, rev, aerr := s.inventory.GetRecipe(ctx, recipeUUID)
+	if aerr != nil {
+		return nil, aerr
+	}
+	return rev, nil
+}
+
+// projectExportRevision 只投影导出所需的规范化字段,绝不序列化整行数据库记录
+func projectExportRevision(rev *model.PillRecipeRevision) *distillation.ExportableSkill {
+	return &distillation.ExportableSkill{
+		Name:          rev.Name,
+		Description:   rev.Description,
+		SkillSchema:   rev.SkillSchema,
+		Tags:          jsonListToStrings(rev.Tags),
+		Sources:       make([]distillation.Source, 0), // 空来源必须发 [] 而非 null(Pydantic sources: List 拒绝 null)
+		GeneratedAt:   rev.CreatedAt.UTC().Format(time.RFC3339),
+		EvidenceLevel: "limited",
+	}
 }
 
 // jsonListToStrings model.JSONList(interface{} 列表)投影为导出模型使用的字符串列表

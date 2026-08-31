@@ -1,25 +1,39 @@
 'use client'
 
 /**
- * 从金丹到道人 - 快捷绑定弹窗
- * 选择一位道人，将金丹绑定给它（可设置权重与服用顺序）
- * 调用 POST /api/v1/agents/:id/pills
+ * 服用金丹对话框（金丹消耗品重构任务 6 Phase E）
+ * 选择一位道人，消耗 1 枚库存实例（available→consumed_by_agent）并生成能力快照。
+ * - 提交成功才移除库存并更新能力；失败保持原状（对话框保留可重试）。
+ * - Idempotency-Key 由 pending-operations 按「动作+目标」生成/复用：网络重试、
+ *   窗口隐藏再显示沿用原 key；成功后清除，换道人即新动作。
+ * - 断线恢复先 GET pill-operations/:id；404 说明未提交，仍用原 key 重试，不换 key。
+ * 调用 POST /api/v1/agents/:id/consume
  */
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { X, Users, Loader2, Gift, AlertCircle } from 'lucide-react'
+import { X, Users, Loader2, FlaskConical, AlertCircle } from 'lucide-react'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
-import * as agentService from '@/services/agentService'
-import type { Agent, Pill } from '@/services/types'
+import { listAgents } from '@/services/agentService'
+import { consumePill } from '@/services/pillInventoryService'
+import {
+  startPendingOperation,
+  clearPendingOperation,
+  recoverOperation,
+} from '@/lib/pending-operations'
+import type { Agent } from '@/services/types'
 
-interface BindAgentModalProps {
-  pill: Pill
+interface ConsumePillModalProps {
+  /** 库存实例 UUID（不是丹方 recipeId / 能力 effectId） */
+  itemId: string
+  /** 实例展示名（标题与幂等 label 用） */
+  itemName: string
   onClose: () => void
+  /** 服用成功后回调（父组件刷新库存/能力缓存） */
+  onConsumed?: () => void
 }
 
-export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
-  const t = useTranslations('bindModal')
-  const tPill = useTranslations('pill')
+export function ConsumePillModal({ itemId, itemName, onClose, onConsumed }: ConsumePillModalProps) {
+  const t = useTranslations('consumeDialog')
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -32,7 +46,7 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
   // 加载道人列表
   useEffect(() => {
     let cancelled = false
-    agentService.listAgents({ page_size: 100 })
+    listAgents({ page_size: 100 })
       .then(data => {
         if (!cancelled) setAgents(data.list || [])
       })
@@ -45,17 +59,35 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
     return () => { cancelled = true }
   }, [t])
 
-  /** 执行绑定 */
-  const handleBind = async () => {
-    if (!selectedAgentId) return
+  /** 执行服用（幂等）：成功才回调/关闭，失败保留对话框原状 */
+  const handleConsume = async () => {
+    if (!selectedAgentId || submitting || success) return
+    const agent = agents.find(a => a.id === selectedAgentId)
+    // 同「动作+目标」pending 期间复用同一 key；换道人 label 变化即新动作
+    const key = startPendingOperation('consume', `${itemName}→${agent?.name ?? itemName}`)
     setSubmitting(true)
     setError(null)
     try {
-      await agentService.bindPill(selectedAgentId, pill.id, weight, sortOrder)
+      await consumePill(key, selectedAgentId, itemId, { weight, sortOrder })
+      clearPendingOperation(key)
       setSuccess(true)
+      onConsumed?.()
       setTimeout(onClose, 800)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorBind'))
+      // 断线恢复：先查已提交结果；有结果按成功处理，404 保留原状用同 key 重试
+      try {
+        const recovered = await recoverOperation(key)
+        if (recovered) {
+          clearPendingOperation(key)
+          setSuccess(true)
+          onConsumed?.()
+          setTimeout(onClose, 800)
+          return
+        }
+      } catch {
+        // recover 查询本身失败：按普通错误展示，仍可用原 key 重试
+      }
+      setError(err instanceof Error ? err.message : t('errorConsume'))
     } finally {
       setSubmitting(false)
     }
@@ -66,9 +98,9 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
       <div className="dao-card w-full max-w-md p-6 animate-in fade-in duration-300 max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between gap-2 mb-5">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Gift className="w-5 h-5 text-gold shrink-0" />
+            <FlaskConical className="w-5 h-5 text-gold shrink-0" />
             <h2 className="text-lg font-serif font-bold text-foreground truncate">
-              {tPill('bindCta')}
+              {t('title')}
             </h2>
           </div>
           <button
@@ -80,11 +112,8 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
           </button>
         </div>
 
-        <p className="text-xs text-muted-foreground mb-4">
-          {t.rich('prompt', {
-            name: pill.name,
-            gold: (chunks) => <span className="text-gold">{chunks}</span>,
-          })}
+        <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+          {t('prompt')}
         </p>
 
         {loading ? (
@@ -151,7 +180,7 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
         )}
 
         {error && (
-          <div className="flex items-center gap-2 text-xs text-primary mb-3">
+          <div className="flex items-center gap-2 text-xs text-primary mb-3" role="alert">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
             <span>{error}</span>
           </div>
@@ -162,7 +191,7 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
             {t('cancel')}
           </button>
           <button
-            onClick={handleBind}
+            onClick={handleConsume}
             disabled={!selectedAgentId || submitting || success || agents.length === 0}
             className="dao-btn-primary flex-1 disabled:opacity-50 whitespace-nowrap"
           >
@@ -171,9 +200,9 @@ export function BindAgentModal({ pill, onClose }: BindAgentModalProps) {
             ) : success ? (
               <Users className="w-4 h-4" />
             ) : (
-              <Gift className="w-4 h-4" />
+              <FlaskConical className="w-4 h-4" />
             )}
-            {success ? t('success') : t('submit')}
+            {submitting ? t('submitting') : success ? t('success') : t('submit')}
           </button>
         </div>
       </div>

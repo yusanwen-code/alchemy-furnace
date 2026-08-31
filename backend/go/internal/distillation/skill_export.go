@@ -76,11 +76,15 @@ type ExportResult struct {
 	Content  []byte
 }
 
-// SkillExportInput 导出接口入参: 已保存金丹的结构化数据(skill)或合法 pill_id,二选一
+// SkillExportInput 导出接口入参（任务 5 消耗品重构后）。
+// 目标三选一：旧 pill_id（仅经 LegacyMap 解析，不读取可用库存）、
+// recipe_id（当前版本）+ 可选 revision_id（指定版本）、skill（结构化数据）。
 type SkillExportInput struct {
-	PillID string
-	Skill  *ExportableSkill
-	Format string
+	PillID     string
+	RecipeID   string
+	RevisionID string
+	Skill      *ExportableSkill
+	Format     string
 }
 
 // ExportValidationError 导出内容校验失败(服务端重校验,→400)

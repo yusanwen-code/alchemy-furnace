@@ -8,7 +8,6 @@ import (
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/model"
-	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/pill"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -63,15 +62,6 @@ func toResponseList(agents []*model.DaoAgent) []*Response {
 	return list
 }
 
-// AgentPillResponse 服用记录响应 DTO:agent_pills 无 uuid,pill_id 输出金丹 UUID
-type AgentPillResponse struct {
-	PillID    string         `json:"pill_id"`
-	Weight    float64        `json:"weight"`
-	SortOrder int            `json:"sort_order"`
-	CreatedAt time.Time      `json:"created_at"`
-	Pill      *pill.Response `json:"pill,omitempty"`
-}
-
 // LanguagePatternResponse 语言模式缓存响应 DTO(纯内部缓存,无 id 输出)
 type LanguagePatternResponse struct {
 	SystemPrompt   string         `json:"system_prompt"`
@@ -80,32 +70,17 @@ type LanguagePatternResponse struct {
 	IsValid        bool           `json:"is_valid"`
 }
 
-// DetailResponse 道人详情 DTO:道人 + 服用记录 + 语言模式缓存
+// DetailResponse 道人详情 DTO:道人 + 语言模式缓存
+// 任务 8 旧入口审计: agent_pills(遗留绑定)不再输出——迁移后旧表仅保留供回滚,
+// 能力展示走 GET /api/v1/agents/:uuid/effects(已吸收能力快照)。
 type DetailResponse struct {
 	*Response
-	AgentPills      []*AgentPillResponse     `json:"agent_pills,omitempty"`
 	LanguagePattern *LanguagePatternResponse `json:"language_pattern,omitempty"`
 }
 
 // toDetailResponse 道人详情模型 → 对外 DTO
 func toDetailResponse(a *model.DaoAgent) *DetailResponse {
 	detail := &DetailResponse{Response: toResponse(a)}
-
-	if a.AgentPills != nil {
-		detail.AgentPills = make([]*AgentPillResponse, 0, len(a.AgentPills))
-		for _, ap := range a.AgentPills {
-			item := &AgentPillResponse{
-				PillID:    ap.Pill.UUID.String(),
-				Weight:    ap.Weight,
-				SortOrder: ap.SortOrder,
-				CreatedAt: ap.CreatedAt,
-			}
-			if ap.Pill.ID != 0 {
-				item.Pill = pill.ToResponse(&ap.Pill)
-			}
-			detail.AgentPills = append(detail.AgentPills, item)
-		}
-	}
 
 	if a.LanguagePattern != nil {
 		detail.LanguagePattern = &LanguagePatternResponse{

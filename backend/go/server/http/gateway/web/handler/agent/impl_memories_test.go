@@ -12,11 +12,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/alchemy-furnace/server/internal/dao"
 	"github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/interface/service"
 	"github.com/alchemy-furnace/server/internal/service/agent_service"
+	"github.com/alchemy-furnace/server/internal/service/pill_inventory_service"
 	"github.com/alchemy-furnace/server/internal/service/turnpolicy"
 	"github.com/alchemy-furnace/server/model"
 	"github.com/alchemy-furnace/server/server/http/middleware"
@@ -145,7 +147,8 @@ func setupMemoryRouter(stub *stubMemory) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.RequestID())
-	h := New(agent_service.New(dao.NewAgentDao(), dao.NewPillDao(), dao.NewModelDao()), stub)
+	h := New(agent_service.New(dao.NewAgentDao(), dao.NewModelDao(),
+		pill_inventory_service.New(dao.GetDB(), time.Now)), stub)
 	r.PUT("/api/v1/agents/:uuid", router.Wrapper(h.Update))
 	memories := r.Group("/api/v1/agents/:uuid/memories")
 	{

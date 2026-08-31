@@ -8,7 +8,8 @@
  * - 浏览器: 成功触发下载(Blob + a[download]);桌面 webview: WKWebView 不执行 Blob 下载,
  *   改为经桌面桥接端点落盘到数据目录 exports/ 并展示保存路径与「打开文件夹」按钮
  * - 失败保留弹窗并提供重试
- * 导出走只读接口 POST /api/v1/distillation/skill-export(pill_id 模式),不删除、不修改金丹。
+ * 导出走只读接口 POST /api/v1/distillation/skill-export(pill_id / recipe_id(+revision_id) 模式),
+ * 不删除、不修改丹方或金丹。任务 5 起旧 pill_id 仅经 LegacyMap 解析,不读取可用库存。
  */
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -30,7 +31,10 @@ import {
 import type { ExportFormat, Pill } from '@/services/types'
 
 interface SkillExportDialogProps {
-  pill: Pill
+  /** 旧金丹模式：导出该金丹（任务 5 起仅经 LegacyMap 解析，不读取可用库存） */
+  pill?: Pill
+  /** 丹方模式：导出该丹方版本（revisionId 缺省 = 当前版本；指定 = 不可变版本） */
+  recipe?: { id: string; name: string; revisionId?: string }
   onClose: () => void
 }
 
@@ -66,7 +70,7 @@ function triggerDownload(blob: Blob, filename: string) {
 
 type ExportStatus = 'idle' | 'submitting' | 'success' | 'error'
 
-export function SkillExportDialog({ pill, onClose }: SkillExportDialogProps) {
+export function SkillExportDialog({ pill, recipe, onClose }: SkillExportDialogProps) {
   const t = useTranslations('skillExport')
   const [format, setFormat] = useState<ExportFormat>('codex')
   const [status, setStatus] = useState<ExportStatus>('idle')
@@ -79,7 +83,11 @@ export function SkillExportDialog({ pill, onClose }: SkillExportDialogProps) {
     setErrorMessage(null)
     setSavedPath(null)
     try {
-      const result = await exportSkill({ pill_id: pill.id, format })
+      const result = await exportSkill(
+        recipe
+          ? { recipe_id: recipe.id, revision_id: recipe.revisionId, format }
+          : { pill_id: pill?.id, format },
+      )
       if (isDesktop()) {
         // 桌面 webview 不执行 Blob 下载: 桥接落盘到数据目录 exports/ 并展示路径
         setSavedPath(await saveSkillExportDesktop(result.blob, result.filename))
@@ -102,7 +110,7 @@ export function SkillExportDialog({ pill, onClose }: SkillExportDialogProps) {
     }
   }
 
-  const filename = skillExportFilename(pill.name, format)
+  const filename = skillExportFilename(recipe?.name ?? pill?.name ?? 'skill', format)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">

@@ -9,7 +9,7 @@ import (
 )
 
 // PillCompositionItem 完整服丹编排项(对外金丹 UUID + 权重)
-// 供 ReplacePillComposition 一次性替换道人全部服用关系
+// 供 ReplacePillComposition 签名(该入口任务 3 起 410 下线,类型仅保留契约兼容)
 type PillCompositionItem struct {
 	PillUUID uuid.UUID
 	Weight   float64
@@ -34,20 +34,55 @@ type Agent interface {
 	// DeleteAgent 按 UUID 删除道人
 	DeleteAgent(ctx context.Context, uid uuid.UUID) errors.Error
 
-	// BindPill 道人服用金丹(双方按 UUID 解析);已绑定返回 ErrorTypeConflict
+	// BindPill 道人服用金丹实例(第二参数为金丹实例 UUID,非丹方/金丹 UUID;任务 3)
+	// 经库存幂等消费: available→consumed_by_agent + 生成能力快照(单事务);
+	// 实例不可用/重复服用返回 ErrorTypeConflict(pill.not_available);
+	// 实例不存在/未知道人返回 ErrorTypeRecordNotFound
 	BindPill(ctx context.Context, agentUID uuid.UUID, pillUID uuid.UUID, weight float64, sortOrder int) errors.Error
 
-	// UpdateAgentPill 更新服用记录(weight/sort_order 为 nil 时不更新对应字段);未绑定返回 ErrorTypeRecordNotFound
+	// UpdateAgentPill 调整已吸收能力权重/顺序(第二参数为金丹实例 UUID;任务 3)
+	// weight/sort_order 为 nil 时不更新对应字段(均为 nil 时仅校验存在);
+	// 无活跃能力(未吸收/已移除)返回 ErrorTypeRecordNotFound
 	UpdateAgentPill(ctx context.Context, agentUID uuid.UUID, pillUID uuid.UUID, weight *float64, sortOrder *int) errors.Error
 
-	// UnbindPill 解除绑定;未绑定返回 ErrorTypeRecordNotFound
+	// UnbindPill 移除道人的已吸收能力(第二参数为金丹实例 UUID;任务 3)
+	// 软删(removed_at 保留历史);原实例保持 consumed_by_agent 不返还库存;
+	// 无活跃能力返回 ErrorTypeRecordNotFound
 	UnbindPill(ctx context.Context, agentUID uuid.UUID, pillUID uuid.UUID) errors.Error
 
 	// ListAgentPills 道人已服用金丹列表(按服用顺序)
 	ListAgentPills(ctx context.Context, agentUID uuid.UUID) ([]*model.ElixirPill, errors.Error)
 
-	// ReplacePillComposition 用完整服丹编排一次性替换道人服用关系(原子)
-	// 校验: 权重 (0,10]、金丹 UUID 不重复、金丹全部存在;全部通过才调一次 DAO 原子替换
-	// 空数组 = 清空全部服用关系;成功后返回服务端确认的道人详情
+	// ReplacePillComposition 已下线(任务 3): 完整服丹编排绕过库存,不再保留。
+	// 任意输入一律返回 ErrorTypeGone(pill.legacy_api_removed,→410),不产生任何写入;
+	// 服用改走 BindPill、移除改走 UnbindPill
 	ReplacePillComposition(ctx context.Context, agentUID uuid.UUID, items []PillCompositionItem) (*model.DaoAgent, errors.Error)
+
+	// ListEffects 道人活跃能力列表（按 sort_order 升序；任务 5，effect UUID 语义）
+	// 同时返回 effects_revision（乐观锁版本），前端 PUT 全量编排需携带
+	ListEffects(ctx context.Context, agentUID uuid.UUID) ([]*EffectWithSource, int, errors.Error)
+
+	// UpdateEffects 全量编排（任务 5）：提交集必须等于活跃集，
+	// 缺少/重复/外部道人 effect → 409 agent.effects_conflict；expectedEffectsRevision
+	// 乐观锁过期同 409；成功返回更新后的道人（含新 EffectsRevision），并失效语言模式缓存
+	UpdateEffects(ctx context.Context, agentUID uuid.UUID, expectedEffectsRevision int, items []EffectUpdateItem) (*model.DaoAgent, errors.Error)
+
+	// RemoveEffect 显式移除能力（按能力 UUID，任务 5）：软删 + EffectsRevision++ + 缓存失效；
+	// 不存在/已移除/跨道人 → 404；原实例保持 consumed_by_agent 不返还
+	RemoveEffect(ctx context.Context, agentUID uuid.UUID, effectUUID uuid.UUID) errors.Error
+}
+
+// EffectUpdateItem 全量编排条目（能力 UUID + 权重 + 顺序；任务 5）
+type EffectUpdateItem struct {
+	EffectID  uuid.UUID
+	Weight    float64
+	SortOrder int
+}
+
+// EffectWithSource 能力快照 + 来源实例/版本对外标识（任务 5 列表输出；
+// 模型上的 UUID 字段均为 json:"-"，对外展示需显式携带）
+type EffectWithSource struct {
+	Effect       model.AgentPillEffect
+	ItemUUID     uuid.UUID
+	RevisionUUID uuid.UUID
 }

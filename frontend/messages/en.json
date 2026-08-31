@@ -9,24 +9,29 @@
   },
   "nav": {
     "ariaLabel": "Primary",
+    "pillWorkspaceLabel": "Pill workspace sections",
     "mobileAriaLabel": "Mobile",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "startCta": "Light the furnace",
     "items": {
       "home": {
-        "label": "Furnace"
+        "label": "Home"
       },
       "pills": {
         "label": "Pills",
         "children": {
           "all": {
-            "title": "All pills",
-            "description": "Browse every pill forged so far — a thousand language modes"
+            "title": "Pill inventory",
+            "description": "View crafted pills; consuming or fusing uses them up"
           },
           "fusion": {
-            "title": "Fuse pills",
+            "title": "Fusion furnace",
             "description": "Cast pills into the fire, and something new emerges"
+          },
+          "recipes": {
+            "title": "Recipes",
+            "description": "Forge from a recipe; recipes last forever, pills are consumable"
           }
         }
       },
@@ -128,11 +133,6 @@
     },
     "stats": {
       "ariaLabel": "Furnace overview",
-      "pills": {
-        "label": "Pills in store",
-        "unit": "",
-        "caption": "Language modes in the pill vault"
-      },
       "agents": {
         "label": "Daoists in hall",
         "unit": "",
@@ -143,29 +143,33 @@
         "unit": "",
         "caption": "Both concluded and ongoing"
       },
-      "builtins": {
-        "label": "Built-in recipes",
+      "inventory": {
+        "label": "Pills in stock",
         "unit": "",
-        "caption": "Pills pre-shipped with the system"
+        "caption": "Available pills in the vault"
+      },
+      "recipes": {
+        "label": "Recipes",
+        "unit": "",
+        "caption": "Permanent crafting recipes"
       }
     },
     "spotlight": {
       "badge": "Freshly forged",
       "viewAll": "Enter the vault →",
-      "kindBuiltIn": "Built-in recipe",
-      "kindSelfMade": "Self-forged",
       "noDescription": "No notes left on this pill — enter the vault for the full record.",
       "viewCta": "View its nature",
       "emptyTitle": "No pills yet",
-      "emptyDesc": "The vault is empty, but the fire is warm. Forge the first language-mode pill and shape a daoist's nature.",
-      "emptyCta": "Forge a new pill"
+      "emptyDesc": "The vault is empty, but the fire is warm. Set down a recipe and forge the first language-mode pill to shape a daoist's nature.",
+      "emptyCta": "Craft a pill",
+      "version": "Version v{revision}"
     },
     "recipeList": {
       "title": "Recipe scroll",
-      "count": "{count} recipes · in store",
-      "builtInBadge": "Built-in",
-      "noDescription": "No notes",
-      "empty": "No pills in store yet"
+      "count": "{count} recipes",
+      "empty": "No recipes yet",
+      "versionBadge": "v{revision}",
+      "availableCount": "{count} in stock"
     },
     "sessions": {
       "title": "Past discourses",
@@ -213,33 +217,78 @@
     "outputTruncatedHint": "The model's structured output was truncated. The system has adjusted its generation strategy; retry, or switch synthesis models if it keeps failing."
   },
   "pills": {
-    "title": "Pill Vault",
-    "subtitle": "Forge language-mode pills, shape a daoist's nature",
-    "searchPlaceholder": "Search pill name or description...",
-    "filter": {
-      "all": "All pills",
-      "builtin": "Built-in",
-      "custom": "Self-forged"
-    },
-    "create": "Forge a new pill",
+    "title": "Pill Inventory",
+    "subtitle": "Consuming or fusing spends a pill; the absorbed ability stays forever",
     "loading": "Searching the vault...",
     "loadErrorTitle": "Could not load pills",
     "retry": "Try again",
-    "emptyTitle": "No pills yet",
+    "emptyTitle": "No available pills",
+    "emptyDesc": "Forge one from a recipe first — consuming or fusing will spend it",
+    "goToRecipes": "Forge from recipes",
+    "availableCount": "{count} available",
+    "itemRevision": "v{revision}",
+    "loadMore": "Load more"
+  },
+  "recipes": {
+    "title": "Recipes",
+    "subtitle": "Recipes last forever; forge pills from them into inventory — pills are consumable",
+    "searchPlaceholder": "Search recipes by name or description...",
+    "create": "New recipe",
+    "loading": "Browsing the recipe ledger...",
+    "loadErrorTitle": "Could not load recipes",
+    "retry": "Try again",
+    "emptyTitle": "No recipes yet",
     "emptySearchTitle": "No matches",
-    "emptySearchDesc": "Try other keywords or filters",
-    "emptyDesc": "Click the button above to forge your first pill",
+    "emptySearchDesc": "Try other keywords",
+    "emptyDesc": "Click above to write your first recipe",
     "modal": {
-      "title": "Forge a new pill",
-      "nameLabel": "Pill name *",
+      "title": "New recipe",
+      "nameLabel": "Recipe name *",
       "namePlaceholder": "e.g. Classical Chinese",
       "descLabel": "Description (with triggers / anti-triggers)",
-      "descPlaceholder": "Describe the language mode or persona this pill grants...",
-      "descHint": "After creation, you'll enter the editor to refine expression DNA, mental models, and other structured content",
+      "descPlaceholder": "Describe the language mode or persona this recipe grants...",
       "cancel": "Cancel",
-      "submit": "Start forging"
+      "submit": "Finalize recipe",
+      "hint": "Once finalized, forge pills from it anytime; a pill is consumed when taken, the ability remains"
     },
-    "closeModal": "Close dialog"
+    "closeModal": "Close dialog",
+    "backToList": "Back to recipes",
+    "invalidLink": "Invalid link",
+    "loadingDetail": "Reading the recipe...",
+    "notFound": "Recipe not found or deleted",
+    "content": {
+      "empty": "No notes yet"
+    },
+    "schema": {
+      "empty": "Not written yet"
+    },
+    "editCta": "Edit new version",
+    "migrationBanner": {
+      "saved": "Saved {recipes} recipes, preserved {effects} absorbed abilities, {availableItems} pill(s) available; ",
+      "consumedNote": "consumed pills are no longer shown as inventory.",
+      "dismiss": "Dismiss migration summary"
+    },
+    "exportSkillCta": "Export Skill",
+    "craftCta": "Forge 1 pill",
+    "crafting": "Forging...",
+    "crafted": "1 pill forged into inventory",
+    "craftFailed": "Forging failed",
+    "archivedBadge": "Archived",
+    "availableCount": "{count} available",
+    "revisionLabel": "v{revision}",
+    "createdLabel": "Finalized",
+    "authorLabel": "Author",
+    "versionLabel": "Version label",
+    "editSave": "Save new version",
+    "editCancel": "Cancel",
+    "editHint": "Saving creates an immutable new version; forged pills and absorbed abilities stay untouched",
+    "unsavedConfirm": "You have unsaved changes to this recipe. Leave anyway?",
+    "saving": "Saving new version...",
+    "saveFailed": "Save failed, try again",
+    "saveConflict": "This recipe was updated elsewhere. Refresh and try again",
+    "archivedNotice": "This recipe is archived — no more pills can be forged. Existing pills and abilities are unaffected",
+    "noInventory": "No inventory — craft one to stock up",
+    "loadMore": "Load more"
   },
   "fusion": {
     "title": "Fusion Furnace",
@@ -283,72 +332,20 @@
         "emptyTitle": "No models available",
         "emptyDesc": "Add and enable models in Settings → Model Management first",
         "emptyDescModels": "This provider has no enabled models"
-      }
-    }
+      },
+      "consumeHint": "Preview does not consume materials; consumption happens on save."
+    },
+    "loadMore": "Load more"
   },
   "pill": {
-    "backToList": "Back to Pill Vault",
+    "backToList": "Back to Inventory",
     "invalidLink": "This pill link is invalid. Return to the pill list and choose again.",
     "loading": "Loading pill...",
-    "notFound": "Pill not found or has been removed",
-    "editCta": "Edit recipe",
-    "cancelCta": "Cancel",
-    "bindCta": "Bestow on daoist",
-    "exportSkillCta": "Export skill",
-    "deleteCta": "Delete pill",
-    "tab": {
-      "content": "Notes",
-      "schema": "Recipe",
-      "relations": "Bound by"
-    },
-    "meta": {
-      "builtin": "Built-in recipe",
-      "custom": "Self-forged",
-      "createdAt": "Forged on",
-      "updatedAt": "Updated on"
-    },
-    "content": {
-      "title": "Notes",
-      "empty": "No notes on this pill.",
-      "systemPrompt": "System prompt",
-      "userPrompt": "User prompt"
-    },
-    "schema": {
-      "title": "Recipe structure",
-      "empty": "This pill has no structured recipe."
-    },
-    "relations": {
-      "title": "Daoists bound to this pill",
-      "empty": "No daoist has bound this pill yet.",
-      "weight": "Weight {weight}"
-    },
-    "dialog": {
-      "deleteTitle": "Confirm deletion",
-      "deleteDesc": "This cannot be undone. Delete this pill?",
-      "cancel": "Cancel",
-      "confirm": "Delete",
-      "bindTitle": "Bestow on daoist",
-      "bindDesc": "Bind this pill to {agent} at weight {weight}"
-    },
+    "notFound": "No such pill",
     "editor": {
-      "saveCta": "Save pill",
-      "savedFeedback": "Saved to vault",
-      "destroyCta": "Destroy",
-      "destroyArmCta": "Click again to confirm",
-      "deleteConfirm": "Destroy this pill? This cannot be undone.",
-      "makeCopyCta": "Make a copy",
-      "copying": "Making a copy…",
-      "copyFailed": "Could not make a copy. Please try again.",
-      "saving": "Saving…",
-      "saveFailed": "Save failed. Your changes are kept — try again.",
-      "deleteFailed": "Delete failed. Please try again.",
-      "unsavedConfirm": "You have unsaved changes. Leave anyway?",
-      "builtInBadge": "Built-in",
       "pillNamePlaceholder": "Pill name",
       "descPlaceholder": "Pill summary (with triggers / anti-triggers)...",
-      "authorLabel": "Author",
       "authorPlaceholder": "Author",
-      "versionLabel": "Version",
       "tagsLabel": "Tags",
       "tagsAdd": "Add tag",
       "tagsPlaceholder": "classical, archaic",
@@ -425,7 +422,25 @@
         "addLabel": "Add example dialogue",
         "deleteAria": "Delete example dialogue"
       }
-    }
+    },
+    "retry": "Retry",
+    "stateAvailable": "Available",
+    "stateConsumedByAgent": "Consumed by agent",
+    "stateConsumedByFusion": "Consumed by fusion",
+    "stateDiscarded": "Discarded",
+    "stateDescAvailable": "Can be consumed or fused; any use consumes this pill, while the absorbed ability stays forever",
+    "stateDescConsumedByAgent": "Consumed: this pill is gone, and its ability snapshot lives with the agent",
+    "stateDescConsumedByFusion": "Consumed as fusion material to produce a new pill",
+    "stateDescDiscarded": "Discarded and unrecoverable; forge a new one from the recipe if needed",
+    "revisionLabel": "v{revision}",
+    "versionLabel": "Recipe version",
+    "consumedAtLabel": "Consumed at",
+    "recipeOrigin": "Source recipe",
+    "archivedBadge": "Recipe archived",
+    "legacyTitle": "This pill has been upgraded to a recipe",
+    "legacyDesc": "Legacy pills now live in the recipe system; view the recipe to forge a new pill",
+    "viewRecipeCta": "View recipe",
+    "consumeCta": "Consume"
   },
   "agents": {
     "title": "Daoist Hall",
@@ -484,14 +499,13 @@
     "saving": "Saving...",
     "saveFailed": "Save failed. Please retry",
     "cancelCta": "Cancel",
-    "restoreCta": "Restore server version",
     "unsavedConfirm": "You have unsaved changes. Leave anyway?",
     "startChatCta": "Start discourse",
     "inactiveChatHint": "A dormant daoist cannot start new chats; reawaken it in editing",
     "modelInvalidBadge": "Model unavailable",
     "modelInvalidWarning": "The current model is disabled or removed and kept for display only; switch to an available model in editing",
     "chatSessionTitle": "Discourse with {name}",
-    "pillsCount": "{count} pills",
+    "pillsCount": "{count} abilities",
     "meta": {
       "createdAt": "Registered on",
       "updatedAt": "Updated on"
@@ -501,14 +515,14 @@
       "empty": "No base persona set."
     },
     "pills": {
-      "title": "Bound pills",
-      "empty": "This daoist has not bound any pills yet.",
+      "title": "Absorbed abilities",
+      "empty": "This daoist has not absorbed any abilities yet.",
       "addCta": "Bestow",
       "weight": "Weight",
       "unbindCta": "Unbind",
       "selectFromVault": "Choose from Pill Vault",
       "allBound": "No pills available (all are already bound)",
-      "emptyHint": "After binding pills, the daoist will learn the corresponding language modes and persona traits",
+      "emptyHint": "Consuming a pill spends inventory; the ability persists as a snapshot. Removing an ability does not refund the pill",
       "reordering": "Saving new order...",
       "dragHint": "Drag the left handle to reorder; weight and order changes will re-synthesize on next discourse",
       "sortOrder": "Sort order",
@@ -616,7 +630,9 @@
       "edit_title": "Edit memory",
       "cancel_edit": "Cancel",
       "op_failed": "Operation failed, please retry"
-    }
+    },
+    "effectsConflict": "Agent capabilities changed elsewhere; refreshed — review and save again",
+    "effectsLoadFailed": "Failed to load abilities"
   },
   "about": {
     "pageTitle": "About",
@@ -771,23 +787,6 @@
     "errorToggleModel": "Failed to update model status",
     "errorTestConnection": "Connection test failed"
   },
-  "bindModal": {
-    "title": "Bind this pill",
-    "pillLabel": "Pill",
-    "agentLabel": "Daoist",
-    "weightLabel": "Weight (0-10)",
-    "weightHint": "Higher weight = stronger influence on the daoist's nature",
-    "cancel": "Cancel",
-    "submit": "Bind",
-    "alreadyBound": "This daoist has already bound this pill",
-    "closeModal": "Close dialog",
-    "prompt": "Bestow “{name}” on a daoist",
-    "noAgents": "No daoists yet. Recruit one in the Daoist Hall first.",
-    "sortOrder": "Sort order",
-    "success": "Bestowed",
-    "errorLoadAgents": "Failed to load daoist list",
-    "errorBind": "Binding failed"
-  },
   "skillExport": {
     "title": "Export skill",
     "formatLabel": "Target platform",
@@ -897,7 +896,8 @@
       "retry": "Retry",
       "interrupted": "The connection ended before this response completed. Retry to start a new attempt.",
       "retryBoundary": "New attempt after an interrupted group turn; completed replies remain above.",
-      "pending": "Waiting for a response..."
+      "pending": "Waiting for a response...",
+      "noResponse": "No valid response was received. Please retry."
     },
     "history": {
       "loadOlder": "Load earlier messages",
@@ -992,5 +992,19 @@
     "changelog": "Changelog",
     "later": "Later",
     "update": "Update now"
+  },
+  "consumeDialog": {
+    "title": "Consume Pill",
+    "prompt": "Consuming this pill consumes 1 pill from inventory; the Daoist keeps the ability. To use it again, refine it from its recipe.",
+    "noAgents": "No Daoists available",
+    "weightLabel": "Weight",
+    "sortOrder": "Order",
+    "cancel": "Cancel",
+    "submit": "Consume",
+    "submitting": "Consuming…",
+    "success": "Consumed",
+    "closeModal": "Close",
+    "errorLoadAgents": "Failed to load Daoists",
+    "errorConsume": "Failed to consume"
   }
 }

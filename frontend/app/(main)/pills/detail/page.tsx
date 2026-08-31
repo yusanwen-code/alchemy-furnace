@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { PillDetailPageClient } from './pill-detail-page-client'
 
 /**
- * 金丹详情页。
+ * 金丹库存实例详情页（?id=<itemId>）。
  *
  * 桌面端为 Next output:export 静态站点，实体 id 通过查询参数 ?id=<UUID> 传递
  * （动态路由 /pills/[id] 只预渲染占位 _，无法恢复真实 UUID）。

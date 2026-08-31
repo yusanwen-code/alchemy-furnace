@@ -6,6 +6,7 @@ import {
   Settings,
   History,
   FlaskConical,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -40,33 +41,42 @@ export interface NavItem {
  * 判断导航项是否激活：主路径或 activePaths 任一命中即激活。
  * `/` 精确匹配，其余按前缀匹配（pathname 须为去 locale 后的本地路径）。
  */
-export function isNavItemActive(item: NavItem, pathname: string): boolean {
+export function isNavItemActive(item: Pick<NavItem, 'path' | 'activePaths'>, pathname: string): boolean {
   const paths = [item.path, ...(item.activePaths ?? [])]
-  return paths.some(path => path === '/' ? pathname === '/' : pathname.startsWith(path))
+  return paths.some(path => pathname === path || (path !== '/' && pathname.startsWith(`${path}/`)))
 }
+
+/** 金丹阁内的分区，与主导航共用路径定义，避免重复设立一级模块。 */
+export const pillWorkspaceItems: NavChild[] = [
+  {
+    titleKey: 'items.pills.children.recipes.title',
+    descKey: 'items.pills.children.recipes.description',
+    path: '/recipes',
+    icon: BookOpen,
+  },
+  {
+    titleKey: 'items.pills.children.all.title',
+    descKey: 'items.pills.children.all.description',
+    path: '/pills',
+    icon: CircleDot,
+  },
+  {
+    titleKey: 'items.pills.children.fusion.title',
+    descKey: 'items.pills.children.fusion.description',
+    path: '/fusion',
+    icon: FlaskConical,
+  },
+]
 
 /** 顶部导航配置（Dify 式 mega-dropdown，参考 reference/导航栏.png） */
 export const navItems: NavItem[] = [
   { labelKey: 'items.home.label', path: '/', icon: Home },
   {
     labelKey: 'items.pills.label',
-    path: '/pills',
+    path: '/recipes',
     icon: CircleDot,
-    activePaths: ['/fusion'],
-    children: [
-      {
-        titleKey: 'items.pills.children.all.title',
-        descKey: 'items.pills.children.all.description',
-        path: '/pills',
-        icon: CircleDot,
-      },
-      {
-        titleKey: 'items.pills.children.fusion.title',
-        descKey: 'items.pills.children.fusion.description',
-        path: '/fusion',
-        icon: FlaskConical,
-      },
-    ],
+    activePaths: pillWorkspaceItems.map(item => item.path),
+    children: pillWorkspaceItems,
   },
   {
     labelKey: 'items.agents.label',

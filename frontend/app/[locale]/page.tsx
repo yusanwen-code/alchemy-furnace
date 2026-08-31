@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronRight, Flame, Plus } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
-import { usePill } from '@/contexts/PillContext'
 import { useAgent } from '@/contexts/AgentContext'
 import { useChat } from '@/contexts/ChatContext'
-import { pillDetailHref } from '@/lib/entity-detail-route'
+import { pillItemDetailHref, recipeDetailHref } from '@/lib/entity-detail-route'
+import { getPillItem, listPillItems } from '@/services/pillInventoryService'
+import { listRecipes } from '@/services/recipeService'
+import type { PillItemDetail, PillItemListItem, RecipeListItem } from '@/services/types'
 import { RecentSessionList } from '@/components/home/recent-session-list'
 import { FloatCard, CoinIcon } from '@/components/alchemy/float-card'
 import { BaguaFurnace } from '@/components/alchemy/bagua-furnace'
@@ -53,27 +55,61 @@ export default function HomePage() {
     ? 'md:max-w-[60%] lg:max-w-[55%]'
     : 'md:max-w-[42%] lg:max-w-[38%]'
 
-  const { state: pillState, fetchPills } = usePill()
+  // 金丹消耗品语义:库存 = 可用实例(available,服用/融合即消耗),丹方 = 永久保留的配方
+  const [inventory, setInventory] = useState<{ total: number; items: PillItemListItem[] }>({
+    total: 0,
+    items: [],
+  })
+  const [recipes, setRecipes] = useState<{ total: number; items: RecipeListItem[] }>({
+    total: 0,
+    items: [],
+  })
+  const [spotlightDetail, setSpotlightDetail] = useState<PillItemDetail | null>(null)
   const { state: agentState, fetchAgents } = useAgent()
   const { state: chatState, fetchSessions } = useChat()
 
   useEffect(() => {
-    fetchPills({})
+    let cancelled = false
+    void (async () => {
+      try {
+        const [inv, recs] = await Promise.all([
+          listPillItems({ size: 4 }),
+          listRecipes({ size: 4 }),
+        ])
+        if (cancelled) return
+        setInventory(inv)
+        setRecipes(recs)
+        // spotlight 详情富化(描述/标签);失败时以列表字段兜底,不打断首页
+        const top = inv.items[0]
+        if (top) {
+          try {
+            const detail = await getPillItem(top.id)
+            if (!cancelled) setSpotlightDetail(detail)
+          } catch {
+            // 兜底展示列表字段
+          }
+        }
+      } catch {
+        // 库存/丹方拉取失败:保持空态
+      }
+    })()
     fetchAgents()
     fetchSessions()
-  }, [fetchPills, fetchAgents, fetchSessions])
+    return () => {
+      cancelled = true
+    }
+  }, [fetchAgents, fetchSessions])
 
-  const pills = pillState.pills
   const agents = agentState.agents
   const sessions = chatState.sessions
 
   const stats = [
     {
-      key: 'pills' as const,
-      label: tStats('pills.label'),
-      value: pills.length,
-      unit: tStats('pills.unit'),
-      caption: tStats('pills.caption'),
+      key: 'inventory' as const,
+      label: tStats('inventory.label'),
+      value: inventory.total,
+      unit: tStats('inventory.unit'),
+      caption: tStats('inventory.caption'),
     },
     {
       key: 'agents' as const,
@@ -90,16 +126,24 @@ export default function HomePage() {
       caption: tStats('sessions.caption'),
     },
     {
-      key: 'builtins' as const,
-      label: tStats('builtins.label'),
-      value: pills.filter((p) => p.is_builtin).length,
-      unit: tStats('builtins.unit'),
-      caption: tStats('builtins.caption'),
+      key: 'recipes' as const,
+      label: tStats('recipes.label'),
+      value: recipes.total,
+      unit: tStats('recipes.unit'),
+      caption: tStats('recipes.caption'),
     },
   ]
 
-  const spotlight = pills[0]
-  const recentPills = pills.slice(0, 4)
+  // 最新库存实例 + 详情富化;无库存时走空态引导去丹方炼制
+  const spotlightItem = inventory.items[0] ?? null
+  const spotlight = spotlightItem
+    ? {
+        ...spotlightItem,
+        description: spotlightDetail?.description ?? '',
+        tags: spotlightDetail?.tags ?? [],
+      }
+    : null
+  const recentRecipes = recipes.items
 
   return (
     <div className="pb-24">
@@ -196,7 +240,7 @@ export default function HomePage() {
           ))}
         </section>
 
-        {/* ── 金丹阁：新成之丹 ── */}
+        {/* ── 金丹阁：最新库存实例 + 丹方录 ── */}
         <section id="pills" className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           {/* 最新金丹 spotlight */}
           <div className="relative flex h-full flex-col overflow-hidden rounded-[20px] border border-border/70 bg-card/60 shadow-[0_25px_50px_-12px_rgba(60,40,20,0.08)]">
@@ -214,7 +258,7 @@ export default function HomePage() {
               {spotlight ? (
                 <div className="max-w-md">
                   <p className="text-sm tracking-widest text-sage">
-                    {spotlight.is_builtin ? tSpot('kindBuiltIn') : tSpot('kindSelfMade')} · {formatDateTime(spotlight.created_at)}
+                    {tSpot('version', { revision: spotlight.revision })} · {formatDateTime(spotlight.created_at)}
                   </p>
                   <h2 className="mt-2 text-balance font-serif text-5xl font-black leading-[0.95] text-foreground md:text-6xl">
                     {spotlight.name}
@@ -232,7 +276,7 @@ export default function HomePage() {
                     </div>
                   )}
                   <Link
-                    href={pillDetailHref(spotlight.id)}
+                    href={pillItemDetailHref(spotlight.id)}
                     className="mt-8 inline-flex w-fit items-center gap-2 rounded-full bg-foreground px-7 py-3 text-sm font-medium text-background transition-transform duration-300 hover:scale-[1.03]"
                   >
                     {tSpot('viewCta')}
@@ -247,7 +291,7 @@ export default function HomePage() {
                     {tSpot('emptyDesc')}
                   </p>
                   <Link
-                    href="/pills"
+                    href="/recipes"
                     className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3 text-sm font-medium text-primary-foreground transition-transform duration-300 hover:scale-[1.03]"
                   >
                     <Plus className="size-4" aria-hidden />
@@ -258,7 +302,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 丹方录：最新四枚 */}
+          {/* 丹方录：最新四张丹方（永久保留；显示版本与可用库存数） */}
           <FloatCard delay={0.2} className="h-full">
             <div className="flex h-full flex-col gap-6 p-7">
               <div className="flex items-baseline justify-between">
@@ -266,33 +310,31 @@ export default function HomePage() {
                   {tRecipes('title')}
                 </h3>
                 <span className="text-xs text-sage">
-                  {tRecipes('count', { count: pills.length })}
+                  {tRecipes('count', { count: recipes.total })}
                 </span>
               </div>
 
               <ul className="flex flex-col gap-2">
-                {recentPills.map((p, i) => (
-                  <li key={p.id}>
+                {recentRecipes.map((r, i) => (
+                  <li key={r.id}>
                     <Link
-                      href={pillDetailHref(p.id)}
+                      href={recipeDetailHref(r.id)}
                       className="group flex w-full items-center gap-4 rounded-2xl px-2 py-2.5 text-left transition-colors duration-300 hover:bg-secondary/70"
                     >
                       <CoinIcon tone={(['gold', 'sage', 'cinnabar'] as const)[i % 3]}>
-                        <span className="font-serif text-base font-bold">{p.name.slice(0, 1)}</span>
+                        <span className="font-serif text-base font-bold">{r.name.slice(0, 1)}</span>
                       </CoinIcon>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate font-serif text-base font-bold text-foreground">
-                            {p.name}
+                            {r.name}
                           </p>
-                          {p.is_builtin && (
-                            <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
-                              {tRecipes('builtInBadge')}
-                            </span>
-                          )}
+                          <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
+                            {tRecipes('versionBadge', { revision: r.revision })}
+                          </span>
                         </div>
                         <p className="mt-1 truncate text-sm text-muted-foreground">
-                          {p.description || tRecipes('noDescription')}
+                          {tRecipes('availableCount', { count: r.available_count })}
                         </p>
                       </div>
                       <ChevronRight
@@ -303,7 +345,7 @@ export default function HomePage() {
                     </Link>
                   </li>
                 ))}
-                {recentPills.length === 0 && (
+                {recentRecipes.length === 0 && (
                   <li className="py-6 text-center text-sm text-muted-foreground">
                     {tRecipes('empty')}
                   </li>

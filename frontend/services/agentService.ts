@@ -1,6 +1,6 @@
 /**
  * 道人服务 - AI Agent 管理 API
- * 对接后端 /api/v1/agents，含服用金丹（绑定/权重/顺序）操作
+ * 服用与能力编排已迁至 pillInventoryService（consumePill / listEffects / updateEffects / removeEffect）
  */
 import { get, post, put, patch, del } from './api'
 import type {
@@ -14,7 +14,6 @@ import type {
   UpdateMemoryRequest,
   PagedList,
   AgentListParams,
-  ReplacePillsItem,
 } from './types'
 
 /**
@@ -29,7 +28,8 @@ export function listAgents(params: AgentListParams = {}): Promise<PagedList<Agen
 }
 
 /**
- * 获取道人详情（含已服用金丹 agent_pills 与语言模式缓存）
+ * 获取道人详情（含已吸收能力快照与语言模式缓存；
+ * 能力编排请用 pillInventoryService 的 listEffects / updateEffects / removeEffect）
  */
 export function getAgent(id: string): Promise<AgentDetail> {
   return get<AgentDetail>(`/agents/${id}`)
@@ -61,47 +61,6 @@ export function updateAgent(
  */
 export function deleteAgent(id: string): Promise<void> {
   return del<void>(`/agents/${id}`)
-}
-
-/**
- * 道人服用金丹（绑定），weight 0-10，sort_order >= 0
- */
-export function bindPill(agentId: string, pillId: string, weight = 1, sortOrder = 0): Promise<void> {
-  return post<void>(`/agents/${agentId}/pills`, {
-    pill_id: pillId,
-    weight,
-    sort_order: sortOrder,
-  })
-}
-
-/**
- * 更新服用记录（权重/顺序）
- */
-export function updateAgentPill(
-  agentId: string,
-  pillId: string,
-  weight: number,
-  sortOrder: number
-): Promise<void> {
-  return put<void>(`/agents/${agentId}/pills/${pillId}`, {
-    weight,
-    sort_order: sortOrder,
-  })
-}
-
-/**
- * 道人解除金丹绑定
- */
-export function unbindPill(agentId: string, pillId: string): Promise<void> {
-  return del<void>(`/agents/${agentId}/pills/${pillId}`)
-}
-
-/**
- * 完整替换道人服丹编排（原子）：以传入数组为最终编排
- * 空数组 = 清空全部服用关系；返回写后服务端确认的道人详情
- */
-export function replacePills(agentId: string, pills: ReplacePillsItem[]): Promise<AgentDetail> {
-  return put<AgentDetail>(`/agents/${agentId}/pills`, { pills })
 }
 
 // ========== 本地记忆 ==========

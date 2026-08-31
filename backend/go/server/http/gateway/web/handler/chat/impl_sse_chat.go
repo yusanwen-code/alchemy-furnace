@@ -2,8 +2,8 @@ package chat
 
 import (
 	"context"
-	stderrors "errors"
 	"encoding/json"
+	stderrors "errors"
 	"net/http"
 	"strings"
 	"time"
@@ -287,6 +287,14 @@ func (cls *Chat) finishSSEStream(ctx context.Context, sessionUID uuid.UUID, sess
 		sseWriteEvent(w, flusher, "error", ssePayload{Content: "语言引擎服务异常，请稍后重试", ErrorCode: "service.chat.stream_unavailable", Terminal: true, Recovery: chatservice.StreamRecoveryPersistedRetry})
 
 	default:
+		if strings.TrimSpace(res.full) == "" {
+			sseWriteEvent(w, flusher, "error", ssePayload{
+				Content:   "道人未生成有效回复，请稍后重试",
+				ErrorCode: "service.chat.empty_response", Terminal: true,
+				Recovery: chatservice.StreamRecoveryPersistedRetry,
+			})
+			return
+		}
 		if res.full != "" {
 			if _, err := cls.chat.SaveMessage(saveCtx, sessionID, "assistant", res.full); err != nil {
 				zap.L().Error("[炼丹炉] 保存助手回复失败", zap.Error(err))

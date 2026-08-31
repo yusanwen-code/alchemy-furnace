@@ -49,7 +49,7 @@ async def chat_completion(request: ChatCompletionRequest) -> BaseResponse:
             for msg in request.messages
         ]
 
-        result = chat_service.chat_completion(
+        result = await chat_service.chat_completion_async(
             messages=messages,
             model=request.model or None,
             temperature=request.temperature,

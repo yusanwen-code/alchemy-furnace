@@ -3,6 +3,7 @@
  * 对应「金丹化性」后端 API 的前端 TypeScript 类型
  * 金丹 = nuwa-skill 结构化语言模式技能包（非知识库）
  */
+import type { PillItemState } from '../lib/pill-inventory-state'
 
 // ========== 金丹 skill_schema（nuwa-skill 结构） ==========
 
@@ -142,11 +143,14 @@ export interface ExportableSkill {
 }
 
 /**
- * Skill 导出请求: 已保存金丹的结构化数据(skill)或合法 pill ID(pill_id),二选一。
+ * Skill 导出请求: 已保存金丹的结构化数据(skill) / 丹方版本(recipe_id 为当前版本,
+ * 带 revision_id 为指定版本) / 旧 pill ID(pill_id, 仅经 LegacyMap 解析) 三选一。
  * 接口绝不接收 API Key。
  */
 export interface SkillExportRequest {
   pill_id?: string
+  recipe_id?: string
+  revision_id?: string
   skill?: ExportableSkill
   format: ExportFormat
 }
@@ -205,19 +209,6 @@ export interface Agent {
   updated_at?: string
 }
 
-/** 服用记录（Agent 绑定金丹） */
-export interface AgentPill {
-  id: string
-  agent_id: string
-  pill_id: string
-  /** 剂量/权重 0-10 */
-  weight: number
-  /** 服用顺序 */
-  sort_order: number
-  created_at: string
-  pill?: Pill
-}
-
 /** 丹性相冲严重程度 */
 export type TensionSeverity = 'low' | 'medium' | 'high'
 
@@ -239,16 +230,16 @@ export interface LanguagePattern {
   inner_tensions: InnerTension[]
 }
 
-/** 道人详情（含服用记录与语言模式） */
+/** 道人详情（含已吸收能力快照与语言模式缓存；能力编排以 pillInventoryService effects 为准） */
 export interface AgentDetail extends Agent {
-  agent_pills?: AgentPill[]
   language_pattern?: LanguagePattern | null
 }
 
-/** 道人编辑器草稿中的服丹行（本地稳定 key 供受控列表渲染/排序） */
-export interface AgentPillDraftItem {
+/** 道人编辑器草稿中的能力编排行（本地稳定 key 供受控列表渲染/排序） */
+export interface AgentEffectDraftItem {
   key: string
-  pill_id: string
+  /** 能力 UUID（服用快照；与库存 itemId / 丹方 recipeId 严格区分） */
+  effect_id: string
   /** 剂量/权重 0-10 */
   weight: number
 }
@@ -261,7 +252,8 @@ export interface AgentEditorDraft {
   model_name: string
   proactivity: number
   status: AgentStatus
-  pills: AgentPillDraftItem[]
+  /** 能力编排（已吸收能力全量；提交集必须等于活跃集） */
+  effects: AgentEffectDraftItem[]
 }
 
 // ========== 本地记忆 ==========
@@ -375,19 +367,6 @@ export interface ChatMessage {
 
 // ========== 请求 ==========
 
-/** 创建金丹请求 */
-export interface CreatePillRequest {
-  name: string
-  description?: string
-  skill_schema: SkillSchema
-  tags?: string[]
-  author?: string
-  version?: string
-}
-
-/** 更新金丹请求 */
-export type UpdatePillRequest = Partial<CreatePillRequest>
-
 /** 创建道人请求 */
 export interface CreateAgentRequest {
   name: string
@@ -402,31 +381,6 @@ export interface UpdateAgentRequest extends Partial<CreateAgentRequest> {
   status?: AgentStatus
   /** 是否启用本地记忆(检索/蒸馏) */
   memory_enabled?: boolean
-}
-
-/** 完整服丹编排单项（完整替换用） */
-export interface ReplacePillsItem {
-  pill_id: string
-  /** 剂量/权重 0-10 */
-  weight: number
-}
-
-/** 完整替换服丹编排请求：以传入数组为最终编排，空数组清空全部服用关系 */
-export interface ReplacePillsRequest {
-  pills: ReplacePillsItem[]
-}
-
-/** 服用金丹请求 */
-export interface BindPillRequest {
-  pill_id: string
-  weight: number
-  sort_order: number
-}
-
-/** 更新服用记录请求 */
-export interface UpdateAgentPillRequest {
-  weight: number
-  sort_order: number
 }
 
 /** 创建会话请求 */
@@ -456,13 +410,183 @@ export interface ListParams {
   page_size?: number
 }
 
-/** 金丹列表查询参数 */
-export interface PillListParams extends ListParams {
-  keyword?: string
-  is_builtin?: boolean
-}
-
 /** 道人列表查询参数 */
 export interface AgentListParams extends ListParams {
   status?: AgentStatus
+}
+
+// ========== 丹方与消耗品库存（金丹消耗品重构） ==========
+// 契约对齐 backend/go/server/http/gateway/web/handler/pill_inventory 输出。
+// 四类实体标识各有专属属性名：recipe_id / revision_id / item_id / effect_id，
+// 禁止用一个含糊的 Pill.id 混用（任务 6 硬约束）。
+
+/** 丹方列表项（UUID 由后端显式携带） */
+export interface RecipeListItem {
+  id: string
+  name: string
+  current_revision_id: string
+  archived_at?: string | null
+  created_at: string
+  /** 该丹方当前可用金丹实例数（GROUP BY 聚合） */
+  available_count: number
+  /** 当前版本序号（任务 6 丹方入口显示「版本 vN」） */
+  revision: number
+}
+
+/** 丹方详情（含当前版本内容；任意状态可读） */
+export interface RecipeDetail {
+  id: string
+  name: string
+  description: string
+  skill_schema: SkillSchema
+  tags: string[]
+  author: string
+  version_label: string
+  revision: number
+  current_revision_id: string
+  archived_at?: string | null
+  created_at: string
+}
+
+/** 丹方不可变版本（revision 从 1 递增；旧金丹不受新版本影响） */
+export interface RecipeRevision {
+  id: string
+  revision: number
+  name: string
+  description: string
+  skill_schema: SkillSchema
+  tags: string[]
+  author: string
+  version_label: string
+  created_at: string
+}
+
+/** 丹方草稿（新建 / 编辑出新版本共用的提交内容） */
+export interface RecipeDraft {
+  name: string
+  description?: string
+  skill_schema?: SkillSchema
+  tags?: string[]
+  author?: string
+  version_label?: string
+}
+
+/** 金丹库存列表项（可用实例；列表恒为 available） */
+export interface PillItemListItem {
+  id: string
+  /** 来源丹方当前版本名称 */
+  name: string
+  state: PillItemState
+  recipe_id: string
+  revision_id: string
+  revision: number
+  created_at: string
+}
+
+/** 金丹库存实例详情（任意状态可读；已消耗/弃置展示去向） */
+export interface PillItemDetail {
+  id: string
+  name: string
+  description: string
+  /** 来源版本标签（hero spotlight 丹性行） */
+  tags: string[]
+  /** available / consumed_by_agent / consumed_by_fusion / discarded */
+  state: PillItemState
+  recipe_id: string
+  revision_id: string
+  revision: number
+  version_label: string
+  /** 来源丹方已归档时展示 */
+  archived_at?: string | null
+  /** 已消耗/已弃置时间 */
+  consumed_at?: string | null
+  created_at: string
+}
+
+/** 道人已吸收能力（服用快照；item_id 指向消耗后原实例，revision_id 指向不可变版本） */
+export interface AgentEffect {
+  id: string
+  name: string
+  schema: SkillSchema
+  weight: number
+  sort_order: number
+  item_id: string
+  revision_id: string
+  created_at: string
+  removed_at?: string | null
+}
+
+/** 幂等写操作统一结果（operation_id 与请求 Idempotency-Key 同值；断线恢复按它查） */
+export interface PillOperationResult {
+  operation_id: string
+  recipe_id?: string
+  revision_id?: string
+  item_ids?: string[]
+  effect_id?: string
+  consumed_item_ids?: string[]
+}
+
+/** 融合预览（两阶段第一阶段；预览不消耗材料） */
+export interface FusionPreview {
+  preview_id: string
+  expires_at: string
+  name: string
+  description: string
+  skill_schema: SkillSchema
+  operator: { id: string; name: string }
+  model: string
+  degraded: boolean
+}
+
+/** 能力列表响应（道人活跃能力，按 sort_order 升序；effects_revision 供 PUT 乐观锁） */
+export interface AgentEffectsResponse {
+  effects_revision: number
+  effects: AgentEffect[]
+}
+
+/** 能力全量编排响应（提交集必须等于活跃集；乐观锁由 effects_revision 承担） */
+export interface UpdateEffectsResponse {
+  effects_revision: number
+  effects: AgentEffect[]
+}
+
+/** 旧金丹 legacy 解析跳转（GET /pills/:id；旧 ID 不再是可用金丹） */
+export interface PillLegacyPointer {
+  entity_type: 'recipe'
+  recipe_id: string
+}
+
+/** 丹方列表查询参数 */
+export interface RecipeListParams {
+  page?: number
+  size?: number
+  keyword?: string
+  include_archived?: boolean
+}
+
+/** 金丹库存列表查询参数 */
+export interface PillItemListParams {
+  page?: number
+  size?: number
+  recipe_id?: string
+}
+
+/**
+ * 库存迁移摘要（GET /migration-summary；升级用户展示，读迁移完成标记，非实时计数）
+ * migrated=true 且 is_fresh_install=false 时前端展示升级摘要条
+ */
+export interface MigrationSummary {
+  migrated: boolean
+  is_fresh_install: boolean
+  /** 旧金丹定义数 / 旧绑定数（迁移前存量） */
+  legacy_pills: number
+  legacy_binds: number
+  /** 已保存丹方数 / 可用金丹数 / 历史已服用数 / 已吸收能力数 */
+  recipes: number
+  available_items: number
+  history_items: number
+  effects: number
+  /** 迁移前一致性备份绝对路径（fresh 安装为空） */
+  backup_path: string
+  completed_at: string
 }

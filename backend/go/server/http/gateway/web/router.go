@@ -19,6 +19,7 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 	}
 
 	pillHandler := handler.NewPill()
+	pillInventoryHandler := handler.NewPillInventory()
 	agentHandler := handler.NewAgent()
 	chatHandler := handler.NewChat()
 	trialHandler := handler.NewTrial()
@@ -33,11 +34,13 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 	userHandler := handler.NewUser()
 
 	// 金丹管理(UUID 对外标识)
+	// 旧写入/克隆路由任务 5 起恒 410 pill.legacy_api_removed(handler 方法体即 410,双保险);
+	// 旧详情路由改道 LegacyMap 跳转(ResolveLegacyPill),不读取可用库存。
 	pills := v1.Group("/pills")
 	{
 		pills.GET("", router.WrapperPage(pillHandler.List))
 		pills.POST("", router.Wrapper(pillHandler.Create))
-		pills.GET("/:uuid", router.Wrapper(pillHandler.Get))
+		pills.GET("/:uuid", router.Wrapper(pillInventoryHandler.ResolveLegacyPill))
 		pills.PUT("/:uuid", router.Wrapper(pillHandler.Update))
 		pills.DELETE("/:uuid", router.Wrapper(pillHandler.Delete))
 		pills.POST("/:uuid/clone", router.Wrapper(pillHandler.Clone))
@@ -66,6 +69,35 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 			memories.DELETE("/:memory_uuid", router.Wrapper(agentHandler.DeleteMemory))
 			memories.DELETE("", router.Wrapper(agentHandler.ClearMemories))
 		}
+	}
+
+	// 金丹消耗品库存(任务 5 新链路,§2.3 路由契约)
+	// 所有写操作(预览与查询除外)要求 Idempotency-Key 头: 缺失/非法 → 400。
+	inventoryGroup := v1.Group("")
+	{
+		// 丹方(永久保留;编辑生成新版本,不影响旧金丹/能力)
+		inventoryGroup.GET("/recipes", router.Wrapper(pillInventoryHandler.ListRecipes))
+		inventoryGroup.POST("/recipes", router.Wrapper(pillInventoryHandler.SaveRecipe))
+		inventoryGroup.GET("/recipes/:id", router.Wrapper(pillInventoryHandler.GetRecipe))
+		inventoryGroup.GET("/recipes/:id/revisions/:revision_id", router.Wrapper(pillInventoryHandler.GetRecipeRevision))
+		inventoryGroup.POST("/recipes/:id/revisions", router.Wrapper(pillInventoryHandler.UpdateRecipe))
+		inventoryGroup.POST("/recipes/:id/archive", router.Wrapper(pillInventoryHandler.ArchiveRecipe))
+		inventoryGroup.POST("/recipes/:id/craft", router.Wrapper(pillInventoryHandler.CraftPill))
+		// 金丹库存(实例级状态机 available→consumed_by_*/discarded)
+		inventoryGroup.GET("/pill-items", router.Wrapper(pillInventoryHandler.ListPillItems))
+		inventoryGroup.GET("/pill-items/:id", router.Wrapper(pillInventoryHandler.GetPillItem))
+		inventoryGroup.POST("/pill-items/:id/discard", router.Wrapper(pillInventoryHandler.DiscardItem))
+		// 服用与能力编排(服用消耗库存但保留能力;移除能力不返还)
+		// 参数名 :uuid/:effect_uuid 为对齐既有 agents 路由树(Gin 同位置通配符名须一致),
+		// 路径形状与 §2.3 契约一致
+		inventoryGroup.POST("/agents/:uuid/consume", router.Wrapper(pillInventoryHandler.ConsumePill))
+		inventoryGroup.GET("/agents/:uuid/effects", router.Wrapper(pillInventoryHandler.ListEffects))
+		inventoryGroup.PUT("/agents/:uuid/effects", router.Wrapper(pillInventoryHandler.UpdateEffects))
+		inventoryGroup.POST("/agents/:uuid/effects/:effect_id/remove", router.Wrapper(pillInventoryHandler.RemoveEffect))
+		// 幂等操作查询(断线恢复)
+		inventoryGroup.GET("/pill-operations/:id", router.Wrapper(pillInventoryHandler.GetOperation))
+		// 迁移摘要只读(任务 8: 升级用户展示;无标记 migrated=false;不触发迁移)
+		inventoryGroup.GET("/migration-summary", router.Wrapper(pillInventoryHandler.MigrationSummary))
 	}
 
 	// 系统接口(健康检查/配置;无 service 层,内联构造)
@@ -107,10 +139,12 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 		trialGroup.POST("/chat", router.Wrapper(trialHandler.Chat))
 	}
 
-	// 金丹融合(N 枚金丹随机融合为新丹预览,不落库)
+	// 金丹融合(两阶段: 预览不扣料/确认原子扣料;旧 /fuse 恒 410)
 	fusionGroup := v1.Group("/fusion")
 	{
 		fusionGroup.POST("/fuse", router.Wrapper(fusionHandler.Fuse))
+		fusionGroup.POST("/previews", router.Wrapper(pillInventoryHandler.PreviewFusion))
+		fusionGroup.POST("/confirm", router.Wrapper(pillInventoryHandler.ConfirmFusion))
 	}
 
 	distillationGroup := v1.Group("/distillation")

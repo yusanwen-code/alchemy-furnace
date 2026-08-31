@@ -7,7 +7,7 @@ import { chatLobbyHref, chatSessionHref, parseLegacyChatPath } from '@/lib/chat-
 import {
   agentDetailHref,
   parseLegacyEntityDetailPath,
-  pillDetailHref,
+  pillItemDetailHref,
 } from '@/lib/entity-detail-route'
 
 /** 旧 HashRouter 链接 → App Router 映射 */
@@ -52,7 +52,7 @@ export function HashRedirect() {
       router.replace(
         legacyEntity.kind === 'agents'
           ? agentDetailHref(legacyEntity.id)
-          : pillDetailHref(legacyEntity.id),
+          : pillItemDetailHref(legacyEntity.id),
       )
       return
     }

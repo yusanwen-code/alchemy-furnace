@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alchemy-furnace/server/internal/errors"
 	idao "github.com/alchemy-furnace/server/internal/interface/dao"
@@ -65,10 +66,28 @@ func (f *fakeAgentDao) InvalidateLanguagePattern(ctx context.Context, agentID ui
 func (f *fakeAgentDao) SaveLanguagePattern(ctx context.Context, p *model.LanguagePattern) errors.Error {
 	panic("unused")
 }
+func (f *fakeAgentDao) SaveLanguagePatternIfRevision(ctx context.Context, p *model.LanguagePattern, expectedEffectsRevision int) errors.Error {
+	panic("unused")
+}
 func (f *fakeAgentDao) ReplaceAgentPills(ctx context.Context, agentID uint, pills []idao.AgentPillInput) errors.Error {
 	panic("unused")
 }
+func (f *fakeAgentDao) RemoveAgentPillEffect(ctx context.Context, agentID uint, itemUUID uuid.UUID, now time.Time) errors.Error {
+	panic("unused")
+}
+func (f *fakeAgentDao) UpdateAgentPillEffect(ctx context.Context, agentID uint, itemUUID uuid.UUID, weight *float64, sortOrder *int) errors.Error {
+	panic("unused")
+}
 func (f *fakeAgentDao) CountSessionsByAgentID(ctx context.Context, agentID uint) (int64, errors.Error) {
+	panic("unused")
+}
+func (f *fakeAgentDao) ListActiveEffects(ctx context.Context, agentID uint) ([]idao.EffectWithSource, errors.Error) {
+	panic("unused")
+}
+func (f *fakeAgentDao) RemoveAgentPillEffectByUUID(ctx context.Context, agentID uint, effectUUID uuid.UUID, now time.Time) errors.Error {
+	panic("unused")
+}
+func (f *fakeAgentDao) UpdateActiveEffectsCAS(ctx context.Context, agentID uint, expectedEffectsRevision int, writes []idao.EffectWrite) (bool, errors.Error) {
 	panic("unused")
 }
 

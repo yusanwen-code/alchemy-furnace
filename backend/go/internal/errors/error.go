@@ -22,6 +22,9 @@ const (
 	ErrorTypeServiceUnavailable
 	// ErrorTypeServerInternalError 服务器内部错误 → 500
 	ErrorTypeServerInternalError
+	// ErrorTypeGone 旧入口已下线(如完整服丹编排被消耗品语义替代) → 410
+	// 任务 3 起使用: 防止客户端继续调用可绕过库存的旧写路径
+	ErrorTypeGone
 )
 
 // Error 内部错误接口
@@ -123,6 +126,8 @@ func HTTPStatus(err error) int {
 		return 400
 	case IsType(err, ErrorTypeConflict):
 		return 409
+	case IsType(err, ErrorTypeGone):
+		return 410
 	case IsType(err, ErrorTypeServiceUnavailable):
 		return 503
 	default:

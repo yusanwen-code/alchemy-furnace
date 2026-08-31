@@ -9,11 +9,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// TrialPillInput 试丹请求中的单颗金丹引用(PillID 为对外 UUID)
+// TrialPillInput 试丹请求中的单颗金丹引用(金丹消耗品重构后)
+// 三种目标互斥: RecipeID(+RevisionID 指定版本) 引用丹方版本;
+// PillID 旧金丹仅经 LegacyMap 解析到丹方当前版本(不读取可用库存);
+// Draft 未保存草稿内联内容(不落库)。试丹是模拟: 不消耗金丹、不写 AgentPillEffect。
 type TrialPillInput struct {
-	PillID    uuid.UUID // 金丹 UUID
-	Weight    float64   // 剂量/权重,默认 1.0
-	SortOrder int       // 服用顺序
+	PillID     uuid.UUID       // 旧金丹 UUID(仅经 LegacyMap 解析;新入口传 uuid.Nil)
+	RecipeID   uuid.UUID       // 丹方 UUID(RevisionID 为空时取当前版本)
+	RevisionID uuid.UUID       // 指定丹方版本(可选;空 = 当前版本)
+	Draft      *TrialPillDraft // 未保存草稿(可选;不落库)
+	Weight     float64         // 剂量/权重,默认 1.0
+	SortOrder  int             // 服用顺序
+}
+
+// TrialPillDraft 未保存草稿的试丹内容(女娲编辑页未保存时试丹,不落库)
+type TrialPillDraft struct {
+	Name        string
+	SkillSchema model.JSONMap
 }
 
 // TrialChatRequest 试丹-临时对话请求

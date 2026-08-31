@@ -1,6 +1,7 @@
 import { setRequestLocale } from 'next-intl/server'
 import type { ReactNode } from 'react'
 import { Navbar } from '@/components/layout/navbar'
+import { PillWorkspaceNav } from '@/components/layout/pill-workspace-nav'
 import { Footer } from '@/components/layout/footer'
 import { LocaleProvider } from '@/components/i18n/locale-provider'
 import { defaultLocale } from '@/i18n'
@@ -31,7 +32,10 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   return (
     <LocaleProvider initialLocale={defaultLocale} preferStored>
       <Navbar />
-      <div className="flex-1">{children}</div>
+      <div className="flex-1">
+        <PillWorkspaceNav />
+        {children}
+      </div>
       <Footer />
     </LocaleProvider>
   )

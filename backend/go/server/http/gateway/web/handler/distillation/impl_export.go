@@ -19,11 +19,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// SkillExportRequest 导出请求: pill_id 与 skill 二选一,format 必填
+// SkillExportRequest 导出请求: pill_id / recipe_id(+revision_id) / skill 三选一,format 必填
+// 任务 5 起: 导出指定丹方版本(recipe_id 为当前版本,带 revision_id 为指定版本);
+// 旧 pill_id 只经 LegacyMap 解析,不读取可用库存。
 type SkillExportRequest struct {
-	PillID string                   `json:"pill_id"`
-	Skill  *nudist.ExportableSkill  `json:"skill"`
-	Format string                   `json:"format"`
+	PillID     string                  `json:"pill_id"`
+	RecipeID   string                  `json:"recipe_id"`
+	RevisionID string                  `json:"revision_id"`
+	Skill      *nudist.ExportableSkill `json:"skill"`
+	Format     string                  `json:"format"`
 }
 
 // SkillExport 处理导出请求并写出 ZIP 二进制响应
@@ -48,9 +52,11 @@ func (h *Handler) SkillExport(c *gin.Context) {
 	}
 
 	result, serr := h.service.SkillExport(contextutil.NewContextWithGin(c), &nudist.SkillExportInput{
-		PillID: body.PillID,
-		Skill:  body.Skill,
-		Format: body.Format,
+		PillID:     body.PillID,
+		RecipeID:   body.RecipeID,
+		RevisionID: body.RevisionID,
+		Skill:      body.Skill,
+		Format:     body.Format,
 	})
 	if serr != nil {
 		writeExportError(c, serr)

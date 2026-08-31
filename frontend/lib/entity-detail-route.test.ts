@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentDetailHref,
-  pillDetailHref,
+  pillItemDetailHref,
   parseEntityDetailId,
   parseLegacyEntityDetailPath,
 } from '@/lib/entity-detail-route'
@@ -11,12 +11,12 @@ const id = '11111111-1111-4111-8111-111111111111'
 describe('entity detail route contract', () => {
   it('builds canonical static detail URLs', () => {
     expect(agentDetailHref(id)).toBe(`/agents/detail?id=${id}`)
-    expect(pillDetailHref(id)).toBe(`/pills/detail?id=${id}`)
+    expect(pillItemDetailHref(id)).toBe(`/pills/detail?id=${id}`)
   })
 
   it('rejects invalid ids when building URLs', () => {
     expect(() => agentDetailHref('_')).toThrow('Invalid entity id')
-    expect(() => pillDetailHref('pill-1')).toThrow('Invalid entity id')
+    expect(() => pillItemDetailHref('pill-1')).toThrow('Invalid entity id')
   })
 
   it('parses only a valid UUID query value', () => {

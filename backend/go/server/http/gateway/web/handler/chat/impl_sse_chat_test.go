@@ -401,7 +401,7 @@ func TestSSEChatSystemMessageIncludesDynamicSections(t *testing.T) {
 			ID: 3, UUID: sessionUID, Type: model.SessionTypeSingle, AgentID: &agentID,
 			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Status: "active", ModelName: "test-model", Proactivity: 60},
 		},
-		pattern:   &model.LanguagePattern{SystemPrompt: "cached static prompt", BehaviorProfile: profileJSON},
+		pattern:    &model.LanguagePattern{SystemPrompt: "cached static prompt", BehaviorProfile: profileJSON},
 		streamFull: "ok",
 	}
 
@@ -454,6 +454,27 @@ func TestSSEChatStopRequestSkipsEngine(t *testing.T) {
 	}
 	if strings.Join(stub.savedRoles, ",") != "user" {
 		t.Fatalf("saved roles = %v, want user only", stub.savedRoles)
+	}
+}
+
+// 空的模型输出不是成功回复：不能发送 done 或触发自动命名。
+func TestSSEChatEmptyModelOutputReturnsError(t *testing.T) {
+	sessionUID := uuid.New()
+	agentID := uint(7)
+	stub := &sseChatStub{
+		session: &model.ChatSession{
+			ID: 1, UUID: sessionUID, AgentID: &agentID,
+			Agent: model.DaoAgent{ID: agentID, UUID: uuid.New(), Name: "测试道人", Status: "active", ModelName: "test-model", Proactivity: 50},
+		},
+		streamFull: "   ",
+	}
+	w := performSSEChat(t, stub, sessionUID)
+	body := w.Body.String()
+	if !strings.Contains(body, "event: error") {
+		t.Fatalf("empty model output must emit error: %q", body)
+	}
+	if strings.Contains(body, "event: done") {
+		t.Fatalf("empty model output must not emit done: %q", body)
 	}
 }
 

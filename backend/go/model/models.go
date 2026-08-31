@@ -55,10 +55,14 @@ type DaoAgent struct {
 	Status        string    `json:"status" gorm:"size:20;default:active;comment:状态: active(活跃)/inactive(停用)"`
 	Proactivity   int       `json:"proactivity" gorm:"default:50;comment:主动性/表达欲(0-100,群聊发言欲)"`
 	MemoryEnabled bool      `json:"memory_enabled" gorm:"not null;default:true;comment:是否启用本地记忆(检索/蒸馏)"`
-	CreatedAt     time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
+	// EffectsRevision 能力编排版本：服用/移除/调权重顺序时同事务加一，用于缓存并发保护
+	EffectsRevision int       `json:"-" gorm:"not null;default:0;comment:能力编排版本(单调递增)"`
+	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime;comment:创建时间"`
 
 	// 关联关系：一个道人服用多个金丹
 	AgentPills []AgentPill `json:"agent_pills,omitempty" gorm:"foreignKey:AgentID;references:ID;constraint:OnDelete:CASCADE;"`
+	// 关联关系：一个道人拥有多个已吸收能力（任务 3；语言模式编译输入的事实来源）
+	AgentPillEffects []AgentPillEffect `json:"agent_pill_effects,omitempty" gorm:"foreignKey:AgentID;references:ID;constraint:OnDelete:CASCADE;"`
 	// 关联关系：一个道人参与多个会话
 	Sessions []ChatSession `json:"sessions,omitempty" gorm:"foreignKey:AgentID;references:ID;constraint:OnDelete:CASCADE;"`
 	// 关联关系：一个道人有一个语言模式缓存

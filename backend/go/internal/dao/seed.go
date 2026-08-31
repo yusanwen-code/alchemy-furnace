@@ -135,6 +135,125 @@ func SeedDefaultLLMModels(db *gorm.DB) error {
 	return nil
 }
 
+// ---------- 内置丹方初始化与一次性赠送（金丹消耗品重构） ----------
+// 旧 SeedBuiltinPills（写 ElixirPill）仅保留给 serve 模式零回归；
+// 桌面启动链改为：MigratePillInventory → SeedBuiltinRecipes → GrantStarterPills。
+// 顺序约束：必须先 SeedBuiltinRecipes 再 GrantStarterPills（赠送依赖丹方存在）。
+
+// SeedBuiltinRecipes 确保内置丹方存在（幂等，按 v1 名称查重）
+// 迁移用户：旧内置 ElixirPill 已转为同名丹方，命中跳过；被用户删除过的内置定义会补齐。
+// 全新安装：创建 5 个内置丹方 v1。不覆盖用户编辑出的新版本（v1 不可变）。
+func SeedBuiltinRecipes(db *gorm.DB) error {
+	created := 0
+	for _, src := range builtinPills() {
+		var count int64
+		if err := db.Table("pill_recipe_revisions").Where("name = ?", src.Name).Count(&count).Error; err != nil {
+			return fmt.Errorf("查询内置丹方「%s」失败: %w", src.Name, err)
+		}
+		if count > 0 {
+			continue // 已存在（含迁移产物）→ 跳过，保证幂等
+		}
+		err := db.Transaction(func(tx *gorm.DB) error {
+			recipe := model.PillRecipe{IsBuiltin: true}
+			if err := tx.Create(&recipe).Error; err != nil {
+				return err
+			}
+			rev := model.PillRecipeRevision{
+				RecipeID:     recipe.ID,
+				Revision:     1,
+				Name:         src.Name,
+				Description:  src.Description,
+				SkillSchema:  deepCopyJSON(src.SkillSchema),
+				Tags:         src.Tags,
+				Author:       src.Author,
+				VersionLabel: src.Version,
+			}
+			if err := tx.Create(&rev).Error; err != nil {
+				return err
+			}
+			return tx.Model(&recipe).Update("current_revision_id", rev.ID).Error
+		})
+		if err != nil {
+			return fmt.Errorf("写入内置丹方「%s」失败: %w", src.Name, err)
+		}
+		created++
+	}
+	log.Printf("[炼丹炉] 内置丹方种子写入完成：新增 %d 个，跳过 %d 个", created, len(builtinPills())-created)
+	return nil
+}
+
+// GrantStarterPills 一次性赠送（持久化标记，重启不自动补货）：
+//   - 新用户（迁移报告 is_fresh_install=true）：每个内置丹方赠送 1 枚可用金丹，disposition=granted
+//   - 迁移用户：只写 legacy_accounted 标记，不赠送（旧数据已按迁移规则核算）
+// 幂等：PillStarterGrant.RecipeID 唯一，重复调用不重复产出。
+func GrantStarterPills(db *gorm.DB) error {
+	var st model.PillMigrationState
+	if err := db.Where("key = ?", PillInventoryMigrationKey).First(&st).Error; err != nil {
+		return fmt.Errorf("读取迁移状态失败(请先执行 MigratePillInventory): %w", err)
+	}
+	isFresh, _ := st.ReportJSON["is_fresh_install"].(bool)
+
+	var recipes []model.PillRecipe
+	if err := db.Where("is_builtin = ?", true).Find(&recipes).Error; err != nil {
+		return fmt.Errorf("查询内置丹方失败: %w", err)
+	}
+
+	granted, accounted := 0, 0
+	err := db.Transaction(func(tx *gorm.DB) error {
+		for _, r := range recipes {
+			var existing int64
+			if err := tx.Model(&model.PillStarterGrant{}).Where("recipe_id = ?", r.ID).Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing > 0 {
+				continue // 已有赠送/核算记录（重启不自动补货）
+			}
+			if isFresh {
+				if r.CurrentRevisionID == nil {
+					return fmt.Errorf("内置丹方「%s」缺少当前版本，无法赠送", r.UUID.String())
+				}
+				// 来源操作：每枚一次赠送独立操作，提供 OriginOperationID
+				op := model.PillOperation{
+					Kind:        "starter_grant",
+					PayloadHash: migrationPayloadHash(model.ElixirPill{UUID: r.UUID, ID: r.ID}),
+					ResultJSON:  model.JSONMap{"kind": "starter_grant", "recipe_uuid": r.UUID.String()},
+				}
+				if err := tx.Create(&op).Error; err != nil {
+					return err
+				}
+				item := model.PillItem{
+					RecipeRevisionID:  *r.CurrentRevisionID,
+					State:             model.PillAvailable,
+					OriginOperationID: op.ID,
+					OriginIndex:       0,
+				}
+				if err := tx.Create(&item).Error; err != nil {
+					return err
+				}
+				if err := tx.Create(&model.PillStarterGrant{
+					RecipeID: r.ID, Disposition: "granted", ItemID: &item.ID,
+				}).Error; err != nil {
+					return err
+				}
+				granted++
+			} else {
+				if err := tx.Create(&model.PillStarterGrant{
+					RecipeID: r.ID, Disposition: "legacy_accounted",
+				}).Error; err != nil {
+					return err
+				}
+				accounted++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("一次性赠送写入失败: %w", err)
+	}
+	log.Printf("[炼丹炉] 内置丹方一次性赠送完成：新用户赠送 %d 枚，迁移用户核算 %d 个", granted, accounted)
+	return nil
+}
+
 // ---------- 内置金丹 skill_schema 构造辅助 ----------
 
 func expressionDNA(sentenceLength string, formality float64, vocabulary, tabooWords []string, rhythm, humorType, certaintyStyle, citationHabit string) map[string]interface{} {

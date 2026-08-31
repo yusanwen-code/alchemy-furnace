@@ -118,12 +118,6 @@ interface AgentContextType {
   addAgent: (data: CreateAgentRequest) => Promise<Agent | null>
   editAgent: (id: string, data: UpdateAgentRequest) => Promise<Agent | null>
   removeAgent: (id: string) => Promise<boolean>
-  /** 服用金丹（绑定），成功后刷新道人详情 */
-  bindPill: (agentId: string, pillId: string, weight?: number, sortOrder?: number) => Promise<boolean>
-  /** 更新服用记录（权重/顺序），成功后刷新道人详情 */
-  updateAgentPill: (agentId: string, pillId: string, weight: number, sortOrder: number) => Promise<boolean>
-  /** 解除金丹绑定，成功后刷新道人详情 */
-  unbindPill: (agentId: string, pillId: string) => Promise<boolean>
 }
 
 const AgentContext = createContext<AgentContextType | null>(null)
@@ -203,53 +197,6 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  /** 刷新当前道人详情的辅助逻辑 */
-  const refreshAgent = useCallback(async (agentId: string) => {
-    const agent = await agentService.getAgent(agentId)
-    dispatch({ type: 'SET_CURRENT_AGENT', payload: agent })
-  }, [])
-
-  /** 服用金丹（绑定） */
-  const bindPill = useCallback(async (agentId: string, pillId: string, weight = 1, sortOrder = 0): Promise<boolean> => {
-    try {
-      await agentService.bindPill(agentId, pillId, weight, sortOrder)
-      await refreshAgent(agentId)
-      return true
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '服用金丹失败' })
-      return false
-    }
-  }, [refreshAgent])
-
-  /** 更新服用记录（权重/顺序） */
-  const updateAgentPill = useCallback(async (
-    agentId: string,
-    pillId: string,
-    weight: number,
-    sortOrder: number
-  ): Promise<boolean> => {
-    try {
-      await agentService.updateAgentPill(agentId, pillId, weight, sortOrder)
-      await refreshAgent(agentId)
-      return true
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '更新服用记录失败' })
-      return false
-    }
-  }, [refreshAgent])
-
-  /** 解除金丹绑定 */
-  const unbindPill = useCallback(async (agentId: string, pillId: string): Promise<boolean> => {
-    try {
-      await agentService.unbindPill(agentId, pillId)
-      await refreshAgent(agentId)
-      return true
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '解除绑定失败' })
-      return false
-    }
-  }, [refreshAgent])
-
   return (
     <AgentContext.Provider
       value={{
@@ -260,9 +207,6 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         addAgent,
         editAgent,
         removeAgent,
-        bindPill,
-        updateAgentPill,
-        unbindPill,
       }}
     >
       {children}

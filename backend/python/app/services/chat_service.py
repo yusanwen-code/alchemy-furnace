@@ -8,6 +8,7 @@
 import asyncio
 import json
 import logging
+from urllib.parse import urlsplit
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import httpx
@@ -21,6 +22,36 @@ from openai import (
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+_DEEPSEEK_V4_MODELS = {
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash-vision-exp",
+}
+
+
+def _is_official_deepseek_v4(model: str, base_url: Optional[str]) -> bool:
+    """只对官方 V4 endpoint 发送 DeepSeek 专用参数，第三方代理保持兼容。"""
+    if model not in _DEEPSEEK_V4_MODELS or not base_url:
+        return False
+    return (urlsplit(base_url).hostname or "").lower() == "api.deepseek.com"
+
+
+def _chat_create_kwargs(model: str, messages: List[Dict[str, str]], temperature: float,
+                        max_tokens: int, stream: bool = False,
+                        base_url: Optional[str] = None) -> Dict[str, Any]:
+    """统一构造 Chat Completions 参数，避免同步/异步路径能力漂移。"""
+    kwargs: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": stream,
+    }
+    if _is_official_deepseek_v4(model, base_url):
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+    return kwargs
 
 
 # ==================== 统一错误映射（T032） ====================
@@ -214,12 +245,9 @@ class ChatService:
             logger.info(f"求道之问 - 模型: {model}")
             chat_messages = self._normalize_messages(messages)
 
-            create_kwargs: Dict[str, Any] = {
-                "model": model,
-                "messages": chat_messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
+            create_kwargs: Dict[str, Any] = _chat_create_kwargs(
+                model, chat_messages, temperature, max_tokens, base_url=eff_url,
+            )
             if response_format is not None:
                 create_kwargs["response_format"] = response_format
 
@@ -245,6 +273,55 @@ class ChatService:
                     temp_client.close()
                 except Exception:
                     logger.debug("关闭临时 OpenAI 客户端异常", exc_info=True)
+
+    async def chat_completion_async(
+        self,
+        messages: List[Dict[str, str]],
+        model: str = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """异步非流式对话，供 FastAPI 路由使用，避免同步 SDK 阻塞事件循环。"""
+        model = model or settings.default_model
+        eff_key, eff_url, is_override = self._resolve_credentials(api_key, base_url)
+        if not self._credentials_usable(eff_key, eff_url, is_override):
+            raise RuntimeError("对话生成失败: OPENAI_API_KEY 未配置，无法调用 LLM (AUTH_FAILED)")
+
+        temp_client: Optional[AsyncOpenAI] = None
+        client = self.async_client
+        if is_override:
+            temp_client = self._build_async_client(eff_key, eff_url)
+            client = temp_client
+        try:
+            chat_messages = self._normalize_messages(messages)
+            kwargs = _chat_create_kwargs(model, chat_messages, temperature, max_tokens, base_url=eff_url)
+            response = await client.chat.completions.create(**kwargs)
+            if not response.choices or not response.choices[0].message.content:
+                raise RuntimeError("模型未返回有效回答 (EMPTY_RESPONSE)")
+            content = response.choices[0].message.content
+            usage = response.usage
+            return {
+                "content": content,
+                "model": model,
+                "usage": {
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.total_tokens,
+                } if usage else {},
+            }
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            message, code = map_llm_error(exc)
+            raise RuntimeError(f"{message} ({code})") from exc
+        finally:
+            if temp_client is not None:
+                try:
+                    await temp_client.close()
+                except Exception:
+                    logger.debug("关闭异步临时 OpenAI 客户端异常", exc_info=True)
 
     async def chat_completion_stream(
         self,
@@ -287,26 +364,49 @@ class ChatService:
             )
 
         stream = None
+        finish_reason = None
+        reasoning_seen = False
+        full_content = []
         try:
             logger.info(f"求道之问(流式) - 模型: {model}")
             chat_messages = self._normalize_messages(messages)
 
-            stream = await client.chat.completions.create(
-                model=model,
-                messages=chat_messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
+            create_kwargs = _chat_create_kwargs(
+                model, chat_messages, temperature, max_tokens, stream=True, base_url=eff_url,
             )
+            stream = await client.chat.completions.create(**create_kwargs)
 
             async for chunk in stream:
+                # usage-only 尾帧可能 choices=[]，不能因此丢掉结束元数据。
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+                    details = getattr(usage, "completion_tokens_details", None)
+                    reasoning_seen = reasoning_seen or bool(
+                        details and getattr(details, "reasoning_tokens", 0)
+                    )
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta
+                choice = chunk.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+                delta = choice.delta
+                if getattr(delta, "reasoning_content", None):
+                    reasoning_seen = True
                 if delta.content:
+                    full_content.append(delta.content)
                     data = json.dumps({"content": delta.content}, ensure_ascii=False)
                     yield f"data: {data}\n\n"
 
+            # [DONE] 只表示 SSE 传输结束，不代表业务上有可见回答。
+            # 空正文必须先发结构化错误，Go 网关才不会将其当作成功 done。
+            if not "".join(full_content).strip():
+                if finish_reason == "length":
+                    message, code = "模型在生成可见回答前达到长度上限，请稍后重试", "OUTPUT_LIMIT_REACHED"
+                elif finish_reason == "content_filter":
+                    message, code = "模型未返回可显示的回答内容", "CONTENT_FILTERED"
+                else:
+                    message, code = "模型未返回有效回答，请稍后重试", "EMPTY_RESPONSE"
+                error_data = json.dumps({"error": message, "code": code}, ensure_ascii=False)
+                yield f"data: {error_data}\n\n"
             yield "data: [DONE]\n\n"
             logger.info("道人回答流式传输完毕")
 

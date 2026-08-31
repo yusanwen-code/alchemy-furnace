@@ -174,6 +174,54 @@ class TestChatCompletionCredentials:
 
 
 class TestChatStreamCredentials:
+    def test_stream_empty_content_is_not_success(self, monkeypatch):
+        """模型仅结束而没有正文时必须返回可恢复错误，不能只发 [DONE]。"""
+        monkeypatch.setattr(settings, "openai_api_key", "")
+        svc = ChatService(api_key="", base_url="")
+
+        class EmptyStream:
+            def __aiter__(self):
+                async def _gen():
+                    yield SimpleNamespace(choices=[SimpleNamespace(
+                        delta=SimpleNamespace(content=None, reasoning_content="thinking"),
+                        finish_reason="length",
+                    )])
+                return _gen()
+
+            async def close(self):
+                return None
+
+        async def fake_create(**kwargs):
+            return EmptyStream()
+
+        factory = _AsyncClientFactory(create=fake_create)
+        monkeypatch.setattr(chat_module, "AsyncOpenAI", factory)
+        events = _collect_stream(svc.chat_completion_stream(
+            messages=[{"role": "user", "content": "求道"}],
+            model="deepseek-v4-flash", api_key="sk-request-key",
+            base_url="https://api.deepseek.com/v1", max_tokens=160,
+        ))
+        assert any(json.loads(e[len("data: "):]).get("code") in {"EMPTY_RESPONSE", "OUTPUT_LIMIT_REACHED"} for e in events if e.startswith("data: {") )
+
+    def test_deepseek_chat_explicitly_disables_thinking_for_short_reply(self, monkeypatch):
+        """短回答预算不能被 DeepSeek 默认思考消耗；请求参数必须显式关闭思考。"""
+        monkeypatch.setattr(settings, "openai_api_key", "")
+        svc = ChatService(api_key="", base_url="")
+        stream = _FakeAsyncStream(chunks=("回答",))
+        captured = {}
+
+        async def fake_create(**kwargs):
+            captured.update(kwargs)
+            return stream
+
+        factory = _AsyncClientFactory(create=fake_create)
+        monkeypatch.setattr(chat_module, "AsyncOpenAI", factory)
+        _collect_stream(svc.chat_completion_stream(
+            messages=[{"role": "user", "content": "求道"}],
+            model="deepseek-v4-flash", api_key="sk-request-key",
+            base_url="https://api.deepseek.com/v1", max_tokens=256,
+        ))
+        assert captured["extra_body"] == {"thinking": {"type": "disabled"}}
     def test_stream_uses_request_credentials_and_closes_stream(self, monkeypatch):
         """流式路径：调用级凭证生效，且流正常结束后被关闭"""
         monkeypatch.setattr(settings, "openai_api_key", "")

@@ -11,6 +11,7 @@ import (
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/fusion"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/model"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/pill"
+	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/pill_inventory"
 	"github.com/alchemy-furnace/server/server/http/gateway/web/handler/trial"
 	"github.com/alchemy-furnace/server/server/http/service"
 	"github.com/google/wire"
@@ -61,5 +62,12 @@ func NewModel() *model.Model {
 func NewChat() *chat.Chat {
 	panic(wire.Build(
 		service.ChatService, chat.New,
+	))
+}
+
+// NewPillInventory 金丹消耗品库存处理器装配(任务 5)
+func NewPillInventory() *pill_inventory.Handler {
+	panic(wire.Build(
+		service.PillInventoryService, pill_inventory.New,
 	))
 }

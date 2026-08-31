@@ -48,7 +48,7 @@ func (s *Pill) GetPillByUUID(ctx context.Context, uid uuid.UUID) (*model.ElixirP
 
 // CreatePill 创建金丹
 func (s *Pill) CreatePill(ctx context.Context, name string, description string, skillSchema model.JSONMap, tags model.JSONList, author string, version string) (*model.ElixirPill, errors.Error) {
-	if err := validateSkillSchema(skillSchema); err != nil {
+	if err := ValidateSkillSchema(skillSchema); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +94,7 @@ func (s *Pill) UpdatePill(ctx context.Context, uid uuid.UUID, name *string, desc
 		updates["description"] = *description
 	}
 	if skillSchema != nil {
-		if verr := validateSkillSchema(skillSchema); verr != nil {
+		if verr := ValidateSkillSchema(skillSchema); verr != nil {
 			return nil, verr
 		}
 		updates["skill_schema"] = skillSchema
@@ -226,40 +226,3 @@ func (s *Pill) invalidateByPill(ctx context.Context, pill *model.ElixirPill) {
 	}
 }
 
-// validateSkillSchema 校验 nuwa-skill 结构化内容:
-// expression_dna 必须存在且为非空对象;mental_models 长度 0-20;example_dialogues 长度 0-10
-func validateSkillSchema(schema model.JSONMap) errors.Error {
-	if len(schema) == 0 {
-		return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.empty", "skill_schema 校验失败: skill_schema 不能为空")
-	}
-
-	dna, ok := schema["expression_dna"]
-	if !ok || dna == nil {
-		return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.dna_missing", "skill_schema 校验失败: 缺少 expression_dna")
-	}
-	if dnaMap, ok := dna.(map[string]interface{}); !ok || len(dnaMap) == 0 {
-		return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.dna_invalid", "skill_schema 校验失败: expression_dna 必须为非空对象")
-	}
-
-	if models, ok := schema["mental_models"]; ok && models != nil {
-		list, ok := models.([]interface{})
-		if !ok {
-			return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.models_type", "skill_schema 校验失败: mental_models 必须为数组")
-		}
-		if len(list) > 20 {
-			return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.models_len", "skill_schema 校验失败: mental_models 长度不能超过 20")
-		}
-	}
-
-	if dialogues, ok := schema["example_dialogues"]; ok && dialogues != nil {
-		list, ok := dialogues.([]interface{})
-		if !ok {
-			return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.dialogues_type", "skill_schema 校验失败: example_dialogues 必须为数组")
-		}
-		if len(list) > 10 {
-			return errors.New(errors.ErrorTypeInvalidRequest, "service.pill.schema.dialogues_len", "skill_schema 校验失败: example_dialogues 长度不能超过 10")
-		}
-	}
-
-	return nil
-}

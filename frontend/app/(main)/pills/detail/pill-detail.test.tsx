@@ -1,626 +1,190 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import PillDetailPage from '@/app/(main)/pills/detail/pill-detail'
+import PillItemDetailPage from '@/app/(main)/pills/detail/pill-detail'
 import { ApiError } from '@/services/api'
-import type { Pill } from '@/services/types'
+import type { PillItemDetail } from '@/services/types'
 
-// ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
-const td = vi.hoisted(() => {
-  const IDS = {
-    PILL_CUSTOM_ID: '88888888-8888-4888-8888-888888888888',
-    PILL_BUILTIN_ID: '99999999-9999-4999-8999-999999999999',
-    PILL_EMPTY_ID: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    PILL_COPY_ID: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  }
-  return {
-    IDS,
-    push: vi.fn(),
-    getPill: vi.fn(),
-    clonePill: vi.fn(),
-    fetchPill: vi.fn(),
-    fetchPills: vi.fn(),
-    addPill: vi.fn(),
-    editPill: vi.fn(),
-    removePill: vi.fn(),
-    dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
-    propId: IDS.PILL_CUSTOM_ID as string | undefined,
-    pillState: {
-      pills: [] as Pill[],
-      total: 0,
-      currentPill: null as Pill | null,
-      loading: false,
-      error: null as string | null,
-      detailLoad: {
-        id: null as string | null,
-        status: 'idle' as 'idle' | 'loading' | 'ready' | 'not-found' | 'error',
-        error: null as string | null,
-      },
-    },
-  }
+const getPillItem = vi.hoisted(() => vi.fn())
+const resolveLegacyPill = vi.hoisted(() => vi.fn())
+const consumePill = vi.hoisted(() => vi.fn())
+const listAgents = vi.hoisted(() => vi.fn())
+
+vi.mock('@/services/pillInventoryService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/pillInventoryService')>()
+  return { ...actual, getPillItem, resolveLegacyPill, consumePill }
 })
 
-const {
-  PILL_CUSTOM_ID,
-  PILL_BUILTIN_ID,
-  PILL_EMPTY_ID,
-  PILL_COPY_ID,
-} = td.IDS
+vi.mock('@/services/agentService', () => ({
+  listAgents,
+}))
 
-// 真实消息解析(命名空间与键都为点路径 + {value} 插值),用于英文长标签等真实文案断言
-// 注意:namespace 可能是嵌套路径(如 'pill.editor'),需整段点路径逐层解析
-function resolveMsg(messages: unknown, namespace: string, key: string, values?: Record<string, unknown>): string {
-  let node: unknown = messages
-  for (const part of `${namespace}.${key}`.split('.')) {
-    if (node == null || typeof node !== 'object') {
-      node = undefined
-      break
-    }
-    node = (node as Record<string, unknown>)[part]
-  }
-  let text = typeof node === 'string' ? node : `${namespace}.${key}`
-  if (values) for (const [k, v] of Object.entries(values)) text = text.split(`{${k}}`).join(String(v))
-  return text
-}
-
-const i18n = vi.hoisted(() => ({ locale: 'zh-CN' as 'zh-CN' | 'en' }))
-
-vi.mock('next-intl', async () => {
-  const en = (await import('@/messages/en.json')).default
-  const zh = (await import('@/messages/zh-CN.json')).default
-  return {
-    useTranslations: (namespace: string) => (key: string, values?: Record<string, unknown>) =>
-      resolveMsg(i18n.locale === 'en' ? en : zh, namespace, key, values),
-    useLocale: () => i18n.locale,
-  }
-})
+// key 透传：文案断言只关心键/角色，不依赖具体语言
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string) => key,
+}))
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: td.push }),
+  useRouter: () => ({ push: vi.fn() }),
 }))
 
-vi.mock('@/contexts/PillContext', () => ({
-  usePill: () => ({
-    state: td.pillState,
-    dispatch: (action: { type: string; payload?: unknown }) => {
-      td.dispatchCalls.push(action)
-      if (action.type === 'UPDATE_PILL' || action.type === 'SET_CURRENT_PILL') {
-        td.pillState.currentPill = action.payload as Pill | null
-      }
-      if (action.type === 'ADD_PILL') td.pillState.pills = [action.payload as Pill, ...td.pillState.pills]
-      if (action.type === 'REMOVE_PILL' && td.pillState.currentPill?.id === action.payload) {
-        td.pillState.currentPill = null
-      }
-      if (action.type === 'SET_ERROR') td.pillState.error = action.payload as string | null
-    },
-    fetchPill: td.fetchPill,
-    fetchPills: td.fetchPills,
-    addPill: td.addPill,
-    editPill: td.editPill,
-    removePill: td.removePill,
-  }),
-}))
+const ITEM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const RECIPE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const REVISION_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
-// flow hook 直接 import getPill/clonePill;其余保留真实实现
-vi.mock('@/services/pillService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/services/pillService')>()
-  return { ...actual, getPill: td.getPill, clonePill: td.clonePill }
-})
-
-// 隔离道人绑定弹窗(其依赖 AgentContext 链路,与本测试无关)
-vi.mock('@/components/bind-agent-modal', () => ({
-  BindAgentModal: () => null,
-}))
-
-// 隔离导出弹窗:详情页只负责入口显隐,弹窗行为由组件测试单独覆盖
-vi.mock('@/components/skill-export-dialog', () => ({
-  SkillExportDialog: () => <div data-testid="skill-export-dialog-probe" />,
-}))
-
-// ---- fixtures ----
-const customPill: Pill = {
-  id: PILL_CUSTOM_ID,
-  name: '丹心妙语',
-  description: '温润如茶',
-  skill_schema: {
-    identity_card: '一位温和的古代炼丹师',
-    expression_dna: {
-      sentence_length: 'medium',
-      formality: 0.3,
-      vocabulary: ['茶'],
-      taboo_words: ['妄言'],
-      rhythm: '舒缓',
-      humor_type: '冷幽默',
-      certainty_style: '留有余地',
-      citation_habit: '喜引《道德经》',
-    },
-    mental_models: [
-      { name: '阴阳转化', one_liner: '对立互化', application: '把对立概念互相转化', limitations: ['不适于线性问题'] },
-    ],
-    decision_heuristics: [{ condition: '遇到两难', action: '寻找第三选择', case: '两难案例' }],
-    values: ['诚实优于圆滑'],
-    anti_patterns: ['不堆砌空洞形容词'],
-    honest_limits: ['对不熟悉领域坦言不知'],
-    example_dialogues: [{ user: '何为道？', assistant: '道可道，非常道。' }],
-    // 非编辑区块 + 真正未知键:保存时必须原样保留
-    fusion_lineage: {
-      parents: [{ uuid: 'p1', name: '母丹' }],
-      operator: { id: 'op', name: '融合' },
-      fused_at: '2026-01-01T00:00:00Z',
-    },
-    future_unknown: { nested: ['甲', '乙'] },
-  },
-  tags: ['古风'],
-  author: '太上老君',
-  version: '2.1.0',
-  is_builtin: false,
+const item: PillItemDetail = {
+  id: ITEM_ID,
+  name: '文言文丹',
+  description: '以文言为骨',
+  tags: ['文言'],
+  state: 'available',
+  recipe_id: RECIPE_ID,
+  revision_id: REVISION_ID,
+  revision: 3,
+  version_label: '2.1.0',
+  archived_at: null,
+  consumed_at: null,
   created_at: '2026-08-20T00:00:00Z',
-  updated_at: '2026-08-20T00:00:00Z',
 }
 
-const builtinPill: Pill = { ...customPill, id: PILL_BUILTIN_ID, is_builtin: true }
-
-const emptyPill: Pill = {
-  ...customPill,
-  id: PILL_EMPTY_ID,
-  name: '空丹',
-  skill_schema: {},
-  tags: [],
-}
-
-type DetailStatus = 'idle' | 'loading' | 'ready' | 'not-found' | 'error'
-
-/**
- * 设置详情页状态机(组件按 pillId prop + pillState.detailLoad 决策)。
- * 缺省:金丹就绪 + 对应 UUID;status 单独传可覆盖(loading/error/not-found)。
- */
-function setDetailState(opts: {
-  pill?: Pill | null
-  status?: DetailStatus
-  error?: string | null
-  id?: string
-}) {
-  const id = opts.id ?? opts.pill?.id ?? PILL_CUSTOM_ID
-  td.propId = id
-  td.pillState.currentPill = opts.pill ?? null
-  td.pillState.detailLoad = {
-    id,
-    status: opts.status ?? (opts.pill ? 'ready' : 'idle'),
-    error: opts.error ?? null,
-  }
-}
-
-/** 渲染组件(统一入口:pillId 来自 td.propId) */
-function renderPage() {
-  return render(<PillDetailPage pillId={td.propId} />)
-}
-
-describe('PillDetailPage', () => {
+describe('PillItemDetailPage 金丹库存实例详情', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    td.dispatchCalls.length = 0
-    td.pillState.pills = []
-    td.pillState.currentPill = null
-    td.pillState.detailLoad = { id: null, status: 'idle', error: null }
-    td.propId = PILL_CUSTOM_ID
-    i18n.locale = 'zh-CN'
-    td.fetchPill.mockResolvedValue(undefined)
+    vi.resetAllMocks()
+    getPillItem.mockResolvedValue(item)
+    listAgents.mockResolvedValue({ list: [], total: 0 })
   })
 
-  afterEach(() => {
-    cleanup()
-    i18n.locale = 'zh-CN'
+  afterEach(() => cleanup())
+
+  it('无 id 展示「链接无效」，不请求 API', () => {
+    render(<PillItemDetailPage />)
+    expect(screen.getByText('invalidLink')).toBeInTheDocument()
+    expect(getPillItem).not.toHaveBeenCalled()
+    expect(resolveLegacyPill).not.toHaveBeenCalled()
   })
 
-  describe('链接/加载/错误/不存在四态', () => {
-    it('无效链接(缺 id):不发 API 且不误报已删除', () => {
-      td.propId = undefined
-      renderPage()
-      expect(td.fetchPill).not.toHaveBeenCalled()
-      expect(td.fetchPills).not.toHaveBeenCalled()
-      expect(screen.getByText('金丹链接无效，请返回金丹阁重新选择')).toBeInTheDocument()
-      expect(screen.queryByText('金丹不存在或已被删除')).toBeNull()
-    })
-
-    it('有效 id 发起详情拉取', () => {
-      renderPage()
-      expect(td.fetchPill).toHaveBeenCalledWith(PILL_CUSTOM_ID)
-    })
-
-    it('加载态:显示加载提示', () => {
-      setDetailState({ status: 'loading' })
-      renderPage()
-      expect(screen.getByText('加载金丹...')).toBeInTheDocument()
-    })
-
-    it('快速切换:旧实体残留时按加载处理,不闪现旧金丹', () => {
-      const oldPill: Pill = { ...customPill, id: PILL_EMPTY_ID, name: '老前任' }
-      setDetailState({ pill: oldPill, status: 'loading' })
-      renderPage()
-      expect(screen.getByText('加载金丹...')).toBeInTheDocument()
-      expect(screen.queryByText('老前任')).toBeNull()
-    })
-
-    it('错误态:显示错误并可重试,重试用同一 UUID', async () => {
-      setDetailState({ status: 'error', error: '服务器内部错误' })
-      const user = userEvent.setup()
-      renderPage()
-      expect(screen.getByText('服务器内部错误')).toBeInTheDocument()
-      td.fetchPill.mockClear()
-      await user.click(screen.getByRole('button', { name: '重试' }))
-      expect(td.fetchPill).toHaveBeenCalledWith(PILL_CUSTOM_ID)
-    })
-
-    it('404 态:只有 API 明确 404 才显示不存在,且给出返回入口', () => {
-      setDetailState({ status: 'not-found' })
-      renderPage()
-      expect(screen.getByText('金丹不存在或已被删除')).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: '返回金丹阁' })).toHaveAttribute('href', '/pills')
-    })
+  it('可用实例展示名称、状态徽标、版本与来源丹方入口', async () => {
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    expect(await screen.findByText('文言文丹')).toBeInTheDocument()
+    expect(screen.getByText('stateAvailable')).toBeInTheDocument()
+    expect(screen.getByText('stateDescAvailable')).toBeInTheDocument()
+    // 版本 v{revision} 与丹方版本标签（标签与值同处一个 span，用正则匹配）
+    expect(screen.getByText('revisionLabel')).toBeInTheDocument()
+    expect(screen.getByText(/^versionLabel/)).toBeInTheDocument()
+    // 来源丹方链接指向丹方详情
+    const recipeLink = screen.getByRole('link', { name: 'recipeOrigin' })
+    expect(recipeLink).toHaveAttribute('href', `/recipes/detail?id=${RECIPE_ID}`)
+    // 未消耗不显示消耗时间
+    expect(screen.queryByText('consumedAtLabel')).not.toBeInTheDocument()
   })
 
-  describe('只读态', () => {
-    it('展示名称、全部 8 个 schema 区块与操作入口', () => {
-      setDetailState({ pill: customPill })
-      renderPage()
-      expect(screen.getByRole('heading', { name: '丹心妙语' })).toBeInTheDocument()
-      for (const title of [
-        '身份卡（第一人称）', '表达 DNA', '心智模型', '决策启发式',
-        '价值观', '反模式（绝不做的事）', '诚实边界', '示例对话',
-      ]) {
-        expect(screen.getByText(title)).toBeInTheDocument()
-      }
-      expect(screen.getByRole('button', { name: '编辑丹方' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '销毁' })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: '制作副本' })).toBeNull()
+  it('已服用实例展示去向与消耗时间', async () => {
+    getPillItem.mockResolvedValue({
+      ...item,
+      state: 'consumed_by_agent',
+      consumed_at: '2026-08-21T10:00:00Z',
     })
-
-    it('空字段:空 schema 的金丹在只读态展示各区块空状态', () => {
-      setDetailState({ pill: emptyPill })
-      renderPage()
-      expect(screen.getByRole('heading', { name: '空丹' })).toBeInTheDocument()
-      // 各区块空兜底文案出现多次(每个空区块一处)
-      expect(screen.getAllByText('此丹无结构化丹方。').length).toBeGreaterThan(0)
-    })
-
-    it('编辑态:点击编辑后出现表单与保存栏', async () => {
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      expect(screen.getByDisplayValue('丹心妙语')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '保存金丹' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
-    })
-
-    it('只读态(已保存)显示导出 Skill 入口,点击打开导出弹窗', async () => {
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
-      expect(screen.getByRole('button', { name: '导出 Skill' })).toBeInTheDocument()
-
-      await user.click(screen.getByRole('button', { name: '导出 Skill' }))
-      expect(screen.getByTestId('skill-export-dialog-probe')).toBeInTheDocument()
-    })
-
-    it('编辑态隐藏导出 Skill 入口(导出只针对已保存金丹)', async () => {
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      expect(screen.queryByRole('button', { name: '导出 Skill' })).toBeNull()
-    })
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    expect(await screen.findByText('stateConsumedByAgent')).toBeInTheDocument()
+    expect(screen.getByText('stateDescConsumedByAgent')).toBeInTheDocument()
+    expect(screen.getByText(/^consumedAtLabel/)).toBeInTheDocument()
   })
 
-  describe('内置金丹', () => {
-    it('只读态显示「制作副本」,隐藏编辑/销毁/保存', () => {
-      setDetailState({ pill: builtinPill })
-      renderPage()
-      expect(screen.getByRole('button', { name: '制作副本' })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: '编辑丹方' })).toBeNull()
-      expect(screen.queryByRole('button', { name: '销毁' })).toBeNull()
-      expect(screen.queryByRole('button', { name: '保存金丹' })).toBeNull()
-      expect(screen.getByText('内置')).toBeInTheDocument()
+  it('已融合实例展示「已融合」去向', async () => {
+    getPillItem.mockResolvedValue({
+      ...item,
+      state: 'consumed_by_fusion',
+      consumed_at: '2026-08-21T10:00:00Z',
     })
-
-    it('内置金丹只读态同样提供导出 Skill 入口', () => {
-      setDetailState({ pill: builtinPill })
-      renderPage()
-      expect(screen.getByRole('button', { name: '导出 Skill' })).toBeInTheDocument()
-    })
-
-    it('点击制作副本:克隆成功后跳转到副本详情(静态查询路由)', async () => {
-      setDetailState({ pill: builtinPill })
-      const copy: Pill = { ...customPill, id: PILL_COPY_ID, name: '丹心妙语 副本', is_builtin: false }
-      td.clonePill.mockResolvedValue(copy)
-      const user = userEvent.setup()
-      renderPage()
-
-      await user.click(screen.getByRole('button', { name: '制作副本' }))
-      await waitFor(() =>
-        expect(td.push).toHaveBeenCalledWith(`/pills/detail?id=${PILL_COPY_ID}`),
-      )
-      expect(td.clonePill).toHaveBeenCalledWith(PILL_BUILTIN_ID)
-    })
-
-    it('制作副本失败:给出错误反馈且不跳转', async () => {
-      setDetailState({ pill: builtinPill })
-      td.clonePill.mockRejectedValue(new ApiError('服务器内部错误', 500))
-      const user = userEvent.setup()
-      renderPage()
-
-      await user.click(screen.getByRole('button', { name: '制作副本' }))
-      expect(await screen.findByRole('alert')).toHaveTextContent('制作副本失败，请重试')
-      expect(td.push).not.toHaveBeenCalled()
-    })
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    expect(await screen.findByText('stateConsumedByFusion')).toBeInTheDocument()
+    expect(screen.getByText('stateDescConsumedByFusion')).toBeInTheDocument()
   })
 
-  describe('自定义编辑与保存', () => {
-    it('编辑覆盖基础信息与全部 schema 区块,保存时未知键原样保留', async () => {
-      setDetailState({ pill: customPill })
-      td.editPill.mockResolvedValue(customPill)
-      td.getPill.mockResolvedValue(customPill)
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-
-      // 基础信息
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.clear(nameInput)
-      await user.type(nameInput, '丹心妙语·改')
-      // 身份卡
-      const identity = screen.getByDisplayValue('一位温和的古代炼丹师')
-      await user.clear(identity)
-      await user.type(identity, '冷静的史官')
-      // 表达 DNA
-      await user.selectOptions(screen.getByRole('combobox'), 'long')
-      // 高频词
-      const vocab = screen.getByDisplayValue('茶')
-      await user.clear(vocab)
-      await user.type(vocab, '茗')
-      // 心智模型名称
-      const modelName = screen.getByDisplayValue('阴阳转化')
-      await user.clear(modelName)
-      await user.type(modelName, '系统论')
-      // 决策启发式条件
-      const condition = screen.getByDisplayValue('遇到两难')
-      await user.clear(condition)
-      await user.type(condition, '遇到不确定')
-      // 价值观
-      const value = screen.getByDisplayValue('诚实优于圆滑')
-      await user.clear(value)
-      await user.type(value, '诚实且清晰')
-      // 反模式
-      const anti = screen.getByDisplayValue('不堆砌空洞形容词')
-      await user.clear(anti)
-      await user.type(anti, '不夸大')
-      // 诚实边界
-      const limit = screen.getByDisplayValue('对不熟悉领域坦言不知')
-      await user.clear(limit)
-      await user.type(limit, '不知即言不知')
-      // 示例对话
-      const dialogueUser = screen.getByDisplayValue('何为道？')
-      await user.clear(dialogueUser)
-      await user.type(dialogueUser, '何为史？')
-
-      await user.click(screen.getByRole('button', { name: '保存金丹' }))
-
-      await waitFor(() => expect(td.editPill).toHaveBeenCalled())
-      const [calledId, payload] = td.editPill.mock.calls[0]
-      expect(calledId).toBe(PILL_CUSTOM_ID)
-      expect(payload.name).toBe('丹心妙语·改')
-      expect(payload.skill_schema.identity_card).toBe('冷静的史官')
-      expect(payload.skill_schema.expression_dna.sentence_length).toBe('long')
-      expect(payload.skill_schema.expression_dna.vocabulary).toEqual(['茗'])
-      expect(payload.skill_schema.mental_models[0].name).toBe('系统论')
-      expect(payload.skill_schema.decision_heuristics[0].condition).toBe('遇到不确定')
-      expect(payload.skill_schema.values).toEqual(['诚实且清晰'])
-      expect(payload.skill_schema.anti_patterns).toEqual(['不夸大'])
-      expect(payload.skill_schema.honest_limits).toEqual(['不知即言不知'])
-      expect(payload.skill_schema.example_dialogues[0].user).toBe('何为史？')
-      // 开闭:非编辑区块与未知键原样保留
-      expect(payload.skill_schema.fusion_lineage).toEqual(customPill.skill_schema.fusion_lineage)
-      expect(payload.skill_schema.future_unknown).toEqual({ nested: ['甲', '乙'] })
-    })
-
-    it('保存成功:PUT 之后必须重新 GET,只有 GET 成功才退出编辑', async () => {
-      setDetailState({ pill: customPill })
-      const fresh: Pill = { ...customPill, name: '丹心妙语·改', updated_at: '2026-08-22T00:00:00Z' }
-      td.editPill.mockResolvedValue({ ...customPill, name: 'PUT回显' })
-      td.getPill.mockResolvedValue(fresh)
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.clear(nameInput)
-      await user.type(nameInput, '丹心妙语·改')
-      await user.click(screen.getByRole('button', { name: '保存金丹' }))
-
-      await waitFor(() => expect(td.getPill).toHaveBeenCalledWith(PILL_CUSTOM_ID))
-      // PUT 先于 GET
-      expect(td.editPill.mock.invocationCallOrder[0]).toBeLessThan(td.getPill.mock.invocationCallOrder[0])
-      // 退出编辑,回到只读,展示 GET 回源的最新名称
-      await screen.findByRole('heading', { name: '丹心妙语·改' })
-      expect(screen.queryByRole('button', { name: '保存金丹' })).toBeNull()
-      expect(screen.getByRole('button', { name: '编辑丹方' })).toBeInTheDocument()
-    })
-
-    it('保存失败:保留全部字段与编辑态,错误可重试', async () => {
-      setDetailState({ pill: customPill })
-      td.editPill.mockRejectedValueOnce(new ApiError('服务器内部错误', 500))
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.clear(nameInput)
-      await user.type(nameInput, '新名字')
-      await user.click(screen.getByRole('button', { name: '保存金丹' }))
-
-      // 错误反馈挂在操作区,可重试;字段与编辑态保留
-      expect(await screen.findByRole('alert')).toHaveTextContent('保存失败')
-      expect(screen.getByDisplayValue('新名字')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '保存金丹' })).toBeInTheDocument()
-      expect(td.getPill).not.toHaveBeenCalled()
-
-      // 重试成功后才退出编辑
-      td.editPill.mockResolvedValue(customPill)
-      td.getPill.mockResolvedValue({ ...customPill, name: '新名字' })
-      await user.click(screen.getByRole('button', { name: '重试' }))
-      await screen.findByRole('heading', { name: '新名字' })
-    })
-
-    it('保存后 GET 失败:不算完成,保留编辑态与草稿', async () => {
-      setDetailState({ pill: customPill })
-      td.editPill.mockResolvedValue(customPill)
-      td.getPill.mockRejectedValue(new ApiError('服务器内部错误', 500))
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.clear(nameInput)
-      await user.type(nameInput, '新名字')
-      await user.click(screen.getByRole('button', { name: '保存金丹' }))
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('保存失败')
-      expect(screen.getByDisplayValue('新名字')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: '保存金丹' })).toBeInTheDocument()
-    })
+  it('已弃置实例展示「已弃置」去向', async () => {
+    getPillItem.mockResolvedValue({ ...item, state: 'discarded', consumed_at: '2026-08-21T10:00:00Z' })
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    expect(await screen.findByText('stateDiscarded')).toBeInTheDocument()
+    expect(screen.getByText('stateDescDiscarded')).toBeInTheDocument()
   })
 
-  describe('删除', () => {
-    it('自定义删除需二次确认:第一次点击仅进入待确认态', async () => {
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
-
-      await user.click(screen.getByRole('button', { name: '销毁' }))
-      expect(td.removePill).not.toHaveBeenCalled()
-      expect(screen.getByRole('button', { name: '再点一次确认销毁' })).toBeInTheDocument()
-    })
-
-    it('二次确认后删除成功并返回列表', async () => {
-      setDetailState({ pill: customPill })
-      td.removePill.mockResolvedValue(undefined)
-      const user = userEvent.setup()
-      renderPage()
-
-      await user.click(screen.getByRole('button', { name: '销毁' }))
-      await user.click(screen.getByRole('button', { name: '再点一次确认销毁' }))
-      await waitFor(() => expect(td.push).toHaveBeenCalledWith('/pills'))
-      expect(td.removePill).toHaveBeenCalledWith(PILL_CUSTOM_ID)
-    })
-
-    it('删除失败:保留页面并给出错误反馈', async () => {
-      setDetailState({ pill: customPill })
-      td.removePill.mockRejectedValue(new ApiError('服务器内部错误', 500))
-      const user = userEvent.setup()
-      renderPage()
-
-      await user.click(screen.getByRole('button', { name: '销毁' }))
-      await user.click(screen.getByRole('button', { name: '再点一次确认销毁' }))
-      expect(await screen.findByRole('alert')).toHaveTextContent('删除失败，请重试')
-      expect(td.push).not.toHaveBeenCalled()
-      // 仍在详情页(标题仍在)
-      expect(screen.getByRole('heading', { name: '丹心妙语' })).toBeInTheDocument()
-    })
-
-    it('删除失败后点「重试」直接重发删除请求(不再停在待确认态)', async () => {
-      setDetailState({ pill: customPill })
-      td.removePill.mockRejectedValueOnce(new ApiError('服务器内部错误', 500))
-      const user = userEvent.setup()
-      renderPage()
-
-      await user.click(screen.getByRole('button', { name: '销毁' }))
-      await user.click(screen.getByRole('button', { name: '再点一次确认销毁' }))
-      expect(await screen.findByRole('alert')).toHaveTextContent('删除失败，请重试')
-      expect(td.removePill).toHaveBeenCalledTimes(1)
-
-      // 用户已二次确认过,「重试」应直接重发删除,成功后返回列表
-      td.removePill.mockResolvedValue(undefined)
-      await user.click(screen.getByRole('button', { name: '重试' }))
-      await waitFor(() => expect(td.removePill).toHaveBeenCalledTimes(2))
-      await waitFor(() => expect(td.push).toHaveBeenCalledWith('/pills'))
-    })
+  it('来源丹方已归档时展示归档徽标', async () => {
+    getPillItem.mockResolvedValue({ ...item, archived_at: '2026-08-25T00:00:00Z' })
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    expect(await screen.findByText('archivedBadge')).toBeInTheDocument()
   })
 
-  describe('未保存保护', () => {
-    function dispatchBeforeUnload() {
-      const event = new Event('beforeunload', { cancelable: true })
-      window.dispatchEvent(event)
-      return event
-    }
+  it('旧金丹 ID：实例 404 时走显式 legacy 解析，命中后展示「已升级为丹方」并跳转丹方', async () => {
+    getPillItem.mockRejectedValue(new ApiError('pill not found', 404))
+    resolveLegacyPill.mockResolvedValue({ entity_type: 'recipe', recipe_id: RECIPE_ID })
 
-    it('编辑且有改动时,浏览器关闭被阻止', async () => {
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.type(nameInput, '改')
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
 
-      expect(dispatchBeforeUnload().defaultPrevented).toBe(true)
-    })
-
-    it('只读/未改动时,浏览器关闭不被阻止', () => {
-      setDetailState({ pill: customPill })
-      renderPage()
-      expect(dispatchBeforeUnload().defaultPrevented).toBe(false)
-    })
-
-    it('保存成功后退出编辑,不再阻止离开', async () => {
-      setDetailState({ pill: customPill })
-      td.editPill.mockResolvedValue(customPill)
-      td.getPill.mockResolvedValue(customPill)
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.type(nameInput, '改')
-      expect(dispatchBeforeUnload().defaultPrevented).toBe(true)
-
-      await user.click(screen.getByRole('button', { name: '保存金丹' }))
-      await waitFor(() => expect(screen.queryByRole('button', { name: '保存金丹' })).toBeNull())
-      expect(dispatchBeforeUnload().defaultPrevented).toBe(false)
-    })
-
-    it('放弃修改后回到只读,不再阻止离开', async () => {
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
-      await user.click(screen.getByRole('button', { name: '编辑丹方' }))
-      const nameInput = screen.getByDisplayValue('丹心妙语')
-      await user.type(nameInput, '改')
-      expect(dispatchBeforeUnload().defaultPrevented).toBe(true)
-
-      await user.click(screen.getByRole('button', { name: '取消' }))
-      await waitFor(() => expect(screen.queryByRole('button', { name: '保存金丹' })).toBeNull())
-      expect(dispatchBeforeUnload().defaultPrevented).toBe(false)
-    })
+    expect(await screen.findByText('legacyTitle')).toBeInTheDocument()
+    expect(screen.getByText('legacyDesc')).toBeInTheDocument()
+    expect(resolveLegacyPill).toHaveBeenCalledWith(ITEM_ID)
+    const goLink = screen.getByRole('link', { name: 'viewRecipeCta' })
+    expect(goLink).toHaveAttribute('href', `/recipes/detail?id=${RECIPE_ID}`)
   })
 
-  describe('英文长标签', () => {
-    it('en locale 下区块标题可换行(无 truncate),按钮不被覆盖', async () => {
-      i18n.locale = 'en'
-      setDetailState({ pill: customPill })
-      const user = userEvent.setup()
-      renderPage()
+  it('实例 404 且 legacy 解析 404：才展示「不存在」', async () => {
+    getPillItem.mockRejectedValue(new ApiError('pill not found', 404))
+    resolveLegacyPill.mockRejectedValue(new ApiError('no mapping', 404))
 
-      // 只读态长标题
-      for (const title of [
-        'Identity card (first person)', 'Expression DNA', 'Mental models',
-        'Decision heuristics', 'Anti-patterns (never do)',
-      ]) {
-        const heading = screen.getByRole('heading', { name: title })
-        expect(heading).not.toHaveClass('truncate')
-      }
-      // 进入编辑,保存按钮仍可达且可用
-      await user.click(screen.getByRole('button', { name: 'Edit recipe' }))
-      const save = screen.getByRole('button', { name: 'Save pill' })
-      expect(save).toBeEnabled()
-      // 编辑态长标签同样可换行
-      const editHeading = screen.getByRole('heading', { name: 'Anti-patterns (never do)' })
-      expect(editHeading).not.toHaveClass('truncate')
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+
+    expect(await screen.findByText('notFound')).toBeInTheDocument()
+    expect(screen.queryByText('legacyTitle')).not.toBeInTheDocument()
+  })
+
+  it('网络错误展示错误态，重试重新请求实例', async () => {
+    getPillItem.mockRejectedValueOnce(new ApiError('网络请求失败', 0))
+
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('网络请求失败')
+
+    await userEvent.click(screen.getByText('retry'))
+    expect(await screen.findByText('文言文丹')).toBeInTheDocument()
+    expect(getPillItem).toHaveBeenCalledTimes(2)
+  })
+
+  it('可用实例展示「服用」按钮，点击打开服用对话框（消耗提示）', async () => {
+    const user = userEvent.setup()
+    listAgents.mockResolvedValue({ list: [{ id: '11111111-1111-4111-8111-111111111111', name: '太上老君' }], total: 1 })
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    await screen.findByText('文言文丹')
+
+    expect(screen.getByRole('button', { name: 'consumeCta' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'consumeCta' }))
+
+    // 服用对话框打开（key-透传 mock：t('title')='title'、t('prompt')='prompt'）
+    expect(await screen.findByRole('heading', { name: 'title' })).toBeInTheDocument()
+    expect(screen.getByText('prompt')).toBeInTheDocument()
+    await screen.findByText('太上老君')
+  })
+
+  it('服用成功后才重读实例：状态变为已服用、按钮消失', async () => {
+    const user = userEvent.setup()
+    consumePill.mockResolvedValue({ operation_id: 'op-1', effect_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' })
+    listAgents.mockResolvedValue({ list: [{ id: '11111111-1111-4111-8111-111111111111', name: '太上老君' }], total: 1 })
+    getPillItem.mockResolvedValueOnce(item)
+    getPillItem.mockResolvedValueOnce({
+      ...item,
+      state: 'consumed_by_agent',
+      consumed_at: '2026-08-21T10:00:00Z',
     })
+    render(<PillItemDetailPage itemId={ITEM_ID} />)
+    await screen.findByText('文言文丹')
+
+    await user.click(screen.getByRole('button', { name: 'consumeCta' }))
+    await screen.findByText('太上老君')
+    await user.click(screen.getByRole('button', { name: /太上老君/ }))
+    await user.click(screen.getByRole('button', { name: 'submit' }))
+
+    // 成功后重读：状态徽标切换为已服用，服用按钮消失
+    expect(await screen.findByText('stateConsumedByAgent')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'consumeCta' })).toBeNull()
+    expect(getPillItem).toHaveBeenCalledTimes(2)
   })
 })

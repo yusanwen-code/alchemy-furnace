@@ -3,6 +3,7 @@ package language_pattern_service
 import (
 	"context"
 	std "errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -21,6 +22,11 @@ type fakeAgentDAO struct {
 	dao.Agent
 	agent *model.DaoAgent
 	saved []*model.LanguagePattern
+	// 缓存保护: savedRevisions 记录每次保存携带的 expectedEffectsRevision;
+	// conflictRemaining>0 时保存被拒(模拟并发编排变更),onConflict 在拒绝时回调
+	savedRevisions    []int
+	conflictRemaining int
+	onConflict        func()
 }
 
 func (f *fakeAgentDAO) TakeAgentDetailByID(ctx context.Context, agentID uint) (*model.DaoAgent, appErrors.Error) {
@@ -32,6 +38,19 @@ func (f *fakeAgentDAO) TakeAgentDetailByID(ctx context.Context, agentID uint) (*
 
 func (f *fakeAgentDAO) SaveLanguagePattern(ctx context.Context, pattern *model.LanguagePattern) appErrors.Error {
 	f.saved = append(f.saved, pattern)
+	return nil
+}
+
+func (f *fakeAgentDAO) SaveLanguagePatternIfRevision(ctx context.Context, pattern *model.LanguagePattern, expectedEffectsRevision int) appErrors.Error {
+	if f.conflictRemaining > 0 {
+		f.conflictRemaining--
+		if f.onConflict != nil {
+			f.onConflict()
+		}
+		return appErrors.ErrorConflict("agent.effects_conflict", "fake: effects revision changed")
+	}
+	f.saved = append(f.saved, pattern)
+	f.savedRevisions = append(f.savedRevisions, expectedEffectsRevision)
 	return nil
 }
 
@@ -83,20 +102,22 @@ func markerSkillSchema() model.JSONMap {
 	}
 }
 
+// newMarkerAgent 构建带已吸收能力(AgentPillEffects 快照)的道人;
+// 身份=被服用实例 UUID,内容=NameSnapshot/SchemaSnapshot(任务 3 起的事实来源)
 func newMarkerAgent() *model.DaoAgent {
+	item := model.PillItem{UUID: uuid.New()}
 	return &model.DaoAgent{
-		ID:          1,
-		Name:        "测试道人",
-		Personality: "沉稳内敛",
-		AgentPills: []model.AgentPill{
+		ID:              1,
+		Name:            "测试道人",
+		Personality:     "沉稳内敛",
+		EffectsRevision: 3,
+		AgentPillEffects: []model.AgentPillEffect{
 			{
-				Weight:    1.0,
-				SortOrder: 0,
-				Pill: model.ElixirPill{
-					UUID:        uuid.New(),
-					Name:        "标记金丹",
-					SkillSchema: markerSkillSchema(),
-				},
+				NameSnapshot:   "标记金丹",
+				SchemaSnapshot: markerSkillSchema(),
+				Weight:         1.0,
+				SortOrder:      0,
+				Item:           item,
 			},
 		},
 	}
@@ -122,7 +143,7 @@ func assertPromptHasAllMarkers(t *testing.T, prompt string) {
 // TestGetOrBuildPatternCacheHitNewFormat 新格式缓存(behavior_profile 非空 + 版本匹配 + 指纹一致)直接命中,不调合成
 func TestGetOrBuildPatternCacheHitNewFormat(t *testing.T) {
 	agent := newMarkerAgent()
-	fp, err := computeFingerprint(agent.Personality, agent.AgentPills)
+	fp, err := computeFingerprint(agent.Personality, buildPillInputs(agent))
 	if err != nil {
 		t.Fatalf("computeFingerprint: %v", err)
 	}
@@ -153,7 +174,7 @@ func TestGetOrBuildPatternCacheHitNewFormat(t *testing.T) {
 // TestGetOrBuildPatternOldCacheRebuilds 旧缓存(无 behavior_profile)视为失效,自动重建
 func TestGetOrBuildPatternOldCacheRebuilds(t *testing.T) {
 	agent := newMarkerAgent()
-	fp, _ := computeFingerprint(agent.Personality, agent.AgentPills)
+	fp, _ := computeFingerprint(agent.Personality, buildPillInputs(agent))
 	agent.LanguagePattern = &model.LanguagePattern{
 		AgentID:           agent.ID,
 		SystemPrompt:      "旧格式提示词",
@@ -219,7 +240,7 @@ func TestGetOrBuildPatternFingerprintMismatchRebuilds(t *testing.T) {
 // TestGetOrBuildPatternProfileVersionMismatchRebuilds 档案版本不一致触发重建
 func TestGetOrBuildPatternProfileVersionMismatchRebuilds(t *testing.T) {
 	agent := newMarkerAgent()
-	fp, _ := computeFingerprint(agent.Personality, agent.AgentPills)
+	fp, _ := computeFingerprint(agent.Personality, buildPillInputs(agent))
 	agent.LanguagePattern = &model.LanguagePattern{
 		AgentID:           agent.ID,
 		SystemPrompt:      "旧版本档案",
@@ -352,5 +373,116 @@ func TestGetOrBuildPatternNoCredentialsStillCallsCombine(t *testing.T) {
 	}
 	if fakeSynth.lastCreds != nil {
 		t.Error("凭证解析失败时应以 nil 凭证调用合成")
+	}
+}
+
+// ---------- 任务 3: 快照编译输入 + 缓存保护 ----------
+
+// TestGetOrBuildPatternPillInputFromEffectSnapshot 合成输入必须来自已吸收能力快照:
+// 身份=被服用实例 UUID,内容=NameSnapshot/SchemaSnapshot;写缓存携带读取时的 EffectsRevision
+func TestGetOrBuildPatternPillInputFromEffectSnapshot(t *testing.T) {
+	agent := newMarkerAgent()
+	fakeAgent := &fakeAgentDAO{agent: agent}
+	fakeSynth := &fakeSynthesis{resp: &synthesis.CombineResponse{
+		EmergenceRules: model.JSONList{"涌现规则甲"},
+		Fingerprint:    "sha256:fp",
+		Model:          "fake-synthesis-model",
+	}}
+
+	svc := New(fakeAgent, fakeSynth, &fakeCreds{})
+	if _, err := svc.GetOrBuildPattern(context.Background(), agent.ID); err != nil {
+		t.Fatalf("GetOrBuildPattern: %v", err)
+	}
+
+	if fakeSynth.calls != 1 {
+		t.Fatalf("合成调用=%d, want 1", fakeSynth.calls)
+	}
+	got := fakeSynth.lastPills
+	if len(got) != 1 {
+		t.Fatalf("pills=%d, want 1", len(got))
+	}
+	ef := agent.AgentPillEffects[0]
+	if got[0].ID != ef.Item.UUID.String() {
+		t.Errorf("PillInput.ID=%q, want 实例 UUID %q", got[0].ID, ef.Item.UUID.String())
+	}
+	if got[0].Name != ef.NameSnapshot {
+		t.Errorf("Name=%q, want 快照 %q", got[0].Name, ef.NameSnapshot)
+	}
+	if !reflect.DeepEqual(got[0].SkillSchema, ef.SchemaSnapshot) {
+		t.Errorf("SkillSchema 必须来自 SchemaSnapshot 快照")
+	}
+	if got[0].Weight != ef.Weight || got[0].SortOrder != ef.SortOrder {
+		t.Errorf("Weight/SortOrder=%v/%d, want %v/%d", got[0].Weight, got[0].SortOrder, ef.Weight, ef.SortOrder)
+	}
+	// 写缓存必须携带读取时的 EffectsRevision(CAS 核对依据)
+	if len(fakeAgent.savedRevisions) != 1 || fakeAgent.savedRevisions[0] != agent.EffectsRevision {
+		t.Fatalf("保存时 expectedEffectsRevision=%v, want %d", fakeAgent.savedRevisions, agent.EffectsRevision)
+	}
+}
+
+// TestGetOrBuildPatternRevisionConflictRetries 写缓存时编排版本已变(并发服用已提交) →
+// 丢弃本次编译结果重读重试;重试时新缓存已就位则直接命中,不重复合成、不用过期结果覆盖
+func TestGetOrBuildPatternRevisionConflictRetries(t *testing.T) {
+	agent := newMarkerAgent()
+	fakeAgent := &fakeAgentDAO{agent: agent, conflictRemaining: 1}
+	fakeAgent.onConflict = func() {
+		// 模拟并发服用已提交: 版本递增 + 新能力的新缓存已就位
+		agent.EffectsRevision = 4
+		fp, _ := computeFingerprint(agent.Personality, buildPillInputs(agent))
+		agent.LanguagePattern = &model.LanguagePattern{
+			AgentID:           agent.ID,
+			SystemPrompt:      "并发服用后的新缓存",
+			BehaviorProfile:   model.JSONMap{"version": 1},
+			ProfileVersion:    behavior.ProfileVersion,
+			SourceFingerprint: fp,
+			IsValid:           true,
+		}
+	}
+	fakeSynth := &fakeSynthesis{resp: &synthesis.CombineResponse{
+		EmergenceRules: model.JSONList{},
+		Fingerprint:    "sha256:fp",
+		Model:          "fake-synthesis-model",
+	}}
+
+	svc := New(fakeAgent, fakeSynth, &fakeCreds{})
+	got, err := svc.GetOrBuildPattern(context.Background(), agent.ID)
+	if err != nil {
+		t.Fatalf("GetOrBuildPattern: %v", err)
+	}
+	if fakeSynth.calls != 1 {
+		t.Errorf("重试应命中并发方的新缓存,不重复合成;实际 %d 次", fakeSynth.calls)
+	}
+	if got != agent.LanguagePattern {
+		t.Error("应返回并发方写入的新缓存")
+	}
+	if len(fakeAgent.saved) != 0 {
+		t.Error("冲突后不得用本次过期结果覆盖新缓存")
+	}
+}
+
+// TestGetOrBuildPatternRevisionConflictExhausted 写缓存持续冲突(连续编排变更):
+// 最多重试 2 次(共 3 次尝试)后返回明确可重试错误,不静默返回过期结果
+func TestGetOrBuildPatternRevisionConflictExhausted(t *testing.T) {
+	agent := newMarkerAgent()
+	fakeAgent := &fakeAgentDAO{agent: agent, conflictRemaining: 100}
+	fakeSynth := &fakeSynthesis{resp: &synthesis.CombineResponse{
+		EmergenceRules: model.JSONList{},
+		Fingerprint:    "sha256:fp",
+		Model:          "fake-synthesis-model",
+	}}
+
+	svc := New(fakeAgent, fakeSynth, &fakeCreds{})
+	_, err := svc.GetOrBuildPattern(context.Background(), agent.ID)
+	if err == nil {
+		t.Fatal("持续冲突应返回错误")
+	}
+	if err.GetCode() != "agent.effects_conflict" {
+		t.Fatalf("code=%s, want agent.effects_conflict", err.GetCode())
+	}
+	if fakeSynth.calls != 3 {
+		t.Errorf("合成尝试=%d, want 3(1 次主 + 2 次重试)", fakeSynth.calls)
+	}
+	if len(fakeAgent.saved) != 0 {
+		t.Error("冲突结果不得落库")
 	}
 }
