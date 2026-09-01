@@ -26,6 +26,10 @@ import (
 // ErrUpdateDisabled dev 构建(无 UpdateRepo)不启用更新
 var ErrUpdateDisabled = errors.New("updater: 构建未配置 UpdateRepo,更新已禁用")
 
+// ErrAppTranslocated 表示应用正从 macOS Gatekeeper 的隔离目录运行。
+// 该目录不可被原位替换，继续更新只会在重启阶段失败。
+var ErrAppTranslocated = errors.New("updater: 当前应用正处于 macOS 隔离运行目录")
+
 // ReleaseInfo GitHub Release 简化模型(仅保留任务 11 需要的字段)
 type ReleaseInfo struct {
 	Version string  `json:"version"`  // e.g. "v0.2.0"

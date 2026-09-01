@@ -12,6 +12,9 @@ import (
 	"os/exec"
 )
 
+// ValidateUpdateTarget Windows 由 NSIS 安装器接管替换，下载前无额外路径限制。
+func ValidateUpdateTarget() error { return nil }
+
 // ApplyAndRestart windows 实现:
 // Setup.exe /S 静默安装(NSIS 语法),装完 NSIS 自动拉起新版
 func ApplyAndRestart(ctx context.Context, setupExe string) error {

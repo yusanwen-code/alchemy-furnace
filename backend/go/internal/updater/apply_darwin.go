@@ -21,7 +21,24 @@ func appBundlePathFromExe(exe string) (string, error) {
 	if i < 0 {
 		return "", fmt.Errorf("updater: 非 .app 内运行,不应用更新: %s", exe)
 	}
-	return exe[:i+len(".app")], nil
+	appPath := exe[:i+len(".app")]
+	// Finder 直接从 DMG/下载目录启动且应用带隔离属性时，macOS 会把它
+	// 映射到 /private/var/.../AppTranslocation/...。该目录不可写，原位
+	// 交换必然失败，必须在下载前阻止该操作并指导用户正确安装。
+	if strings.Contains(filepath.ToSlash(appPath), "/AppTranslocation/") {
+		return "", fmt.Errorf("%w：请先退出炼丹炉，将“炼丹炉.app”拖入“应用程序”目录后重新打开，再检查更新", ErrAppTranslocated)
+	}
+	return appPath, nil
+}
+
+// ValidateUpdateTarget 在下载前确认当前安装位置可执行原位更新。
+func ValidateUpdateTarget() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("updater: 获取可执行路径失败: %w", err)
+	}
+	_, err = appBundlePathFromExe(exe)
+	return err
 }
 
 // swapScript 等待旧进程退出 → 备份旧版 → 移入新版(失败回滚) → open 重启

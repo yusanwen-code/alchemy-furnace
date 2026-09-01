@@ -34,3 +34,9 @@ func TestFindExtractedAppRejectsMissingOrAmbiguousBundle(t *testing.T) {
 	_, err = findExtractedApp(root)
 	require.Error(t, err)
 }
+
+func TestAppBundlePathFromExeRejectsAppTranslocation(t *testing.T) {
+	_, err := appBundlePathFromExe("/private/var/folders/ab/cd/AppTranslocation/123/d/炼丹炉.app/Contents/MacOS/炼丹炉")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "拖入“应用程序”")
+}

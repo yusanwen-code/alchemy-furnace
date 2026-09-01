@@ -11,6 +11,11 @@ import (
 	"runtime"
 )
 
+// ValidateUpdateTarget linux 桌面分发不支持更新。
+func ValidateUpdateTarget() error {
+	return fmt.Errorf("updater: 桌面分发不支持 %s,仅 macOS / Windows", runtime.GOOS)
+}
+
 // ApplyAndRestart linux 不支持(桌面分发仅 macOS / Windows)
 func ApplyAndRestart(_ context.Context, _ string) error {
 	return fmt.Errorf("updater: 桌面分发不支持 %s,仅 macOS / Windows", runtime.GOOS)

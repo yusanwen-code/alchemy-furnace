@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/alchemy-furnace/server/internal/buildinfo"
+	internalerrors "github.com/alchemy-furnace/server/internal/errors"
 	"github.com/alchemy-furnace/server/internal/updater"
 	"github.com/alchemy-furnace/server/server/http/response"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // updateProgress 包内全局进度(0..100 下载中;110 待重启;负数错误)
@@ -83,11 +85,16 @@ func (cls *System) ApplyUpdate(c *gin.Context) (response.Code, any, error) {
 	if !updater.IsNewer(rel.Version, current) {
 		return response.Ok, gin.H{"message": "已是最新版本,无需更新"}, nil
 	}
+	// macOS App Translocation 等安装位置问题必须在下载前拦截；否则数十 MB
+	// 资源下载完成后仍会在交换应用时失败，前端过去只能看到“内部错误”。
+	if err := updater.ValidateUpdateTarget(); err != nil {
+		return updateFailure("preflight", err)
+	}
 
 	// 临时目录: os.TempDir()/alchemy-update-<ts>
 	tmpDir, err := os.MkdirTemp("", "alchemy-update-*")
 	if err != nil {
-		return response.ServerInternalError, nil, err
+		return updateFailure("create_temp_dir", err)
 	}
 	assetPath := filepath.Join(tmpDir, asset.Name)
 	updateProgress.Store(0)
@@ -103,8 +110,7 @@ func (cls *System) ApplyUpdate(c *gin.Context) (response.Code, any, error) {
 
 	// 1. 下载资产
 	if err := updater.Download(c.Request.Context(), *asset, assetPath, progressFn); err != nil {
-		updateProgress.Store(-1)
-		return response.ServerInternalError, nil, err
+		return updateFailure("download", err)
 	}
 
 	// 2. SHA256 校验(GitHub release 资产旁通常有 <name>.sha256 单行)
@@ -112,8 +118,7 @@ func (cls *System) ApplyUpdate(c *gin.Context) (response.Code, any, error) {
 	if body, err := fetchOptional(c.Request.Context(), shaURL); err == nil && len(body) > 0 {
 		// 容忍两种格式: <hex> <filename>(单行) 或多行 sha256sum
 		if err := updater.VerifyChecksums(assetPath, asset.Name, bytes.NewReader(body)); err != nil {
-			updateProgress.Store(-1)
-			return response.ServerInternalError, nil, err
+			return updateFailure("verify_checksum", err)
 		}
 	}
 
@@ -121,10 +126,24 @@ func (cls *System) ApplyUpdate(c *gin.Context) (response.Code, any, error) {
 
 	// 3. Apply: 主进程会 os.Exit(0),后续不返回
 	if err := updater.ApplyAndRestart(c.Request.Context(), assetPath); err != nil {
-		updateProgress.Store(-1)
-		return response.ServerInternalError, nil, err
+		return updateFailure("apply", err)
 	}
 	return response.Ok, gin.H{"message": "更新已启动,进程即将退出"}, nil
+}
+
+// updateFailure 统一记录更新失败的阶段。安装位置错误属于用户可修复的 4xx，
+// 其他错误仍按 5xx 隐藏内部细节，但可从桌面诊断日志定位阶段和原始原因。
+func updateFailure(stage string, err error) (response.Code, any, error) {
+	updateProgress.Store(-1)
+	zap.L().Warn("[炼丹炉] 自动更新失败", zap.String("stage", stage), zap.Error(err))
+	if errors.Is(err, updater.ErrAppTranslocated) {
+		return response.InvalidParams, nil, internalerrors.New(
+			internalerrors.ErrorTypeInvalidRequest,
+			"handler.system.update.app_translocated",
+			"当前炼丹炉未安装到“应用程序”目录，无法自动更新。请退出应用，将“炼丹炉.app”拖入“应用程序”后重新打开，再检查更新。",
+		)
+	}
+	return response.ServerInternalError, nil, err
 }
 
 // ProgressUpdate GET /api/v1/update/progress
