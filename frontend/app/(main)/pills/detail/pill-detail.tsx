@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { getPillItem, resolveLegacyPill } from '@/services/pillInventoryService'
 import { ConsumePillModal } from '@/components/consume-pill-modal'
+import { PillWorkspacePage } from '@/components/layout/pill-workspace-layout'
 import { ApiError } from '@/services/api'
 import { recipeDetailHref } from '@/lib/entity-detail-route'
 import { formatDateTime } from '@/utils/format'
@@ -101,7 +102,7 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
   // ========== 链接无效 / 加载 / 错误 / 不存在 四态 ==========
   if (!itemId) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <AlertCircle className="mb-3 h-12 w-12 text-primary" />
           <p className="text-sm text-muted-foreground">{t('invalidLink')}</p>
@@ -110,24 +111,24 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
             {t('backToList')}
           </Link>
         </div>
-      </div>
+    </PillWorkspacePage>
     )
   }
 
   if (phase.kind === 'loading') {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="mb-3 h-8 w-8 animate-spin text-gold" />
           <p className="text-sm text-muted-foreground">{t('loading')}</p>
         </div>
-      </div>
+    </PillWorkspacePage>
     )
   }
 
   if (phase.kind === 'error') {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <div role="alert" className="mb-4 max-w-xl break-words text-center text-sm text-muted-foreground">
             {phase.message}
@@ -136,13 +137,13 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
             {t('retry')}
           </button>
         </div>
-      </div>
+    </PillWorkspacePage>
     )
   }
 
   if (phase.kind === 'not-found') {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <AlertCircle className="mb-3 h-12 w-12 text-primary" />
           <p className="text-sm text-muted-foreground">{t('notFound')}</p>
@@ -151,14 +152,14 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
             {t('backToList')}
           </Link>
         </div>
-      </div>
+    </PillWorkspacePage>
     )
   }
 
   // ========== 旧金丹 → 已升级为丹方（legacy 解析命中） ==========
   if (phase.kind === 'legacy') {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <Link
           href="/pills"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-gold"
@@ -179,7 +180,7 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
             {t('viewRecipeCta')}
           </Link>
         </div>
-      </div>
+    </PillWorkspacePage>
     )
   }
 
@@ -189,7 +190,7 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
   const consumed = item.state !== 'available' && item.consumed_at
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <PillWorkspacePage>
       <Link
         href="/pills"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-gold"
@@ -278,6 +279,6 @@ export default function PillItemDetailPage({ itemId }: PillItemDetailPageProps) 
           }}
         />
       )}
-    </div>
+    </PillWorkspacePage>
   )
 }

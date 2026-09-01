@@ -842,7 +842,28 @@
   "agentDetail": {
     "editor": {
       "proactivity": "Proactivity",
-      "proactivityHint": "Willingness to speak in group chats (0-100)"
+      "proactivityHint": "Willingness to speak in group chats (0-100)",
+      "consume": {
+        "open": "Consume pill",
+        "title": "Consume a pill for {name}",
+        "warning": "This consumes 1 pill and keeps the ability. Consumption is independent of saving this page; canceling the edit will not refund the pill.",
+        "confirm": "Confirm 1 pill",
+        "submitting": "Consuming",
+        "duplicate": "Version already absorbed",
+        "pendingRemoval": "This ability's removal is not saved; save it first, then consume",
+        "empty": "No available pills. Craft one in the pill vault first.",
+        "loadFailed": "Failed to load inventory",
+        "loadMore": "Load more",
+        "loadMoreFailed": "Failed to load more inventory",
+        "uncertain": "Consumption result unconfirmed. Verify first; do not repeat the action.",
+        "syncFailed": "Pill consumed, but syncing the ability list failed",
+        "retrySync": "Retry sync",
+        "success": "1 pill consumed; the ability is retained",
+        "verify": "Verify",
+        "verifyLater": "Verify later",
+        "cancel": "Cancel",
+        "close": "Close"
+      }
     }
   },
   "profile": {

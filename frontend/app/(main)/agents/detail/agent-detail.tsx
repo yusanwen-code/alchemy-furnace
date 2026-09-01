@@ -8,7 +8,7 @@
  *       GET 回读(flow 保证);409 冲突保留草稿并刷新合并;失败保留草稿且可重试
  * 删除: 有会话历史(409 delete_has_history)时引导停用;无历史才二次确认硬删除
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   Ban,
   Brain,
+  CheckCircle2,
   Cpu,
   ExternalLink,
   FlaskConical,
@@ -40,10 +41,13 @@ import { useAgent } from '@/contexts/AgentContext'
 import { avatarInputMaxLength } from '@/lib/avatar-validation'
 import { chatSessionHref } from '@/lib/chat-route'
 import { useAgentEditorFlow, type AgentEffectsData } from '@/hooks/use-agent-editor-flow'
+import { isConsumedResult } from '@/hooks/use-consume-pill-operation'
 import { useChatLaunchFlow } from '@/hooks/use-chat-launch-flow'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
+import { clearPendingOperation, listPendingOperations, recoverOperation } from '@/lib/pending-operations'
 import { pillItemDetailHref } from '@/lib/entity-detail-route'
 import { AgentPillComposer } from '@/components/agent-pill-composer'
+import { ConsumeInventoryPillModal } from '@/components/agents/consume-inventory-pill-modal'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -53,7 +57,7 @@ import { listEffects } from '@/services/pillInventoryService'
 import * as modelService from '@/services/modelService'
 import type { ModelOption } from '@/services/modelService'
 import type { AgentDetail, AgentMemory, CreateMemoryRequest, MemoryKind } from '@/services/types'
-import type { AgentStatus, TensionSeverity } from '@/services/types'
+import type { AgentStatus, PillOperationResult, TensionSeverity } from '@/services/types'
 import { formatDateTime } from '@/utils/format'
 
 /** 从 409 响应体提取会话历史数(兼容 data.data.session_count 与 data.session_count 两种嵌套) */
@@ -626,6 +630,16 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   // 已吸收能力列表（服用快照 + effects_revision 乐观锁）；null=未加载/失败
   const [effectsData, setEffectsData] = useState<AgentEffectsData | null>(null)
   const [effectsLoadFailed, setEffectsLoadFailed] = useState(false)
+  // —— 服用金丹（库存选择弹窗 + 页内提示与保存锁定）——
+  const [consumeOpen, setConsumeOpen] = useState(false)
+  const [consumeSuccess, setConsumeSuccess] = useState(false)
+  const [consumeSyncFailed, setConsumeSyncFailed] = useState(false)
+  const [consumePending, setConsumePending] = useState(false)
+  const [consumePendingRemoval, setConsumePendingRemoval] = useState(false)
+  /** 最近一次能力同步是否成功（弹窗关闭时据此决定是否转页内「重试同步」提示） */
+  const syncOkRef = useRef(true)
+  /** 弹窗打开时固定的道人 ID（服用/同步都以它为准，不随渲染切换） */
+  const capturedAgentIdRef = useRef<string | null>(null)
   const loadEffects = useCallback(async () => {
     if (!agentId) return
     setEffectsLoadFailed(false)
@@ -635,8 +649,135 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
       setEffectsLoadFailed(true)
     }
   }, [agentId])
-  const flow = useAgentEditorFlow(agent, effectsData, setEffectsData)
-  useUnsavedChanges(flow.dirty, t('unsavedConfirm'))
+  const flow = useAgentEditorFlow(agent, effectsData, setEffectsData, { mutationBlocked: consumeOpen })
+  // 离开提示同时覆盖草稿 dirty 与未确认操作（弹窗打开/结果未知/同步失败）
+  useUnsavedChanges(flow.dirty || consumeOpen || consumePending || consumeSyncFailed, t('unsavedConfirm'))
+
+  // —— 服用金丹：能力同步与页内提示 ——
+
+  /** 同步服用后的能力（listEffects → reconcile 并入草稿）；失败返回 false（绝不再次 consume） */
+  const syncConsumedEffects = useCallback(
+    async (targetAgentId: string): Promise<boolean> => {
+      try {
+        const fresh = await listEffects(targetAgentId)
+        flow.reconcileConsumedEffects(targetAgentId, fresh)
+        syncOkRef.current = true
+        return true
+      } catch {
+        syncOkRef.current = false
+        return false
+      }
+    },
+    [flow],
+  )
+
+  /** 读取当前道人的 pending 服用记录（重挂载恢复：先读能力与 pending，再决定提示） */
+  const refreshPending = useCallback(() => {
+    setConsumePending(
+      listPendingOperations().some(r => r.action === 'consume' && r.consumeInput?.agentId === agentId),
+    )
+  }, [agentId])
+
+  // 挂载恢复:读会话级 pending 记录到状态。不能改用 state 初始化——SSR/水合期无
+  // sessionStorage,初始值必须与服务器一致(结果未知提示只能水合后浮现)
+  /* eslint-disable react-hooks/set-state-in-effect -- 外部存储一次性读取,非派生可算 */
+  useEffect(() => {
+    refreshPending()
+  }, [refreshPending])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 道人 ID 变化：关闭弹窗、丢弃旧响应写入（operation 恢复记录保留，回到该道人时提示仍在）
+  const lastPageAgentIdRef = useRef(agentId)
+  useEffect(() => {
+    if (lastPageAgentIdRef.current === agentId) return
+    lastPageAgentIdRef.current = agentId
+    setConsumeOpen(false)
+    setConsumeSyncFailed(false)
+    setConsumeSuccess(false)
+    setConsumePendingRemoval(false)
+    refreshPending()
+  }, [agentId, refreshPending])
+
+  // 成功提示短暂展示后自动消失
+  useEffect(() => {
+    if (!consumeSuccess) return
+    const timer = setTimeout(() => setConsumeSuccess(false), 4000)
+    return () => clearTimeout(timer)
+  }, [consumeSuccess])
+
+  /** 打开库存选择弹窗；草稿有未保存的移除意图时先提示保存（禁止对同版本重复服用） */
+  const handleConsumeOpen = useCallback(() => {
+    const pendingRemovals = (effectsData?.effects ?? []).filter(
+      e => !flow.draft.effects.some(d => d.effect_id === e.id),
+    )
+    if (pendingRemovals.length > 0) {
+      setConsumePendingRemoval(true)
+      return
+    }
+    setConsumePendingRemoval(false)
+    capturedAgentIdRef.current = agentId ?? null
+    syncOkRef.current = true
+    setConsumeSuccess(false)
+    setConsumeSyncFailed(false)
+    setConsumeOpen(true)
+  }, [agentId, effectsData, flow.draft.effects])
+
+  /** 弹窗关闭：最后一次同步失败时转为页内「重试同步」提示 */
+  const handleConsumeClose = useCallback(() => {
+    setConsumeOpen(false)
+    if (!syncOkRef.current) setConsumeSyncFailed(true)
+    refreshPending()
+  }, [refreshPending])
+
+  /** 服用成功后的能力同步（弹窗 onCommitted；失败抛出让弹窗只允许「重试同步」） */
+  const handleConsumed = useCallback(
+    async (_result: PillOperationResult) => {
+      const target = capturedAgentIdRef.current ?? agentId
+      if (!target) throw new Error('agent not loaded')
+      const ok = await syncConsumedEffects(target)
+      if (!ok) throw new Error('effects sync failed')
+      setConsumeSuccess(true)
+    },
+    [agentId, syncConsumedEffects],
+  )
+
+  /** 页内「重试同步」：仅再次 GET effects 并合并，绝不再次 POST consume */
+  const handleRetrySync = useCallback(() => {
+    const target = capturedAgentIdRef.current ?? agentId
+    if (!target) return
+    void syncConsumedEffects(target).then(ok => {
+      if (ok) {
+        setConsumeSyncFailed(false)
+        setConsumeSuccess(true)
+      }
+    })
+  }, [agentId, syncConsumedEffects])
+
+  /** 「核对」：恢复查询 pending 记录；已提交→同步能力，未提交(404)→直接结束未知状态 */
+  const handleVerifyPending = useCallback(async () => {
+    if (!agentId) return
+    const records = listPendingOperations().filter(
+      r => r.action === 'consume' && r.consumeInput?.agentId === agentId,
+    )
+    for (const record of records) {
+      try {
+        const result = await recoverOperation(record.key)
+        clearPendingOperation(record.key)
+        if (result && record.consumeInput && isConsumedResult(result, record.key, record.consumeInput)) {
+          const ok = await syncConsumedEffects(agentId)
+          if (!ok) setConsumeSyncFailed(true)
+        }
+      } catch {
+        // 查询失败：仍未知，保留 pending 与提示
+      }
+    }
+    refreshPending()
+  }, [agentId, refreshPending, syncConsumedEffects])
+
+  /** 草稿未保存的移除意图数（该版本仍活跃，禁止重复服用） */
+  const pendingRemovalCount = (effectsData?.effects ?? []).filter(
+    e => !flow.draft.effects.some(d => d.effect_id === e.id),
+  ).length
 
   // null = 尚未加载成功(不做失效判定);数组 = 已加载(可能为空)
   const [modelOptions, setModelOptions] = useState<ModelOption[] | null>(null)
@@ -716,8 +857,9 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
     }
   }
 
-  /** 保存(写后重读由 flow 保证) */
+  /** 保存(写后重读由 flow 保证);服用进行中/结果未知/同步未完成时禁止保存草稿 */
   const handleSave = () => {
+    if (consumeOpen || consumePending || consumeSyncFailed) return
     void flow.save()
   }
 
@@ -1127,6 +1269,24 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
             </ol>
           )}
         </section>
+
+        {/* 服用金丹结果未核对:仅提示+核对(结果未知时保存/再次服用被锁定) */}
+        {consumePending && (
+          <div
+            role="alert"
+            className="mb-4 mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2.5 text-xs text-gold"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{tEditor('consume.uncertain')}</span>
+            <button
+              type="button"
+              onClick={() => void handleVerifyPending()}
+              className="ml-auto shrink-0 rounded-md border border-gold/40 px-2 py-0.5 font-medium hover:bg-gold/20"
+            >
+              {tEditor('consume.verify')}
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -1292,7 +1452,8 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
             <button
               type="button"
               onClick={flow.discard}
-              className="dao-btn-ghost whitespace-nowrap text-sm"
+              disabled={consumeOpen}
+              className="dao-btn-ghost whitespace-nowrap text-sm disabled:opacity-50"
             >
               <X className="h-4 w-4" />
               {t('cancelCta')}
@@ -1308,7 +1469,69 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
           <h2 className="min-w-0 break-words font-serif text-base font-bold text-gold">
             {t('pills.title')}
           </h2>
+          <button
+            type="button"
+            onClick={handleConsumeOpen}
+            disabled={effectsLoadFailed || effectsData === null || consumePending || consumeSyncFailed}
+            className="ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold transition-colors hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FlaskConical className="h-3.5 w-3.5" />
+            {tEditor('consume.open')}
+          </button>
         </div>
+
+        {/* 服用金丹提示(未保存移除意图/结果未知/同步失败/成功) */}
+        {/* 移除意图已保存/撤销后自动收起(派生自草稿,无需同步 effect) */}
+        {consumePendingRemoval && pendingRemovalCount > 0 && (
+          <div
+            role="alert"
+            className="mb-4 flex items-start gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2.5 text-xs text-gold"
+          >
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{tEditor('consume.pendingRemoval')}</span>
+          </div>
+        )}
+        {consumePending && (
+          <div
+            role="alert"
+            className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-3 py-2.5 text-xs text-gold"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{tEditor('consume.uncertain')}</span>
+            <button
+              type="button"
+              onClick={() => void handleVerifyPending()}
+              className="ml-auto shrink-0 rounded-md border border-gold/40 px-2 py-0.5 font-medium hover:bg-gold/20"
+            >
+              {tEditor('consume.verify')}
+            </button>
+          </div>
+        )}
+        {consumeSyncFailed && (
+          <div
+            role="alert"
+            className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5 text-xs text-primary"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{tEditor('consume.syncFailed')}</span>
+            <button
+              type="button"
+              onClick={handleRetrySync}
+              className="ml-auto shrink-0 rounded-md border border-primary/40 px-2 py-0.5 font-medium hover:bg-primary/20"
+            >
+              {tEditor('consume.retrySync')}
+            </button>
+          </div>
+        )}
+        {consumeSuccess && (
+          <div
+            role="status"
+            className="mb-4 flex items-center gap-2 rounded-lg border border-sage/40 bg-sage/10 px-3 py-2.5 text-xs text-sage"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            <span>{tEditor('consume.success')}</span>
+          </div>
+        )}
         {effectsLoadFailed ? (
           <div>
             <ActionFeedback
@@ -1357,7 +1580,7 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={flow.saveStatus === 'submitting'}
+          disabled={flow.saveStatus === 'submitting' || consumeOpen || consumePending || consumeSyncFailed}
           className="dao-btn-primary whitespace-nowrap shadow-lg disabled:opacity-50"
         >
           {flow.saveStatus === 'submitting' ? (
@@ -1368,6 +1591,17 @@ export default function AgentDetailPage({ agentId }: AgentDetailPageProps) {
           {t('saveCta')}
         </button>
       </div>
+
+      {/* 服用金丹:库存选择弹窗(固定当前道人;提交成功→同步能力→关闭) */}
+      {consumeOpen && agent && (
+        <ConsumeInventoryPillModal
+          agentId={agent.id}
+          agentName={agent.name}
+          activeEffects={effectsData?.effects ?? []}
+          onClose={handleConsumeClose}
+          onCommitted={handleConsumed}
+        />
+      )}
     </div>
   )
 }

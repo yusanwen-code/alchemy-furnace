@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { listPillItems } from '@/services/pillInventoryService'
+import { PillWorkspaceHeader, PillWorkspacePage } from '@/components/layout/pill-workspace-layout'
 import { pillItemDetailHref, recipeDetailHref } from '@/lib/entity-detail-route'
 import { formatDateTime } from '@/utils/format'
 import type { PillItemListItem } from '@/services/types'
@@ -91,15 +92,12 @@ export default function PillsPage() {
   const hasMore = load === 'ready' && items.length < total
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-      {/* 页面头部 */}
-      <div className="mb-6 flex items-center gap-3">
-        <CircleDot className="h-6 w-6 text-gold" />
-        <div>
-          <h1 className="page-title">{t('title')}</h1>
-          <p className="page-subtitle">{t('subtitle')}</p>
-        </div>
-      </div>
+    <PillWorkspacePage>
+      <PillWorkspaceHeader
+        icon={<CircleDot className="h-6 w-6 shrink-0 text-gold" />}
+        title={t('title')}
+        subtitle={t('subtitle')}
+      />
 
       {/* 加载状态 */}
       {load === 'loading' && items.length === 0 && (
@@ -193,6 +191,6 @@ export default function PillsPage() {
           </button>
         </div>
       )}
-    </div>
+    </PillWorkspacePage>
   )
 }

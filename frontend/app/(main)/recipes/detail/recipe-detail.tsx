@@ -44,6 +44,7 @@ import {
   startPendingOperation,
 } from '@/lib/pending-operations'
 import { SkillExportDialog } from '@/components/skill-export-dialog'
+import { PillWorkspacePage } from '@/components/layout/pill-workspace-layout'
 import { ActionFeedback } from '@/components/interaction/action-feedback'
 import { formatDateTime } from '@/utils/format'
 import type {
@@ -260,7 +261,7 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
   // ========== 链接无效 / 加载 / 错误 / 不存在 四态 ==========
   if (!recipeId) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <AlertCircle className="mb-3 h-12 w-12 text-primary" />
           <p className="text-sm text-muted-foreground">{t('invalidLink')}</p>
@@ -269,14 +270,14 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
             {t('backToList')}
           </Link>
         </div>
-      </div>
+      </PillWorkspacePage>
     )
   }
 
   if (loadStatus !== 'ready') {
     if (loadStatus === 'not-found') {
       return (
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <PillWorkspacePage>
           <div className="flex flex-col items-center justify-center py-16">
             <AlertCircle className="mb-3 h-12 w-12 text-primary" />
             <p className="text-sm text-muted-foreground">{t('notFound')}</p>
@@ -285,12 +286,12 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
               {t('backToList')}
             </Link>
           </div>
-        </div>
+        </PillWorkspacePage>
       )
     }
     if (loadStatus === 'error') {
       return (
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+        <PillWorkspacePage>
           <div className="flex flex-col items-center justify-center py-16">
             <AlertCircle className="mb-3 h-12 w-12 text-primary" />
             <p className="mb-4 max-w-xl break-words text-center text-sm text-muted-foreground">
@@ -300,28 +301,28 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
               {tCommon('retry')}
             </button>
           </div>
-        </div>
+        </PillWorkspacePage>
       )
     }
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="mb-3 h-8 w-8 animate-spin text-gold" />
           <p className="text-sm text-muted-foreground">{t('loadingDetail')}</p>
         </div>
-      </div>
+      </PillWorkspacePage>
     )
   }
 
   // 兜底:缺 id 外的任何状态未就绪都按加载处理,不闪现旧数据
   if (!recipe || recipe.id !== recipeId) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="mb-3 h-8 w-8 animate-spin text-gold" />
           <p className="text-sm text-muted-foreground">{t('loadingDetail')}</p>
         </div>
-      </div>
+      </PillWorkspacePage>
     )
   }
 
@@ -341,7 +342,7 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
         (dna.vocabulary && dna.vocabulary.length > 0),
     )
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+      <PillWorkspacePage>
         <Link
           href="/recipes"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-gold"
@@ -577,7 +578,7 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
             onClose={() => setShowExport(false)}
           />
         )}
-      </div>
+      </PillWorkspacePage>
     )
   }
 
@@ -630,7 +631,7 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <PillWorkspacePage>
       <Link
         href="/recipes"
         className="mb-4 inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-muted-foreground transition-colors hover:text-gold"
@@ -1026,6 +1027,6 @@ export default function RecipeDetailPage({ recipeId, initialEdit }: RecipeDetail
           {t('editSave')}
         </button>
       </div>
-    </div>
+    </PillWorkspacePage>
   )
 }

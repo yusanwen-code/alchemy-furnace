@@ -10,12 +10,17 @@
  * - 409 agent.effects_conflict（乐观锁过期/提交集与活跃集不一致）：保留草稿与
  *   用户编辑，重新拉取能力列表刷新基线并把新能力并入草稿（仍在集合中的行保留
  *   用户权重/顺序），提示用户重新确认；不把服务端结果覆盖用户编辑
+ * - 服用同步（reconcileConsumedEffects）：固定当前道人时把服用后的活跃集并入草稿
+ *   （保留用户权重/删除意图），并刷新能力基线；道人不匹配时拒绝，零写入
+ * - mutationBlocked（第 4 参）：服用进行中/结果未知时阻塞 save 与 discard，
+ *   防止用旧编排覆盖刚吸收的能力；reconcileConsumedEffects 不受阻塞
  * - 移除能力不返还金丹（原实例保持 consumed_by_agent）
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { useAgent } from '@/contexts/AgentContext'
 import { validateAvatarField } from '@/lib/avatar-validation'
+import { mergeConsumedEffects } from '@/lib/merge-agent-effects'
 import { clearPendingOperation, startPendingOperation } from '@/lib/pending-operations'
 import { getAgent, updateAgent } from '@/services/agentService'
 import { ApiError } from '@/services/api'
@@ -48,10 +53,12 @@ export interface AgentEditorFlow {
   beginEdit(): void
   /** 局部更新草稿 */
   updateDraft(patch: Partial<AgentEditorDraft>): void
-  /** 保存草稿：基础资料 → 移除缺失能力 → 全量编排 → GET 回读；任何一步失败保留草稿与编辑态 */
+  /** 保存草稿：基础资料 → 移除缺失能力 → 全量编排 → GET 回读；任何一步失败保留草稿与编辑态；mutationBlocked 时直接返回 false（零 API） */
   save(): Promise<boolean>
-  /** 放弃修改并退出到只读 */
+  /** 放弃修改并退出到只读；mutationBlocked 时不执行 */
   discard(): void
+  /** 服用同步：把服用后的活跃集并入草稿（保留用户权重/删除意图）并刷新能力基线；道人不匹配时返回 false 且零写入 */
+  reconcileConsumedEffects(agentId: string, fresh: AgentEffectsData): boolean
   /** 女娲蒸馏草稿显式落表（仅调用此方法才写入 name/personality；不触碰能力编排） */
   applyNuwaDraft(draft: DistillationDraft): void
 }
@@ -132,6 +139,7 @@ export function useAgentEditorFlow(
   agent: AgentDetail | null,
   effectsData: AgentEffectsData | null,
   onEffectsRefreshed?: (fresh: AgentEffectsData) => void,
+  options: { mutationBlocked?: boolean } = {},
 ): AgentEditorFlow {
   const { dispatch } = useAgent()
   const [mode, setMode] = useState<AgentEditorMode>('readonly')
@@ -176,13 +184,31 @@ export function useAgentEditorFlow(
   }, [])
 
   const discard = useCallback(() => {
+    if (options.mutationBlocked) return
     setDraft(agent ? buildDraft(agent, effectsData) : emptyDraft())
     setFieldErrors({})
     setSaveStatus('idle')
     setMode('readonly')
-  }, [agent, effectsData])
+  }, [agent, effectsData, options.mutationBlocked])
+
+  /** 服用同步：服用提交后由页面调用，把服务端新活跃集并入草稿并刷新基线 */
+  const reconcileConsumedEffects = useCallback(
+    (agentId: string, fresh: AgentEffectsData): boolean => {
+      // 道人已切换：旧响应作废（防止把别的道人的能力写进当前草稿）
+      if (!agent || agent.id !== agentId) return false
+      setDraft(prev => ({
+        ...prev,
+        effects: mergeConsumedEffects(prev.effects, effectsData?.effects ?? [], fresh.effects),
+      }))
+      onEffectsRefreshed?.(fresh)
+      return true
+    },
+    [agent, effectsData, onEffectsRefreshed],
+  )
 
   const save = useCallback(async (): Promise<boolean> => {
+    // 服用进行中/结果未知：拒绝保存，防止旧编排覆盖刚吸收的能力（零 API）
+    if (options.mutationBlocked) return false
     if (!agent || mode !== 'editing' || submittingRef.current) return false
     // 字段级校验：失败不发起任何 API
     const errors = validateDraft(draft)
@@ -225,10 +251,10 @@ export function useAgentEditorFlow(
 
       // 第三步：重读能力列表（remove 会递增 effects_revision，乐观锁必须以最新值为准）
       const fresh = await listEffects(agent.id)
-      onEffectsRefreshed?.(fresh)
 
-      // 第四步：全量编排（乐观锁；提交集必须等于活跃集，sortOrder = 草稿数组下标）
-      await updateEffects(
+      // 第四步：全量编排（乐观锁；提交集必须等于活跃集，sortOrder = 草稿数组下标）。
+      // 写后真相以 updateEffects 返回值为准（而非第三步的重读快照），后续基线回源它。
+      const updated = await updateEffects(
         agent.id,
         fresh.effects_revision,
         draft.effects.map((item, index) => ({
@@ -237,12 +263,13 @@ export function useAgentEditorFlow(
           sortOrder: index,
         })),
       )
+      onEffectsRefreshed?.(updated)
 
       // 第五步：写后重读；只有 GET 成功才算保存完成，最终状态以 GET 对象为准
       const freshAgent = await getAgent(agent.id)
       dispatch({ type: 'UPDATE_AGENT', payload: freshAgent })
       dispatch({ type: 'SET_CURRENT_AGENT', payload: freshAgent })
-      setDraft(buildDraft(freshAgent, fresh))
+      setDraft(buildDraft(freshAgent, updated))
       setSaveStatus('idle')
       setMode('readonly')
       return true
@@ -265,7 +292,7 @@ export function useAgentEditorFlow(
     } finally {
       submittingRef.current = false
     }
-  }, [agent, mode, draft, effectsData, dispatch, onEffectsRefreshed])
+  }, [agent, mode, draft, effectsData, dispatch, onEffectsRefreshed, options.mutationBlocked])
 
   const applyNuwaDraft = useCallback((incoming: DistillationDraft) => {
     if (!agent) return
@@ -285,6 +312,7 @@ export function useAgentEditorFlow(
     updateDraft,
     save,
     discard,
+    reconcileConsumedEffects,
     applyNuwaDraft,
   }
 }

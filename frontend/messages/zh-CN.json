@@ -842,7 +842,28 @@
   "agentDetail": {
     "editor": {
       "proactivity": "主动性",
-      "proactivityHint": "群聊中的发言欲(0-100,越高越健谈)"
+      "proactivityHint": "群聊中的发言欲(0-100,越高越健谈)",
+      "consume": {
+        "open": "服用金丹",
+        "title": "为「{name}」服用金丹",
+        "warning": "将立即消耗 1 枚金丹并保留能力。服用独立于本页保存，取消编辑不会返还金丹。",
+        "confirm": "确认服用 1 枚",
+        "submitting": "服用中",
+        "duplicate": "已吸收此版本",
+        "pendingRemoval": "此能力尚未保存移除，请先保存后再服用",
+        "empty": "暂无可用金丹，请先到金丹阁按丹方炼制",
+        "loadFailed": "库存加载失败",
+        "loadMore": "加载更多",
+        "loadMoreFailed": "后续库存加载失败",
+        "uncertain": "服用结果尚未确认，请先核对，勿重复操作",
+        "syncFailed": "金丹已服用，能力列表同步失败",
+        "retrySync": "重试同步",
+        "success": "已服用 1 枚金丹，能力已保留",
+        "verify": "核对",
+        "verifyLater": "稍后核对",
+        "cancel": "取消",
+        "close": "关闭"
+      }
     }
   },
   "profile": {

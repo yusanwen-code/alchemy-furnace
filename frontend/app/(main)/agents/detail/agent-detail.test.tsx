@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentDetailPage from '@/app/(main)/agents/detail/agent-detail'
 import { ApiError } from '@/services/api'
-import type { AgentDetail, AgentEffect, AgentMemory } from '@/services/types'
+import type { AgentDetail, AgentEffect, AgentMemory, PillItemListItem } from '@/services/types'
 
 // ---- 固定 UUID(静态详情路由只接受 RFC 4122;置于 hoisted 块内避免提升期 TDZ)----
 const td = vi.hoisted(() => {
@@ -35,6 +35,11 @@ const td = vi.hoisted(() => {
     listModelOptions: vi.fn(),
     launchSingle: vi.fn(),
     launchRetry: vi.fn(),
+    // 服用金丹(库存选择弹窗):固定当前道人,不请求 listAgents
+    listAgents: vi.fn(),
+    listPillItems: vi.fn(),
+    consumePill: vi.fn(),
+    getOperation: vi.fn(),
     dispatchCalls: [] as Array<{ type: string; payload?: unknown }>,
     propId: IDS.AGENT_ID as string | undefined,
     agentState: {
@@ -127,6 +132,7 @@ vi.mock('@/services/agentService', async (importOriginal) => {
     getAgent: td.getAgent,
     updateAgent: td.updateAgent,
     deleteAgent: td.deleteAgent,
+    listAgents: td.listAgents,
     fetchAgentMemories: td.fetchMemories,
     createAgentMemory: td.createMemory,
     updateAgentMemory: td.updateMemory,
@@ -142,6 +148,9 @@ vi.mock('@/services/pillInventoryService', async (importOriginal) => {
     listEffects: td.listEffects,
     updateEffects: td.updateEffects,
     removeEffect: td.removeEffect,
+    listPillItems: td.listPillItems,
+    consumePill: td.consumePill,
+    getOperation: td.getOperation,
   }
 })
 
@@ -176,6 +185,20 @@ const effB: AgentEffect = { ...effA, id: 'eff-b', name: '浩然正气', weight: 
 const effC: AgentEffect = { ...effA, id: 'eff-c', name: '清风徐来', weight: 3, sort_order: 3, item_id: ITEM_C_ID }
 
 const effectsData2 = { effects_revision: 2, effects: [effA, effB] }
+// 服用产出:库存实例 → 服务端能力快照(weight 按服务端值落草稿)
+const itemForConsume: PillItemListItem = {
+  id: ITEM_C_ID,
+  name: '清风徐来',
+  state: 'available',
+  recipe_id: 'recipe-x',
+  revision_id: 'rev-9',
+  revision: 1,
+  created_at: '2026-08-20T00:00:00Z',
+}
+/** 契约准确的服用成功响应:operation_id 回显幂等 key */
+function okConsumeResult(key: string): { operation_id: string; effect_id: string; consumed_item_ids: string[] } {
+  return { operation_id: key, effect_id: 'eff-c', consumed_item_ids: [ITEM_C_ID] }
+}
 
 const baseAgent: AgentDetail = {
   id: AGENT_ID,
@@ -248,7 +271,9 @@ async function enterEditing(user: ReturnType<typeof userEvent.setup>) {
 describe('AgentDetailPage', () => {
   beforeEach(() => {
     vi.resetAllMocks() // 清实现与 once 队列(clearAllMocks 不清 once,跨测试泄漏)
-    sessionStorage.clear() // 真实 pending-operations 实现
+    // 真实 pending-operations 实现:写 '[]'(全部操作完成态)而非 clear()——
+    // readAll 在 key 缺失时回落模块级 memoryStore(会话内幂等兜底),clear() 清不掉它,会跨测试泄漏
+    sessionStorage.setItem('alchemy_pending_operations', '[]')
     td.dispatchCalls.length = 0
     td.agentState.agents = []
     td.agentState.currentAgent = null
@@ -260,6 +285,9 @@ describe('AgentDetailPage', () => {
     td.listEffects.mockResolvedValue(effectsData2)
     td.updateEffects.mockResolvedValue({ effects_revision: 3, effects: [effA, effB] })
     td.removeEffect.mockResolvedValue(undefined)
+    td.listPillItems.mockResolvedValue({ total: 0, items: [] })
+    td.consumePill.mockResolvedValue({ operation_id: 'op-1' })
+    td.getOperation.mockRejectedValue(Object.assign(new Error('not found'), { status: 404 }))
     td.listModelOptions.mockResolvedValue(modelOptions)
     td.launchSingle.mockResolvedValue(true)
     td.fetchMemories.mockResolvedValue([])
@@ -517,6 +545,9 @@ describe('AgentDetailPage', () => {
       td.listEffects
         .mockResolvedValueOnce(effectsData2)
         .mockResolvedValueOnce({ effects_revision: 3, effects: [effA] })
+      // 写后真相以 updateEffects 返回值为准(save 第四步):提交集=草稿=仅剩丹心妙语,
+      // 否则只读态基线会回源 beforeEach 的默认双能力 mock
+      td.updateEffects.mockResolvedValue({ effects_revision: 3, effects: [effA] })
       td.getAgent.mockResolvedValue(fresh)
       const user = userEvent.setup()
       renderPage()
@@ -735,6 +766,234 @@ describe('AgentDetailPage', () => {
       ).toBeInTheDocument()
       expect(td.updateAgent).not.toHaveBeenCalled()
       expect(td.updateEffects).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('服用金丹入口', () => {
+    it('编辑态:能力为空仍显示服用按钮,点击固定当前道人打开库存弹窗且不请求 listAgents', async () => {
+      setDetailState({ agent: baseAgent })
+      td.listEffects.mockResolvedValue({ effects_revision: 1, effects: [] })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      const openBtn = screen.getByRole('button', { name: '服用金丹' })
+      expect(openBtn).toBeEnabled()
+
+      await user.click(openBtn)
+      // 弹窗以固定 agentId 打开:标题用当前道人名,不重新拉道人列表
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText('为「太上老君」服用金丹')).toBeInTheDocument()
+      expect(td.listAgents).not.toHaveBeenCalled()
+      expect(td.listPillItems).toHaveBeenCalledWith({ page: 1, size: 24 })
+    })
+
+    it('编辑态:能力读取失败时服用按钮禁用', async () => {
+      setDetailState({ agent: baseAgent })
+      td.listEffects.mockRejectedValue(new Error('boom'))
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      expect(screen.getByRole('button', { name: '服用金丹' })).toBeDisabled()
+    })
+  })
+
+  describe('服用金丹行为', () => {
+    it('弹窗打开期间保存与取消禁用(防止旧编排覆盖刚吸收的能力)', async () => {
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await screen.findByRole('dialog')
+
+      expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+      // 弹窗内也有「取消」,页面取消按钮(disabled)与弹窗取消(可点)同时存在
+      const cancels = screen.getAllByRole('button', { name: '取消' })
+      expect(cancels.some(b => b.hasAttribute('disabled'))).toBe(true)
+      expect(cancels.some(b => !b.hasAttribute('disabled'))).toBe(true)
+    })
+
+    it('服用成功:仅刷新能力并入草稿(新能力+服务端权重),弹窗关闭,保存不误删新能力', async () => {
+      setDetailState({ agent: baseAgent })
+      const freshAgent: AgentDetail = { ...baseAgent, name: '收丹老君', updated_at: '2026-08-23T00:00:00Z' }
+      td.updateAgent.mockResolvedValue(freshAgent)
+      td.getAgent.mockResolvedValue(freshAgent)
+      td.consumePill.mockImplementation(async (key: string) => okConsumeResult(key))
+      td.listPillItems.mockResolvedValue({ total: 1, items: [itemForConsume] })
+      // 挂载(rev2 双能力) → 服用同步(rev3 三能力) → 保存前重读(rev3)
+      td.listEffects
+        .mockResolvedValueOnce(effectsData2)
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await user.click(await screen.findByRole('radio', { name: /清风徐来/ }))
+      await user.click(screen.getByRole('button', { name: /确认服用 1 枚/ }))
+
+      // 弹窗关闭 + 成功提示 + 能力已按新基线同步(只刷新能力,不重新拉道人)
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(screen.getByText('已服用 1 枚金丹，能力已保留')).toBeInTheDocument()
+      expect(td.listEffects).toHaveBeenCalledTimes(2)
+      expect(td.listAgents).not.toHaveBeenCalled()
+      expect(td.consumePill).toHaveBeenCalledTimes(1)
+      // 新能力进草稿(composer 出现清风徐来行)
+      expect(screen.getByRole('button', { name: /上移 清风徐来/ })).toBeInTheDocument()
+
+      // 保存:全量编排提交含新能力(weight=服务端值),不被后续保存误删
+      await user.click(screen.getByRole('button', { name: '保存' }))
+      await waitFor(() => expect(td.updateEffects).toHaveBeenCalled())
+      expect(td.updateEffects).toHaveBeenCalledWith(AGENT_ID, 3, [
+        { effectId: 'eff-a', weight: 2, sortOrder: 0 },
+        { effectId: 'eff-b', weight: 1, sortOrder: 1 },
+        { effectId: 'eff-c', weight: 3, sortOrder: 2 },
+      ])
+      await screen.findByRole('heading', { name: '收丹老君' })
+    })
+
+    it('服用成功后取消编辑:新能力仍在(取消编辑不返还金丹、不还原)', async () => {
+      setDetailState({ agent: baseAgent })
+      td.consumePill.mockImplementation(async (key: string) => okConsumeResult(key))
+      td.listPillItems.mockResolvedValue({ total: 1, items: [itemForConsume] })
+      td.listEffects
+        .mockResolvedValueOnce(effectsData2)
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await user.click(await screen.findByRole('radio', { name: /清风徐来/ }))
+      await user.click(screen.getByRole('button', { name: /确认服用 1 枚/ }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+      await user.click(screen.getByRole('button', { name: '取消' }))
+      const section = screen.getByRole('heading', { name: '已吸收能力' }).closest('section')!
+      expect(within(section).getByText('清风徐来')).toBeInTheDocument()
+      // 再进编辑:新能力仍在 composer(取消编辑只丢弃未保存的草稿改动,不撤销服用)
+      await enterEditing(user)
+      expect(screen.getByRole('button', { name: /上移 清风徐来/ })).toBeInTheDocument()
+    })
+
+    it('草稿有未保存移除意图:点服用金丹不开弹窗,提示先保存', async () => {
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+      await user.click(screen.getByRole('button', { name: /停服 浩然正气/ }))
+
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(screen.getByText('此能力尚未保存移除，请先保存后再服用')).toBeInTheDocument()
+    })
+
+    it('结果未知:稍后核对关窗后页内提示并锁定保存;核对命中已提交则解锁并同步能力', async () => {
+      setDetailState({ agent: baseAgent })
+      td.consumePill.mockRejectedValue(new Error('network down'))
+      td.listPillItems.mockResolvedValue({ total: 1, items: [itemForConsume] })
+      // 弹窗 recover 查询失败 → uncertain;页内核对命中已提交(operation_id 回显)
+      td.getOperation
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockImplementation(async (key: string) => okConsumeResult(key))
+      td.listEffects
+        .mockResolvedValueOnce(effectsData2)
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await user.click(await screen.findByRole('radio', { name: /清风徐来/ }))
+      await user.click(screen.getByRole('button', { name: /确认服用 1 枚/ }))
+      expect(await screen.findByText('服用结果尚未确认，请先核对，勿重复操作')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '稍后核对' }))
+
+      // 页内提示(弹窗已关)+ 保存/再次服用锁定
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(screen.getByRole('alert')).toHaveTextContent('服用结果尚未确认，请先核对，勿重复操作')
+      expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: '服用金丹' })).toBeDisabled()
+
+      // 核对:recoverOperation 命中 → 同步能力 → 解锁
+      await user.click(screen.getByRole('button', { name: '核对' }))
+      await waitFor(() => expect(td.listEffects).toHaveBeenCalledTimes(2))
+      expect(td.consumePill).toHaveBeenCalledTimes(1) // 核对绝不重新服用
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+      expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: /上移 清风徐来/ })).toBeInTheDocument()
+      expect(sessionStorage.getItem('alchemy_pending_operations')).toBe('[]')
+    })
+
+    it('能力同步失败:关闭弹窗转页内「重试同步」,重试仅再次 GET 能力绝不重新服用', async () => {
+      setDetailState({ agent: baseAgent })
+      td.consumePill.mockImplementation(async (key: string) => okConsumeResult(key))
+      td.listPillItems.mockResolvedValue({ total: 1, items: [itemForConsume] })
+      // 挂载成功 → 服用同步失败 → 重试同步成功
+      td.listEffects
+        .mockResolvedValueOnce(effectsData2)
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce({ effects_revision: 3, effects: [effA, effB, effC] })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await user.click(await screen.findByRole('radio', { name: /清风徐来/ }))
+      await user.click(screen.getByRole('button', { name: /确认服用 1 枚/ }))
+      expect(await screen.findByText('金丹已服用，能力列表同步失败')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '关闭' })) // X 关闭弹窗
+
+      // 页内提示 + 重试同步,保存锁定
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(screen.getByText('金丹已服用，能力列表同步失败')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+
+      await user.click(screen.getByRole('button', { name: '重试同步' }))
+      await waitFor(() => expect(td.listEffects).toHaveBeenCalledTimes(3))
+      expect(td.consumePill).toHaveBeenCalledTimes(1) // 同步重试绝不 POST consume
+      await waitFor(() => expect(screen.queryByText('金丹已服用，能力列表同步失败')).toBeNull())
+      expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: /上移 清风徐来/ })).toBeInTheDocument()
+    })
+
+    it('重挂载读 pending:结果未知关窗后离开再回,只读态仍提示核对', async () => {
+      setDetailState({ agent: baseAgent })
+      td.consumePill.mockRejectedValue(new Error('network down'))
+      td.getOperation.mockRejectedValue(new Error('offline'))
+      td.listPillItems.mockResolvedValue({ total: 1, items: [itemForConsume] })
+      const user = userEvent.setup()
+      renderPage()
+      await enterEditing(user)
+
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await user.click(await screen.findByRole('radio', { name: /清风徐来/ }))
+      await user.click(screen.getByRole('button', { name: /确认服用 1 枚/ }))
+      await screen.findByText('服用结果尚未确认，请先核对，勿重复操作')
+      await user.click(screen.getByRole('button', { name: '稍后核对' }))
+
+      // 模拟离开重进:重挂载后从 storage 读回 pending → 只读分支提示核对
+      cleanup()
+      renderPage()
+      expect(await screen.findByText('服用结果尚未确认，请先核对，勿重复操作')).toBeInTheDocument()
+    })
+
+    it('道人切换:旧弹窗响应丢弃,弹窗关闭不写入新草稿', async () => {
+      setDetailState({ agent: baseAgent })
+      const user = userEvent.setup()
+      const { rerender } = render(<AgentDetailPage agentId={AGENT_ID} />)
+      await enterEditing(user)
+      // 等能力列表加载完成(服用按钮就绪)再打开弹窗
+      await screen.findByRole('button', { name: /上移 丹心妙语/ })
+      await user.click(screen.getByRole('button', { name: '服用金丹' }))
+      await screen.findByRole('dialog')
+
+      setDetailState({ agent: { ...baseAgent, id: OTHER_AGENT_ID, name: '沉睡道人' } })
+      rerender(<AgentDetailPage agentId={OTHER_AGENT_ID} />)
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     })
   })
 

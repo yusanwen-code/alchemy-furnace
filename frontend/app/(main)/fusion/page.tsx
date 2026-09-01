@@ -23,6 +23,7 @@ import {
 import { listProviders, listModels, updateModel } from '@/services/modelService'
 import type { Provider, LLMModel } from '@/services/modelService'
 import { getSystemConfig, type FusionModelInfo } from '@/services/systemService'
+import { PillWorkspaceHeader, PillWorkspacePage } from '@/components/layout/pill-workspace-layout'
 import type { FusionPreview, PillItemListItem, PillOperationResult } from '@/services/types'
 import { BaguaFurnace } from '@/components/alchemy/bagua-furnace'
 import type { FurnaceWindow } from '@/components/alchemy/bagua-furnace-fire'
@@ -223,16 +224,12 @@ export default function FusionPage() {
     msg.includes('fusion model')
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 pb-24">
-      <div className="mb-6 flex items-start gap-3">
-        <FlaskConical className="w-7 h-7 text-gold shrink-0 mt-0.5" strokeWidth={1.75} />
-        <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-2xl font-black text-foreground sm:text-3xl">
-            {t('title')}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
-        </div>
-      </div>
+    <PillWorkspacePage>
+      <PillWorkspaceHeader
+        icon={<FlaskConical className="h-6 w-6 shrink-0 text-gold" />}
+        title={t('title')}
+        subtitle={t('subtitle')}
+      />
 
       {/* 当前融合模型 banner:已配置显示模型名,未配置显示醒目警告 */}
       <div className={`mb-4 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
@@ -587,6 +584,6 @@ export default function FusionPage() {
           </div>
         </div>
       )}
-    </div>
+    </PillWorkspacePage>
   )
 }

@@ -166,7 +166,12 @@ describe('PillItemDetailPage 金丹库存实例详情', () => {
 
   it('服用成功后才重读实例：状态变为已服用、按钮消失', async () => {
     const user = userEvent.setup()
-    consumePill.mockResolvedValue({ operation_id: 'op-1', effect_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' })
+    // 契约准确的成功响应：operation_id 回显幂等 key，consumed_item_ids 含本实例
+    consumePill.mockImplementation(async (key: string) => ({
+      operation_id: key,
+      effect_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      consumed_item_ids: [ITEM_ID],
+    }))
     listAgents.mockResolvedValue({ list: [{ id: '11111111-1111-4111-8111-111111111111', name: '太上老君' }], total: 1 })
     getPillItem.mockResolvedValueOnce(item)
     getPillItem.mockResolvedValueOnce({

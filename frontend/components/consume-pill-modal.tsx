@@ -13,13 +13,8 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { X, Users, Loader2, FlaskConical, AlertCircle } from 'lucide-react'
 import { EntityAvatar } from '@/components/avatar/entity-avatar'
+import { useConsumePillOperation } from '@/hooks/use-consume-pill-operation'
 import { listAgents } from '@/services/agentService'
-import { consumePill } from '@/services/pillInventoryService'
-import {
-  startPendingOperation,
-  clearPendingOperation,
-  recoverOperation,
-} from '@/lib/pending-operations'
 import type { Agent } from '@/services/types'
 
 interface ConsumePillModalProps {
@@ -36,12 +31,23 @@ export function ConsumePillModal({ itemId, itemName, onClose, onConsumed }: Cons
   const t = useTranslations('consumeDialog')
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [weight, setWeight] = useState(1)
   const [sortOrder, setSortOrder] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  /** 道人列表加载失败（与服用结果错误分开展示；关弹窗重开即重置） */
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // 共享服用执行器：提交/断线恢复/幂等 key 语义与道人编辑页「服用金丹」一致
+  const { status, error, submit } = useConsumePillOperation({
+    onCommitted: () => {
+      onConsumed?.()
+      setTimeout(onClose, 800)
+    },
+  })
+  const submitting = status === 'submitting'
+  const success = status === 'committed'
+  // 结果未知（recover 查询失败）时展示通用失败文案，重试同 key 可安全收敛
+  const errorText = error ?? (status === 'uncertain' ? t('errorConsume') : null)
 
   // 加载道人列表
   useEffect(() => {
@@ -51,7 +57,7 @@ export function ConsumePillModal({ itemId, itemName, onClose, onConsumed }: Cons
         if (!cancelled) setAgents(data.list || [])
       })
       .catch(err => {
-        if (!cancelled) setError(err instanceof Error ? err.message : t('errorLoadAgents'))
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : t('errorLoadAgents'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -59,38 +65,17 @@ export function ConsumePillModal({ itemId, itemName, onClose, onConsumed }: Cons
     return () => { cancelled = true }
   }, [t])
 
-  /** 执行服用（幂等）：成功才回调/关闭，失败保留对话框原状 */
-  const handleConsume = async () => {
+  /** 执行服用（幂等）：成功才回调/关闭，失败保留对话框原状；重试沿用同一幂等 key */
+  const handleConsume = () => {
     if (!selectedAgentId || submitting || success) return
     const agent = agents.find(a => a.id === selectedAgentId)
-    // 同「动作+目标」pending 期间复用同一 key；换道人 label 变化即新动作
-    const key = startPendingOperation('consume', `${itemName}→${agent?.name ?? itemName}`)
-    setSubmitting(true)
-    setError(null)
-    try {
-      await consumePill(key, selectedAgentId, itemId, { weight, sortOrder })
-      clearPendingOperation(key)
-      setSuccess(true)
-      onConsumed?.()
-      setTimeout(onClose, 800)
-    } catch (err) {
-      // 断线恢复：先查已提交结果；有结果按成功处理，404 保留原状用同 key 重试
-      try {
-        const recovered = await recoverOperation(key)
-        if (recovered) {
-          clearPendingOperation(key)
-          setSuccess(true)
-          onConsumed?.()
-          setTimeout(onClose, 800)
-          return
-        }
-      } catch {
-        // recover 查询本身失败：按普通错误展示，仍可用原 key 重试
-      }
-      setError(err instanceof Error ? err.message : t('errorConsume'))
-    } finally {
-      setSubmitting(false)
-    }
+    void submit({
+      agentId: selectedAgentId,
+      itemId,
+      weight,
+      sortOrder,
+      label: `${itemName}→${agent?.name ?? itemName}`,
+    })
   }
 
   return (
@@ -179,10 +164,10 @@ export function ConsumePillModal({ itemId, itemName, onClose, onConsumed }: Cons
           </div>
         )}
 
-        {error && (
+        {(errorText ?? loadError) && (
           <div className="flex items-center gap-2 text-xs text-primary mb-3" role="alert">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>{error}</span>
+            <span>{errorText ?? loadError}</span>
           </div>
         )}
 

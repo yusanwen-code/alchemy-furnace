@@ -577,4 +577,195 @@ describe('useAgentEditorFlow（effects 数据源）', () => {
       expect(updateAgent).not.toHaveBeenCalled()
     })
   })
+
+  describe('服用同步 reconcileConsumedEffects + mutationBlocked', () => {
+    it('reconcile:服用结果并入草稿(保留基础资料/用户权重/删除意图),刷新能力基线', () => {
+      const fresh: AgentEffectsData = { effects_revision: 3, effects: [effA, effB, effC] }
+      const onEffectsRefreshed = vi.fn()
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, onEffectsRefreshed),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+      // 用户编辑:基础资料改名 + B 权重调为 2 + A 从草稿移除(待删除意图)
+      act(() => result.current.updateDraft({ name: '改名' }))
+      act(() => result.current.updateDraft({ effects: [{ key: 'eff-b', effect_id: 'eff-b', weight: 2 }] }))
+
+      let ok = false
+      act(() => {
+        ok = result.current.reconcileConsumedEffects('agent-1', fresh)
+      })
+      expect(ok).toBe(true)
+      // 基础资料草稿保留
+      expect(result.current.draft.name).toBe('改名')
+      // A 待删除意图保留(不复活);B 保留用户权重;新能力 C 追加末尾(服务端权重)
+      expect(result.current.draft.effects).toEqual([
+        { key: 'eff-b', effect_id: 'eff-b', weight: 2 },
+        { key: 'eff-c', effect_id: 'eff-c', weight: 3 },
+      ])
+      // 基线刷新(供 dirty 比较与后续保存)
+      expect(onEffectsRefreshed).toHaveBeenCalledWith(fresh)
+    })
+
+    it('重复同步同一 fresh:不重复追加(幂等)', () => {
+      const fresh: AgentEffectsData = { effects_revision: 3, effects: [effA, effB, effC] }
+      const onEffectsRefreshed = vi.fn()
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, onEffectsRefreshed),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ effects: [{ key: 'eff-b', effect_id: 'eff-b', weight: 2 }] }))
+
+      let first = false
+      let second = false
+      act(() => {
+        first = result.current.reconcileConsumedEffects('agent-1', fresh)
+      })
+      act(() => {
+        second = result.current.reconcileConsumedEffects('agent-1', fresh)
+      })
+      expect(first).toBe(true)
+      expect(second).toBe(true)
+      expect(result.current.draft.effects).toEqual([
+        { key: 'eff-b', effect_id: 'eff-b', weight: 2 },
+        { key: 'eff-c', effect_id: 'eff-c', weight: 3 },
+      ])
+    })
+
+    it('道人不匹配:拒绝旧响应,零写入', () => {
+      const fresh: AgentEffectsData = { effects_revision: 3, effects: [effA, effB, effC] }
+      const onEffectsRefreshed = vi.fn()
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, onEffectsRefreshed),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ effects: [{ key: 'eff-b', effect_id: 'eff-b', weight: 2 }] }))
+
+      let ok = true
+      act(() => {
+        ok = result.current.reconcileConsumedEffects('agent-2', fresh)
+      })
+      expect(ok).toBe(false)
+      expect(onEffectsRefreshed).not.toHaveBeenCalled()
+      // 草稿零变化
+      expect(result.current.draft.effects).toEqual([{ key: 'eff-b', effect_id: 'eff-b', weight: 2 }])
+    })
+
+    it('切换到新道人后,旧道人的服用响应被拒绝且不写入新草稿', () => {
+      const otherAgent: AgentDetail = { ...baseAgent, id: 'agent-2', name: '哪吒' }
+      const fresh: AgentEffectsData = { effects_revision: 3, effects: [effA, effB, effC] }
+      const onEffectsRefreshed = vi.fn()
+      const { result, rerender } = renderHook(
+        ({ agent }) => useAgentEditorFlow(agent, effectsData, onEffectsRefreshed),
+        { wrapper, initialProps: { agent: baseAgent } },
+      )
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ name: '改老君' }))
+      // 切到另一位道人 → 整体复位
+      rerender({ agent: otherAgent })
+      expect(result.current.mode).toBe('readonly')
+      expect(result.current.draft.name).toBe('哪吒')
+      // 旧道人的服用响应(agentId=agent-1)到达 → 拒绝
+      let ok = true
+      act(() => {
+        ok = result.current.reconcileConsumedEffects('agent-1', fresh)
+      })
+      expect(ok).toBe(false)
+      expect(result.current.draft.name).toBe('哪吒')
+      expect(onEffectsRefreshed).not.toHaveBeenCalled()
+    })
+
+    it('mutationBlocked:保存被拒绝,零 API', async () => {
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, undefined, { mutationBlocked: true }),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ name: '改名' }))
+
+      let ok = true
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(false)
+      expect(updateAgent).not.toHaveBeenCalled()
+      expect(removeEffect).not.toHaveBeenCalled()
+      expect(updateEffects).not.toHaveBeenCalled()
+      expect(getAgent).not.toHaveBeenCalled()
+      // 编辑态与草稿保留
+      expect(result.current.mode).toBe('editing')
+      expect(result.current.draft.name).toBe('改名')
+    })
+
+    it('mutationBlocked:discard 不执行,草稿与编辑态保留', () => {
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, undefined, { mutationBlocked: true }),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ name: '改名' }))
+      expect(result.current.dirty).toBe(true)
+
+      act(() => result.current.discard())
+      expect(result.current.mode).toBe('editing')
+      expect(result.current.draft.name).toBe('改名')
+      expect(result.current.dirty).toBe(true)
+    })
+
+    it('mutationBlocked 不影响 reconcileConsumedEffects', () => {
+      const fresh: AgentEffectsData = { effects_revision: 3, effects: [effA, effB, effC] }
+      const onEffectsRefreshed = vi.fn()
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, onEffectsRefreshed, { mutationBlocked: true }),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+      act(() => result.current.updateDraft({ effects: [{ key: 'eff-b', effect_id: 'eff-b', weight: 2 }] }))
+
+      let ok = false
+      act(() => {
+        ok = result.current.reconcileConsumedEffects('agent-1', fresh)
+      })
+      expect(ok).toBe(true)
+      expect(result.current.draft.effects).toEqual([
+        { key: 'eff-b', effect_id: 'eff-b', weight: 2 },
+        { key: 'eff-c', effect_id: 'eff-c', weight: 3 },
+      ])
+      expect(onEffectsRefreshed).toHaveBeenCalledWith(fresh)
+    })
+
+    it('保存成功后基线 = updateEffects 返回值(而非重读 fresh)', async () => {
+      updateAgent.mockResolvedValue({ ...baseAgent })
+      getAgent.mockResolvedValue({ ...baseAgent })
+      // 第三步重读:revision 3,无新能力(拿乐观锁)
+      listEffects.mockResolvedValue({ effects_revision: 3, effects: [effA, effB] })
+      // 服务端编排后的真相:revision 4,含新能力 C
+      const updatedEffects: AgentEffectsData = { effects_revision: 4, effects: [effA, effB, effC] }
+      updateEffects.mockResolvedValue(updatedEffects)
+      const onEffectsRefreshed = vi.fn()
+      const { result } = renderHook(
+        () => useAgentEditorFlow(baseAgent, effectsData, onEffectsRefreshed),
+        { wrapper },
+      )
+      act(() => result.current.beginEdit())
+
+      let ok = false
+      await act(async () => {
+        ok = await result.current.save()
+      })
+      expect(ok).toBe(true)
+      // 基线刷新必须来自 updateEffects 返回值,且只刷新一次
+      expect(onEffectsRefreshed).toHaveBeenCalledTimes(1)
+      expect(onEffectsRefreshed).toHaveBeenCalledWith(updatedEffects)
+      // 草稿回源自 updateEffects 返回值
+      expect(result.current.draft.effects).toEqual([
+        { key: 'eff-a', effect_id: 'eff-a', weight: 2 },
+        { key: 'eff-b', effect_id: 'eff-b', weight: 1 },
+        { key: 'eff-c', effect_id: 'eff-c', weight: 3 },
+      ])
+      expect(result.current.dirty).toBe(false)
+    })
+  })
 })

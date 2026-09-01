@@ -103,6 +103,12 @@ describe('ConsumePillModal 服用对话框', () => {
   it('选择道人后提交：一次 consumePill（幂等 key + itemId），成功后回调并清 pending 记录', async () => {
     const user = userEvent.setup()
     const onConsumed = vi.fn()
+    // 契约准确的成功响应：operation_id 回显幂等 key，含 effect_id 与 consumed_item_ids
+    td.consumePill.mockImplementation(async (key: string) => ({
+      operation_id: key,
+      effect_id: 'e-1',
+      consumed_item_ids: [ITEM_ID],
+    }))
     render(<ConsumePillModal itemId={ITEM_ID} itemName="丹心妙语" onClose={vi.fn()} onConsumed={onConsumed} />)
     await screen.findByText('太上老君')
 
@@ -122,8 +128,13 @@ describe('ConsumePillModal 服用对话框', () => {
 
   it('重复点击提交只产生一项逻辑操作', async () => {
     const user = userEvent.setup()
-    let resolve!: (v: unknown) => void
-    td.consumePill.mockReturnValue(new Promise((r) => { resolve = r }))
+    let resolve!: () => void
+    td.consumePill.mockImplementation(
+      (key: string) =>
+        new Promise((r) => {
+          resolve = () => r({ operation_id: key, effect_id: 'e-1', consumed_item_ids: [ITEM_ID] })
+        }),
+    )
     render(<ConsumePillModal itemId={ITEM_ID} itemName="丹心妙语" onClose={vi.fn()} onConsumed={vi.fn()} />)
     await screen.findByText('太上老君')
 
@@ -133,7 +144,7 @@ describe('ConsumePillModal 服用对话框', () => {
     await user.click(submit)
     expect(td.consumePill).toHaveBeenCalledTimes(1)
 
-    resolve({ operation_id: 'op-1' })
+    resolve()
     await waitFor(() => expect(screen.getByRole('button', { name: /已服用/ })).toBeInTheDocument())
   })
 
@@ -180,7 +191,12 @@ describe('ConsumePillModal 服用对话框', () => {
     const user = userEvent.setup()
     const onConsumed = vi.fn()
     td.consumePill.mockRejectedValue(new Error('network down'))
-    td.getOperation.mockResolvedValue({ operation_id: 'op-1', effect_id: 'e-1' })
+    // 契约准确的恢复响应：operation_id 回显幂等 key
+    td.getOperation.mockImplementation(async (key: string) => ({
+      operation_id: key,
+      effect_id: 'e-1',
+      consumed_item_ids: [ITEM_ID],
+    }))
     render(<ConsumePillModal itemId={ITEM_ID} itemName="丹心妙语" onClose={vi.fn()} onConsumed={onConsumed} />)
     await screen.findByText('太上老君')
 

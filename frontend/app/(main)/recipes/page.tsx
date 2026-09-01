@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { RecipeCard } from '@/components/recipe-card'
 import { NuwaDistillPanel } from '@/components/nuwa-distill-panel'
+import { PillWorkspaceHeader, PillWorkspacePage } from '@/components/layout/pill-workspace-layout'
 import { recipeDetailHref } from '@/lib/entity-detail-route'
 import { listRecipes, saveRecipe } from '@/services/recipeService'
 import { getMigrationSummary } from '@/services/pillInventoryService'
@@ -169,25 +170,21 @@ export default function RecipesPage() {
   const hasMore = recipes.length < total
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      {/* 页面头部 */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <BookOpen className="h-6 w-6 text-gold" />
-            <h1 className="page-title">{t('title')}</h1>
-          </div>
-          <p className="page-subtitle">{t('subtitle')}</p>
-        </div>
-
-        <button
-          onClick={() => setShowCreate(true)}
-          className="dao-btn-primary self-start whitespace-nowrap"
-        >
-          <Plus className="h-4 w-4" />
-          {t('create')}
-        </button>
-      </div>
+    <PillWorkspacePage>
+      <PillWorkspaceHeader
+        icon={<BookOpen className="h-6 w-6 shrink-0 text-gold" />}
+        title={t('title')}
+        subtitle={t('subtitle')}
+        actions={
+          <button
+            onClick={() => setShowCreate(true)}
+            className="dao-btn-primary whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4" />
+            {t('create')}
+          </button>
+        }
+      />
 
       {/* 迁移摘要条（任务 8：仅旧版升级用户展示；可关闭） */}
       {showMigrationBanner && migrationSummary && (
@@ -379,6 +376,6 @@ export default function RecipesPage() {
           )}
         </>
       )}
-    </div>
+    </PillWorkspacePage>
   )
 }
