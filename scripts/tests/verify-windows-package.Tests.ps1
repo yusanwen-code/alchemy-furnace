@@ -33,7 +33,7 @@ BeforeAll {
   # 生成带完整 PE32+ Optional Header 的夹具(供 Subsystem 解析测试):
   # Subsystem 字段位于 Optional Header 起点 +0x44, 与 Get-PeSubsystem 读法一致
   function New-TestPeFile {
-    param([string]$Path, [uint16]$Machine, [uint16]$Subsystem)
+    param([string]$Path, [uint16]$Machine, [uint16]$Subsystem, [byte[]]$Payload = @())
     $fs = [System.IO.File]::Create($Path)
     try {
       $bw = New-Object System.IO.BinaryWriter($fs)
@@ -44,6 +44,9 @@ BeforeAll {
       $bw.Write([uint32]0x00004550)                     # 'PE\0\0'
       $bw.Write([uint16]$Machine)                       # COFF Machine
       $bw.Write([uint16]0)                              # NumberOfSections
+      $bw.Write([uint32]0)                              # TimeDateStamp
+      $bw.Write([uint32]0)                              # PointerToSymbolTable
+      $bw.Write([uint32]0)                              # NumberOfSymbols
       $bw.Write([uint16]0x00F0)                         # SizeOfOptionalHeader (PE32+)
       $bw.Write([uint16]0)                              # Characteristics
       $bw.Write([uint16]0x20B)                          # Optional Magic (PE32+)
@@ -67,6 +70,7 @@ BeforeAll {
       $bw.Write([uint32]0)                              # SizeOfHeaders
       $bw.Write([uint32]0)                              # CheckSum
       $bw.Write([uint16]$Subsystem)                     # Subsystem @ +0x44
+      $bw.Write($Payload)
       $bw.Flush()
     } finally { $fs.Dispose() }
   }
@@ -83,7 +87,7 @@ BeforeAll {
       [uint16]$PythonMachine = 0x8664,
       [byte[]]$AppPayload = ([System.Text.Encoding]::ASCII.GetBytes('v0.1.1'))
     )
-    New-FakePe -Path (Join-Path $Root 'AlchemyFurnace.exe') -Machine $AppMachine -Payload $AppPayload
+    New-TestPeFile -Path (Join-Path $Root 'AlchemyFurnace.exe') -Machine $AppMachine -Subsystem 2 -Payload $AppPayload
     if ($WithRuntime) {
       $engineApp = Join-Path $Root 'runtime\engine\app'
       New-Item -ItemType Directory -Force -Path $engineApp | Out-Null
