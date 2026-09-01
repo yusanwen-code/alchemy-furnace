@@ -3,6 +3,8 @@
  * 基于 fetch 的统一请求封装，自动解包后端 { code, message, data } 响应信封
  */
 
+import { recordApiFailure } from '@/lib/diagnostics/recent-api-failures'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1'
 
 /**
@@ -87,10 +89,14 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const url = buildUrl(path, params)
 
   // 默认请求头(自动合并桌面端 token,web 模式无侵入)
+  const localRequestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `request-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const headers: Record<string, string> = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     ...authHeaders(),
+    'X-Request-ID': localRequestId,
     ...((fetchOptions.headers as Record<string, string>) || {}),
   }
 
@@ -103,11 +109,20 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     // 处理 HTTP 错误
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new ApiError(
+      const apiError = new ApiError(
         errorData.message || `HTTP ${response.status}: ${response.statusText}`,
         response.status,
         errorData
       )
+      apiError.requestId = typeof errorData.request_id === 'string'
+        ? errorData.request_id
+        : response.headers.get('X-Request-ID') || localRequestId
+      recordApiFailure({
+        at: new Date().toISOString(), method: options.method || 'GET', path: path.split('?')[0],
+        status: response.status, errorCode: apiError.errorCode, requestId: apiError.requestId,
+        category: apiError.category,
+      })
+      throw apiError
     }
 
     // 204 No Content
@@ -120,7 +135,17 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     // 解包 { code, message, data } 信封
     if (body && typeof body === 'object' && typeof body.code === 'number' && 'data' in body) {
       if (body.code !== 0) {
-        throw new ApiError(body.message || '请求失败', body.code, body)
+        const bodyStatus = response.status >= 400 ? response.status : body.code
+        const apiError = new ApiError(body.message || '请求失败', bodyStatus, body)
+        apiError.requestId = typeof body.request_id === 'string'
+          ? body.request_id
+          : response.headers.get('X-Request-ID') || localRequestId
+        recordApiFailure({
+          at: new Date().toISOString(), method: options.method || 'GET', path: path.split('?')[0],
+          status: bodyStatus, errorCode: apiError.errorCode, requestId: apiError.requestId,
+          category: apiError.category,
+        })
+        throw apiError
       }
       return body.data as T
     }
@@ -131,10 +156,16 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       throw error
     }
     // 网络错误
-    throw new ApiError(
+    const apiError = new ApiError(
       error instanceof Error ? error.message : '网络请求失败，请检查网络连接',
       0
     )
+    apiError.requestId = localRequestId
+    recordApiFailure({
+      at: new Date().toISOString(), method: options.method || 'GET', path: path.split('?')[0],
+      status: 0, requestId: localRequestId, category: apiError.category,
+    })
+    throw apiError
   }
 }
 
@@ -143,6 +174,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
  */
 export class ApiError extends Error {
   public readonly errorCode?: string
+  public requestId?: string
+  public category: 'business' | 'gateway' | 'engine' | 'upstream' | 'unknown' = 'unknown'
 
   constructor(
     message: string,
@@ -155,6 +188,10 @@ export class ApiError extends Error {
     if (typeof errorCode === 'string') {
       this.errorCode = errorCode
     }
+    if (status === 0) this.category = 'gateway'
+    else if (this.errorCode?.startsWith('engine.') || status === 503) this.category = 'engine'
+    else if (this.errorCode?.startsWith('provider.') || this.errorCode?.startsWith('upstream.')) this.category = 'upstream'
+    else if (status >= 400 && status < 500) this.category = 'business'
   }
 }
 

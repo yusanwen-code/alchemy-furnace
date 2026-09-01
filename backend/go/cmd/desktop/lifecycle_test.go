@@ -67,6 +67,20 @@ func TestLifecycleStartInstallsDockReopen(t *testing.T) {
 	require.Equal(t, 1, win.shows, "触发 Dock 重开应恢复主窗口")
 }
 
+// Dock 的“退出”与窗口关闭是不同语义：必须注册完整退出回调，而非进入 BeforeClose 隐藏路径。
+func TestLifecycleStartInstallsDockQuit(t *testing.T) {
+	l, win, _ := newLifecycleFixture(nil)
+	var installed func()
+	l.dockQuit = func(fn func()) { installed = fn }
+
+	require.NoError(t, l.Start(context.Background()))
+	require.NotNil(t, installed, "Start 应注册 Dock 退出回调")
+
+	installed()
+	require.Equal(t, 1, win.quits, "Dock 退出应请求完整应用退出")
+	require.False(t, l.BeforeClose(context.Background()), "退出中不得隐藏窗口")
+}
+
 // 托盘失败: 关闭 → 不隐藏, 返回 false(真正退出)
 func TestLifecycleBeforeCloseQuitsWhenTrayNotReady(t *testing.T) {
 	l, win, _ := newLifecycleFixture(errors.New("tray boom"))

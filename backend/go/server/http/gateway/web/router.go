@@ -105,6 +105,9 @@ func Register(r *gin.Engine, isDesktop bool, guards ...gin.HandlerFunc) error {
 	{
 		sys.GET("/health", router.Wrapper(systemHandler.HealthCheck))
 		sys.GET("/config", router.Wrapper(systemHandler.GetConfig))
+		if isDesktop {
+			sys.GET("/diagnostics", router.Wrapper(systemHandler.Diagnostics))
+		}
 	}
 	// 版本信息(全模式: serve + desktop 都暴露,前端关于区消费)
 	v1.GET("/version", router.Wrapper(systemHandler.GetVersion))

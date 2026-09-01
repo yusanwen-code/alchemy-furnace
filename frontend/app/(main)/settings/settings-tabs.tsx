@@ -17,8 +17,9 @@ import { ModelsPanel } from '@/components/models/models-panel'
 import { FireEffectPanel } from '@/components/settings/fire-effect-panel'
 import { ProfilePanel } from '@/components/settings/profile-panel'
 import { LanguagePanel } from '@/components/settings/language-panel'
+import { DiagnosticsPanel } from '@/components/settings/diagnostics-panel'
 
-const TAB_KEYS = ['models', 'fire', 'profile', 'language', 'about'] as const
+const TAB_KEYS = ['models', 'fire', 'profile', 'language', 'about', 'diagnostics'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 /** 关于区 GitHub 仓库链接(web 原生 target=_blank;桌面经 open-url 桥接交系统浏览器) */
@@ -30,7 +31,8 @@ function isTabKey(v: string | null): v is TabKey {
     v === 'fire' ||
     v === 'profile' ||
     v === 'language' ||
-    v === 'about'
+    v === 'about' ||
+    v === 'diagnostics'
   )
 }
 
@@ -59,6 +61,7 @@ export function SettingsTabs() {
             { key: 'profile', label: t('profile') },
             { key: 'language', label: t('language') },
             { key: 'about', label: t('about') },
+            ...(isDesktop() ? [{ key: 'diagnostics', label: t('diagnostics') }] : []),
           ]}
           activeKey={active}
           onChange={switchTab}
@@ -72,6 +75,8 @@ export function SettingsTabs() {
         <ProfilePanel />
       ) : active === 'language' ? (
         <LanguagePanel />
+      ) : active === 'diagnostics' ? (
+        <DiagnosticsPanel />
       ) : (
         <AboutPanel />
       )}

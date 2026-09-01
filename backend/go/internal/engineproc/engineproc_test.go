@@ -4,11 +4,31 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRedactingWriterKeepsPythonOutputWithoutSecrets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "python.log")
+	w, err := newPythonLogWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = w.Write([]byte("engine.health_timeout api_key=sk-secret\n"))
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "sk-secret") || !strings.Contains(string(data), "engine.health_timeout") {
+		t.Fatalf("unexpected python log: %s", data)
+	}
+}
 
 func TestRuntimeRootFromRelativeExecutableIsAbsolute(t *testing.T) {
 	root, err := runtimeRootFromExecutable(filepath.Join("build", "bin", "AlchemyFurnace"))

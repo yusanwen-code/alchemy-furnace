@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/alchemy-furnace/server/internal/desktoptray"
+	"github.com/alchemy-furnace/server/internal/dockquit"
 	"github.com/alchemy-furnace/server/internal/dockreopen"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -27,10 +28,10 @@ type windowRuntime interface {
 // wailsWindowRuntime 无状态适配器: 窄接口 → Wails runtime
 type wailsWindowRuntime struct{}
 
-func (wailsWindowRuntime) Hide(ctx context.Context)           { wailsruntime.WindowHide(ctx) }
-func (wailsWindowRuntime) Show(ctx context.Context)           { wailsruntime.WindowShow(ctx) }
-func (wailsWindowRuntime) Unminimise(ctx context.Context)     { wailsruntime.WindowUnminimise(ctx) }
-func (wailsWindowRuntime) Quit(ctx context.Context)           { wailsruntime.Quit(ctx) }
+func (wailsWindowRuntime) Hide(ctx context.Context)       { wailsruntime.WindowHide(ctx) }
+func (wailsWindowRuntime) Show(ctx context.Context)       { wailsruntime.WindowShow(ctx) }
+func (wailsWindowRuntime) Unminimise(ctx context.Context) { wailsruntime.WindowUnminimise(ctx) }
+func (wailsWindowRuntime) Quit(ctx context.Context)       { wailsruntime.Quit(ctx) }
 func (wailsWindowRuntime) About(ctx context.Context) {
 	_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
 		Type:    wailsruntime.InfoDialog,
@@ -54,6 +55,9 @@ type desktopLifecycle struct {
 	// 真实实现=dockreopen.Install 向 wails AppDelegate 添加缺失的 reopen 方法)
 	dockReopen func(func())
 
+	// dockQuit 将 Dock 的“退出”接入完整退出路径，而非 OnBeforeClose 的隐藏窗口路径。
+	dockQuit func(func())
+
 	trayReady   atomic.Bool
 	quitting    atomic.Bool
 	pendingShow atomic.Bool // 第二实例唤回早于 startup(context 未注入)时记录
@@ -67,6 +71,7 @@ func newDesktopLifecycle(window windowRuntime, tray *desktoptray.Controller) *de
 		tray:       tray,
 		saveState:  saveWindowState,
 		dockReopen: dockreopen.Install,
+		dockQuit:   dockquit.Install,
 	}
 }
 
@@ -79,6 +84,7 @@ func (l *desktopLifecycle) Start(ctx context.Context) error {
 	// wails 未实现 applicationShouldHandleReopen(Dock 点击恢复窗口),
 	// 由 dockreopen 向 AppDelegate 动态注册, 转发到 ShowMainWindow
 	l.dockReopen(l.ShowMainWindow)
+	l.dockQuit(l.RequestQuit)
 	err := l.tray.Start(desktoptray.Callbacks{
 		Open: l.ShowMainWindow,
 		Quit: l.RequestQuit,

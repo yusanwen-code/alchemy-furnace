@@ -31,9 +31,7 @@ func GinLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
 		method := c.Request.Method
-		clientIP := c.ClientIP()
 
 		// 处理请求
 		c.Next()
@@ -48,8 +46,7 @@ func GinLogger() gin.HandlerFunc {
 			zap.Int("status", statusCode),
 			zap.String("method", method),
 			zap.String("path", path),
-			zap.String("query", query),
-			zap.String("ip", clientIP),
+			zap.String("request_id", c.GetString("X-Request-ID")),
 			zap.Duration("duration", duration),
 			zap.Int("size", responseSize),
 		}

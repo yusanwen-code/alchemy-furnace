@@ -49,7 +49,7 @@ fi
 
 # ─── 1. 前端构建 ───
 say "前端构建"
-( cd "$ROOT/frontend" && pnpm install --frozen-lockfile && pnpm build )
+( cd "$ROOT/frontend" && pnpm install --frozen-lockfile && pnpm exec next build --webpack )
 
 # webui 嵌入准备
 rm -rf "$ROOT/backend/go/internal/webui/out"
@@ -57,7 +57,17 @@ cp -R "$ROOT/frontend/out" "$ROOT/backend/go/internal/webui/out"
 
 # ─── 2. Python 运行时 ───
 say "Python 运行时 → $PLATFORM"
-"$ROOT/scripts/build-python-runtime.sh" "$PLATFORM" "$ROOT/backend/go/dist-runtime"
+RUNTIME_DIR="$ROOT/backend/go/dist-runtime"
+if [[ "$PLATFORM" == darwin-arm64 || "$PLATFORM" == darwin-amd64 ]]; then
+  RUNTIME_READY="-x $RUNTIME_DIR/bin/python3 && -f $RUNTIME_DIR/engine/app/main.py"
+else
+  RUNTIME_READY="-f $RUNTIME_DIR/python.exe && -f $RUNTIME_DIR/engine/app/main.py"
+fi
+if eval "[[ $RUNTIME_READY ]]"; then
+  say "复用现有 Python runtime(离线模式): $RUNTIME_DIR"
+else
+  "$ROOT/scripts/build-python-runtime.sh" "$PLATFORM" "$RUNTIME_DIR"
+fi
 
 # ─── 3. Wails 编译(注入 ldflags) ───
 cd "$ROOT/backend/go"
@@ -79,6 +89,15 @@ mkdir -p build/bin
 wails build -platform "$WAILS_PLATFORM" \
   -ldflags "-X github.com/alchemy-furnace/server/internal/buildinfo.Version=${VERSION} -X github.com/alchemy-furnace/server/internal/buildinfo.Commit=${COMMIT} -X github.com/alchemy-furnace/server/internal/buildinfo.BuildDate=${BUILD_DATE} -X github.com/alchemy-furnace/server/internal/buildinfo.UpdateRepo=${REPO}" \
   -skipbindings
+
+# Wails 不会自动把 Python runtime 放进 .app;装配步骤必须紧接着执行,
+# 并在继续生成发布资产前确认 runtime 已准备好,避免产出启动即失败的安装包。
+if [[ ! -x "$ROOT/backend/go/dist-runtime/bin/python3" && "$PLATFORM" != windows-amd64 ]]; then
+  fail "Python runtime 未生成,拒绝继续打包: $ROOT/backend/go/dist-runtime/bin/python3"
+fi
+if [[ "$PLATFORM" == windows-amd64 && ! -f "$ROOT/backend/go/dist-runtime/python.exe" ]]; then
+  fail "Python runtime 未生成,拒绝继续打包: $ROOT/backend/go/dist-runtime/python.exe"
+fi
 
 # ─── 4. 装配 + 打 dmg/zip ───
 say "装配 + 打包"

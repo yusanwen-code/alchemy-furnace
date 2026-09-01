@@ -15,6 +15,7 @@ import (
 
 	"github.com/alchemy-furnace/server/internal/configuration"
 	"github.com/alchemy-furnace/server/internal/engineendpoint"
+	"github.com/alchemy-furnace/server/internal/paths"
 )
 
 // ResolveRuntimeRoot 定位内嵌 Python 运行时根目录
@@ -102,21 +103,33 @@ func Start(ctx context.Context) (baseURL string, stop func(), err error) {
 		cmd = exec.CommandContext(ctx, pythonBin(root),
 			"-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", fmt.Sprint(port))
 		cmd.Dir = filepath.Join(root, "engine")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		dataDir, derr := paths.DataDir()
+		if derr != nil {
+			err = fmt.Errorf("定位日志目录失败: %w", derr)
+			continue
+		}
+		pythonLog, lerr := newPythonLogWriter(filepath.Join(dataDir, "logs", "python.log"))
+		if lerr != nil {
+			err = fmt.Errorf("打开 Python 日志失败: %w", lerr)
+			continue
+		}
+		cmd.Stdout = pythonLog
+		cmd.Stderr = pythonLog
 		// 过滤污染 env: 父 shell 的 LOG_FORMAT=json / 自定义 %-style 配置会让 uvicorn 崩溃
 		cmd.Env = pythonProcessEnv(os.Environ())
 		setProcGroup(cmd) // 平台文件实现
 		if err = cmd.Start(); err != nil {
+			_ = pythonLog.Close()
 			continue // 端口竞争等,换端口重试
 		}
 		baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 		if err = waitHealthy(ctx, baseURL, 30*time.Second); err == nil {
 			configuration.Configuration.PythonEngine.BaseURL = baseURL
 			engineendpoint.Set(baseURL)
-			return baseURL, func() { killProcGroup(cmd) }, nil
+			return baseURL, func() { killProcGroup(cmd); _ = pythonLog.Close() }, nil
 		}
 		killProcGroup(cmd)
+		_ = pythonLog.Close()
 	}
 	return "", nil, fmt.Errorf("Python 引擎启动失败(重试 3 次): %w", err)
 }

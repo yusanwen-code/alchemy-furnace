@@ -68,7 +68,28 @@
       "fire": "炉火",
       "about": "关于",
       "profile": "我的简介",
-      "language": "语言"
+      "language": "语言",
+      "diagnostics": "故障诊断"
+    },
+    "diagnostics": {
+      "title": "故障诊断",
+      "subtitle": "查看本地服务状态与最近接口错误",
+      "serviceStatus": "服务状态",
+      "python": "Python 引擎",
+      "running": "运行中",
+      "unavailable": "不可用",
+      "unknown": "未知",
+      "logDir": "日志目录",
+      "appLog": "应用日志",
+      "pythonLog": "Python 日志",
+      "refresh": "刷新状态",
+      "copy": "复制诊断摘要",
+      "copied": "已复制",
+      "loading": "正在读取诊断状态...",
+      "loadFailed": "诊断状态读取失败",
+      "recentFailures": "最近接口失败",
+      "noFailures": "暂无接口失败记录",
+      "unknownError": "未知错误"
     },
     "fire": {
       "title": "炉火",

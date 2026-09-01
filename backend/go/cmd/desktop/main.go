@@ -27,6 +27,7 @@ import (
 	"github.com/alchemy-furnace/server/internal/paths"
 	"github.com/alchemy-furnace/server/server/http/gateway/web"
 	"github.com/alchemy-furnace/server/server/http/middleware"
+	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -48,14 +49,18 @@ func newRedirectHandler(target func() string) http.Handler {
 
 func main() {
 	paths.SetDesktopMode(true)
-	if _, err := paths.EnsureDataDir(); err != nil {
+	dataDir, err := paths.EnsureDataDir()
+	if err != nil {
 		log.Fatalf("[炼丹炉] 数据目录不可用: %v", err)
+	}
+	// 配置加载本身也必须可诊断：桌面从图标启动时没有终端，先用默认
+	// release 文件日志接住 loader/后续启动失败，再继续读取用户配置。
+	bootID := uuid.NewString()
+	if err := logger.InitWithOptions(logger.Options{Mode: "release", DataDir: dataDir, BootID: bootID}); err != nil {
+		log.Fatalf("[炼丹炉] 初始化日志失败: %v", err)
 	}
 	if err := loader.LoadConfig(""); err != nil {
 		log.Fatalf("[炼丹炉] 加载配置失败: %v", err)
-	}
-	if err := logger.Init(configuration.Configuration.Server.Mode); err != nil {
-		log.Fatalf("[炼丹炉] 初始化日志失败: %v", err)
 	}
 	gin.SetMode(gin.ReleaseMode)
 

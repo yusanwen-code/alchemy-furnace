@@ -34,4 +34,25 @@ describe('request', () => {
     expect(error).toMatchObject({ status: 0 })
     expect((error as ApiError).errorCode).toBeUndefined()
   })
+
+  it('attaches a request id and exposes the server request id on errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 503,
+      error_code: 'engine.unavailable',
+      message: 'engine unavailable',
+      request_id: 'server-request-123',
+      data: null,
+    }), { status: 503, statusText: 'Service Unavailable' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await request('/chat').catch((caught: unknown) => caught)
+
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      'X-Request-ID': expect.any(String),
+    })
+    expect(error).toMatchObject({
+      requestId: 'server-request-123',
+      category: 'engine',
+    })
+  })
 })

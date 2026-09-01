@@ -68,7 +68,28 @@
       "fire": "Furnace",
       "about": "About",
       "profile": "My Profile",
-      "language": "Language"
+      "language": "Language",
+      "diagnostics": "Diagnostics"
+    },
+    "diagnostics": {
+      "title": "Diagnostics",
+      "subtitle": "Inspect local services and recent API failures",
+      "serviceStatus": "Service status",
+      "python": "Python engine",
+      "running": "Running",
+      "unavailable": "Unavailable",
+      "unknown": "Unknown",
+      "logDir": "Log directory",
+      "appLog": "Application log",
+      "pythonLog": "Python log",
+      "refresh": "Refresh status",
+      "copy": "Copy diagnostic summary",
+      "copied": "Copied",
+      "loading": "Reading diagnostic status...",
+      "loadFailed": "Could not read diagnostic status",
+      "recentFailures": "Recent API failures",
+      "noFailures": "No recent API failures",
+      "unknownError": "Unknown error"
     },
     "fire": {
       "title": "Furnace",
