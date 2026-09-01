@@ -341,6 +341,22 @@ describe('chat launch surfaces', () => {
     expect(screen.getByRole('dialog', { name: 'mode.selectAgent' })).toHaveAttribute('aria-modal', 'true')
   })
 
+  it('renders an agent avatar image in the launch picker', async () => {
+    testDoubles.agentState.agents = [
+      { ...defaultAgents[0], avatar: 'https://example.com/agent-one.png' },
+      defaultAgents[1],
+    ]
+    const user = userEvent.setup()
+    render(<ChatView />)
+
+    await user.click(screen.getByRole('button', { name: 'newSession' }))
+
+    expect(await screen.findByRole('img', { name: 'Agent One' })).toHaveAttribute(
+      'src',
+      'https://example.com/agent-one.png',
+    )
+  })
+
   it('does not dismiss a pending launch through the close control', async () => {
     const creation = deferred<ChatSession>()
     const user = userEvent.setup()

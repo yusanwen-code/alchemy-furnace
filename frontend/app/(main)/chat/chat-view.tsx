@@ -1038,9 +1038,7 @@ function AgentSelectModal({
                     {checked && <span className="text-primary-foreground text-xs font-bold">✓</span>}
                   </div>
                 )}
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sage to-sage/70 flex items-center justify-center text-white font-serif font-bold flex-shrink-0">
-                  {agent.name.charAt(0)}
-                </div>
+                <EntityAvatar name={agent.name} src={agent.avatar} size="md" shape="square" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{agent.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{agent.model_name}</p>
